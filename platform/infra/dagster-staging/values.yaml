@@ -2,8 +2,9 @@
 # Chart: dagster/dagster 1.13.27, from https://dagster-io.github.io/helm.
 # Only what differs from the chart defaults is set here.
 #
-# Memory figures are starting values from ADR-0011's spike (webserver ~130,
-# daemon ~200, code server ~215 MiB), corrected from `kubectl top` once it runs.
+# Memory figures are set from measurement in staging (architecture.md
+# section 11): peaks by the kubelet over an hour of runs on 2026-10-28, and
+# again after seven days of uptime on 2026-11-05.
 
 # The metadata lives in the database `dagster` of staging's Postgres, as the
 # role `dagster` (postgres-staging/cluster.yaml). Its password is in the
@@ -31,8 +32,9 @@ telemetry:
   enabled: false
 
 dagsterWebserver:
+  # Measured 127-141 MiB.
   resources:
-    requests: {cpu: 25m, memory: 192Mi}
+    requests: {cpu: 25m, memory: 160Mi}
     limits: {memory: 384Mi}
   # The init container only waits for Postgres.
   initContainerResources:
@@ -40,8 +42,10 @@ dagsterWebserver:
     limits: {memory: 32Mi}
 
 dagsterDaemon:
+  # Measured 104 MiB at start, 206 after four hours, 263 after seven days:
+  # it grows with uptime. Watched; the limit is what stops it.
   resources:
-    requests: {cpu: 25m, memory: 256Mi}
+    requests: {cpu: 25m, memory: 320Mi}
     limits: {memory: 512Mi}
   initContainerResources:
     requests: {cpu: 10m, memory: 16Mi}
@@ -96,16 +100,17 @@ dagster-user-deployments:
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
-      # Runs inherit this deployment's image, environment, resources, volumes
-      # and Pod security context, in this namespace. The container security
-      # context is set for runs in runLauncher above.
+      # Runs inherit this deployment's image, environment, volumes and Pod
+      # security context, in this namespace. The container security context
+      # is set for runs in runLauncher above. Their resources are not these:
+      # a tag on each job in the code location sets them (RUN_RESOURCES in
+      # lagom_orchestration/definitions.py), and wins.
       includeConfigInLaunchedRuns:
         enabled: true
-      # The code server idles at ~215 MiB; a run with dlt and dbt peaks at
-      # ~250-300 MiB. One figure serves both, since runs inherit it. The
-      # run's request is also written on the Application
-      # (apps/dagster-staging.yaml, lagom.dev/ephemeral-memory-request) for
-      # the budget check: change both together.
+      # Measured 203-291 MiB for the code server alone. These figures stay
+      # while staging runs an image without RUN_RESOURCES, whose runs still
+      # take them; the change that pins an image with it lowers them to the
+      # code server's own.
       resources:
         requests: {cpu: 50m, memory: 384Mi}
         limits: {memory: 1Gi}

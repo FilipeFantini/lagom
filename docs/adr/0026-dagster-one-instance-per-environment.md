@@ -104,3 +104,22 @@ is revised, and Dagster can orchestrate the Postgres pipeline instead.
 
 Reversal: delete the two Applications. Each database `dagster` stays, holding
 the history.
+
+## Notes
+
+The text above is kept as decided. These notes record what changed since,
+without rewriting it.
+
+- **2026-11-05 — memory measured, and runs get their own resources.** The
+  figures under *Negative* were the spike's. Staging measured the webserver
+  at 127–141 MiB, the daemon at 104 MiB growing to 263 after seven days, and
+  the code server at 203–291 MiB. A run peaked at ~700 MiB, not 250–300.
+  "Runs inherit the code location's resources" therefore no longer holds: a
+  single figure would have reserved ~700 MiB for the idle code server, and
+  prod would not have fitted the CI ceiling. Each job carries a
+  `dagster-k8s/config` tag with the run's resources, which Dagster applies
+  over the code location's, and runs execute their steps in one process
+  instead of one process per step. The figures are in
+  [architecture.md §11](../architecture.md#11-resource-budget); the
+  operator chose this on 2026-11-05 over moving the runs' configuration into
+  the run launcher's values, which would have duplicated it.

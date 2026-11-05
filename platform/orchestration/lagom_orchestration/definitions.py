@@ -19,6 +19,7 @@ from dagster import (
     OpExecutionContext,
     ScheduleDefinition,
     define_asset_job,
+    in_process_executor,
     job,
     op,
 )
@@ -46,8 +47,20 @@ def warehouse(context: AssetExecutionContext, dbt: DbtCliResource) -> Iterator[A
 # run queue (platform/infra/dagster-<env>/values.yaml).
 PIPELINE_TAG = {"lagom/pipeline": "usgs"}
 
+# The memory of each run's Pod. Without this, a run inherits the code server's
+# resources, and a run needs more than twice what the code server does
+# (architecture.md section 11). Dagster applies a run's tags over the code
+# location's configuration, so this wins. The request is also declared on
+# each environment's Application (lagom.dev/ephemeral-memory-request) for the
+# budget check; tests/test_definitions.py fails if they differ.
+RUN_RESOURCES = {"requests": {"cpu": "50m", "memory": "768Mi"}, "limits": {"memory": "1Gi"}}
+RUN_TAGS = {
+    **PIPELINE_TAG,
+    "dagster-k8s/config": {"container_config": {"resources": RUN_RESOURCES}},
+}
+
 usgs_job = define_asset_job(
-    "usgs", selection=AssetSelection.groups("usgs").downstream(), tags=PIPELINE_TAG
+    "usgs", selection=AssetSelection.groups("usgs").downstream(), tags=RUN_TAGS
 )
 
 
@@ -61,13 +74,18 @@ def compact_lake(context: OpExecutionContext) -> None:
     context.log.info("DuckLake merged, expired and cleaned")
 
 
-@job(tags=PIPELINE_TAG)
+@job(tags=RUN_TAGS)
 def lake_maintenance() -> None:
     compact_lake()
 
 
 defs = Definitions(
     assets=[usgs_events, warehouse],
+    # Every step in the run's own process. The default executor starts each
+    # step in a new Python process beside the run's, which holds Dagster, dlt
+    # and dbt's imports a second time. The steps run one after the other
+    # anyway, so nothing is lost. dbt still runs as its own process.
+    executor=in_process_executor,
     jobs=[usgs_job, lake_maintenance],
     schedules=[
         # Every 30 minutes, as the CronJob: USGS publishes ~9 events an hour.
