@@ -1,0 +1,33 @@
+# Staging's Dagster UI at a cluster IP that never changes (ADR-0027).
+#
+# `tailscale serve` on the node forwards tailnet port 8080 to this address
+# (runbook: "Dagster UI over the tailnet"). The chart's own Service,
+# dagster-dagster-webserver, gets a cluster IP chosen at creation, which
+# changes whenever the Service is recreated, and serve would then point at
+# nothing. This one asks for its address.
+#
+# The address is in 10.43.0.0/24, the lower part of k3s's service range
+# (10.43.0.0/16) that Kubernetes keeps for addresses requested by name:
+# automatic allocation takes from the rest first. If it were taken anyway,
+# creating this Service fails and Argo CD shows the error.
+#
+# The selector repeats the chart's labels for the webserver Pods (chart
+# dagster 1.13.27, release `dagster`). If an upgrade changes them, this
+# Service selects nothing and the URL answers 502: a loud failure, fixed here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dagster-ui-tailnet
+  namespace: staging
+spec:
+  type: ClusterIP
+  clusterIP: 10.43.0.30
+  selector:
+    app.kubernetes.io/name: dagster
+    app.kubernetes.io/instance: dagster
+    component: dagster-webserver
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
