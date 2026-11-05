@@ -1499,9 +1499,11 @@ Exercised in staging on 2026-10-28. In prod, replace `staging` with `prod`.
 
 Both carry the tag `lagom/pipeline=usgs`, and the daemon's queue starts one
 run with that tag at a time. A second run waits as *Queued* until the first
-ends. In staging, a `usgs` run took 43 to 55 s (9 runs on 2026-10-28). In the
-21:30 run, the load took 7 s and dbt 23 s; the rest was Dagster starting each
-step as a subprocess of the run's Pod.
+ends. In staging's first week (2026-10-28 to 11-05), 372 of 373 `usgs` runs
+succeeded, in 43 s at the median and 136 s at most; the one failure was the
+driver pitfall below. All 8 `lake_maintenance` runs succeeded, in 10 to 17 s.
+In the 21:30 run of 2026-10-28, the load took 7 s and dbt 23 s; the rest was
+Dagster starting each step as a subprocess of the run's Pod.
 
 **Check it is healthy:**
 
