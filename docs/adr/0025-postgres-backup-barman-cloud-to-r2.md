@@ -1,7 +1,9 @@
 # ADR-0025 — Postgres backup: the Barman Cloud plugin to Cloudflare R2, staging first
 
 - **Status:** Accepted for staging; prod follows once a restore in staging has
-  passed (see *How it is accepted*). Prod enabled 2026-10-28; see the notes
+  passed (see *How it is accepted*). Prod enabled 2026-10-28; see the notes.
+  RPO and prod retention partially superseded by
+  [ADR-0027](0027-hourly-wal-archiving-and-14-day-prod-retention.md)
 - **Date:** 2026-10-28
 - **Decided by:** the operator, on 2026-10-28, choosing the plugin over a
   `pg_dump` job.
@@ -142,3 +144,9 @@ without rewriting it.
   being removed with the backup was not looked at; it is inferred from the
   catalog. Prod's 30-day retention uses the same code path; its first
   deletion is due around 2026-11-28.
+- **2026-11-05 — RPO and prod retention superseded by
+  [ADR-0027](0027-hourly-wal-archiving-and-14-day-prod-retention.md).** Each
+  bucket held about 1 GB after eight days, almost all WAL closed every
+  5 minutes by the clock. WAL is now archived at least hourly, so the RPO is
+  about an hour, and prod keeps 14 days. Prod's first deletion is now due
+  around 2026-11-12 instead of 2026-11-28.
