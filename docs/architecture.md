@@ -1552,7 +1552,8 @@ an hour the Pod is gone, and the run is read in the UI.
 **Start a run on demand.** In the UI, *Jobs → usgs → Materialize all*. For
 `lake_maintenance`, which has no assets, *Jobs → lake_maintenance → Launchpad
 → Launch Run*. The run appears in *Runs*. If a scheduled run is in progress,
-it waits as *Queued*.
+it waits as *Queued*. Exercised on 2026-11-05: a `usgs` run started at
+11:17 UTC, loaded 4 rows, `PASS=33`, in under a minute.
 
 Start runs from the job's page, not from *Catalog* or the asset graph. A run
 started there belongs to Dagster's implicit asset job, which has none of the
