@@ -111,7 +111,7 @@ dagster-user-deployments:
       # for one case: a run launched from the asset catalog instead of a job
       # belongs to Dagster's implicit asset job, which has no RUN_RESOURCES
       # tag, so it takes these figures. With 1Gi it has room for a run's peak
-      # instead of being OOM-killed (runbook: start runs from the job page).
+      # instead of being OOM-killed. Start runs from the job page instead.
       resources:
         requests: {cpu: 50m, memory: 320Mi}
         limits: {memory: 1Gi}
