@@ -94,9 +94,9 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at ccdf9a3 (PR #34,
-        # psycopg 3 for Dagster's Postgres storage).
-        tag: "ccdf9a30d6fafad3956e3db9065829104b95a410@sha256:d4bd17c127f524bfafccea69c6de1144ad125aa098c1824c89061bd1a50869da"
+        # Pinned by digest (ADR-0015): built from main at d6716cc (PR #38,
+        # runs set their own resources and run their steps in one process).
+        tag: "d6716cc89dec747823dc4260e8b42196da2800db@sha256:ce87e595dcdb1d61e12608ed4fb57db13d4da8a4f41b59814d915d1cf99b6c1b"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
@@ -107,12 +107,13 @@ dagster-user-deployments:
       # lagom_orchestration/definitions.py), and wins.
       includeConfigInLaunchedRuns:
         enabled: true
-      # Measured 203-291 MiB for the code server alone. These figures stay
-      # while staging runs an image without RUN_RESOURCES, whose runs still
-      # take them; the change that pins an image with it lowers them to the
-      # code server's own.
+      # The code server alone: measured 203-291 MiB. The limit stays at 1Gi
+      # for one case: a run launched from the asset catalog instead of a job
+      # belongs to Dagster's implicit asset job, which has no RUN_RESOURCES
+      # tag, so it takes these figures. With 1Gi it has room for a run's peak
+      # instead of being OOM-killed. Start runs from the job page instead.
       resources:
-        requests: {cpu: 50m, memory: 384Mi}
+        requests: {cpu: 50m, memory: 320Mi}
         limits: {memory: 1Gi}
       podSecurityContext:
         runAsNonRoot: true
