@@ -105,7 +105,17 @@ spec:
         createrole: false
         inherit: true
         comment: read-only on the gold schema; granted by dbt
+      # Dagster's metadata (ADR-0026): owner of the database `dagster` only.
+      # Its password is random, generated and sealed by the operator in
+      # dagster-db-sealed.yaml; nothing else needs it, so it is not kept.
+      - name: dagster
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: dagster-db
 
-  # No backup, monitoring or pooler yet: backup waits for its trigger and
-  # PgBouncer for the first external BI consumer (ADR-0012, architecture.md §8).
-  # A disabled block would read as protection that is not there.
+  # No monitoring or pooler yet: PgBouncer waits for the first external BI
+  # consumer (ADR-0012, architecture.md §8). A disabled block would read as
+  # protection that is not there. Backup is on, above (ADR-0025).
