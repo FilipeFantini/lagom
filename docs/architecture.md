@@ -1465,7 +1465,8 @@ within two minutes.
 **Retention** is enforced by the sidecar every 30 minutes. To check it: an
 expired backup must be gone from `kubectl get backups` and from the bucket,
 with no `BadDigest` or `DeleteObjects` error in the sidecar's log. Without R2
-credentials the bucket is checked only through the catalog (ADR-0025 notes):
+credentials the bucket is checked through the catalog, or by the operator
+listing `postgres/base/` in the Cloudflare console (ADR-0025 notes):
 
 ```bash
 kubectl --context <node-name> -n <env> logs postgres-1 -c plugin-barman-cloud --since=24h | grep -iE 'retention|delete|error'
