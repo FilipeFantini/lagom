@@ -54,3 +54,52 @@ def test_jobs_and_schedules(defs) -> None:  # type: ignore[no-untyped-def]
     assert {j.name for j in defs.resolve_all_job_defs()} >= {"usgs", "lake_maintenance"}
     crons = {s.job_name: s.cron_schedule for s in defs.schedules}  # type: ignore[union-attr]
     assert crons == {"usgs": "*/30 * * * *", "lake_maintenance": "15 4 * * *"}
+
+
+def test_steps_run_in_the_runs_process(defs) -> None:  # type: ignore[no-untyped-def]
+    for job in defs.resolve_all_job_defs():
+        if job.name in {"usgs", "lake_maintenance"}:
+            assert job.executor_def.name == "in_process", job.name
+
+
+def test_run_resources_override_the_code_servers(defs) -> None:  # type: ignore[no-untyped-def]
+    """A run's tag wins over the code location's resources, key by key.
+
+    The code location passes its own resources to every run; this is the
+    merge dagster-k8s applies on top of them when it builds the run's Pod.
+    """
+    from dagster_k8s.container_context import K8sContainerContext
+    from dagster_k8s.job import get_user_defined_k8s_config
+
+    from lagom_orchestration.definitions import RUN_RESOURCES
+
+    code_location = K8sContainerContext(
+        resources={"requests": {"cpu": "50m", "memory": "320Mi"}, "limits": {"memory": "512Mi"}}
+    )
+    for job in defs.resolve_all_job_defs():
+        if job.name not in {"usgs", "lake_maintenance"}:
+            continue
+        assert job.tags["lagom/pipeline"] == "usgs"
+        run = code_location.merge(
+            K8sContainerContext(run_k8s_config=get_user_defined_k8s_config(job.tags))
+        )
+        assert run.run_k8s_config.container_config["resources"] == RUN_RESOURCES, job.name
+
+
+def test_budget_declares_the_runs_request() -> None:
+    """The budget check counts a run by its Application's annotation.
+
+    Each environment's Application pins an image, and the request is in the
+    image, so the annotation must match the request of the code it runs:
+    this compares it with the code in this checkout.
+    """
+    import yaml
+
+    from lagom_orchestration.definitions import RUN_RESOURCES
+
+    apps = sorted((Path(__file__).resolve().parents[2] / "infra" / "apps").glob("dagster-*.yaml"))
+    assert apps
+    for app in apps:
+        annotations = yaml.safe_load(app.read_text())["metadata"]["annotations"]
+        declared = annotations["lagom.dev/ephemeral-memory-request"]
+        assert declared == RUN_RESOURCES["requests"]["memory"], app.name

@@ -18,7 +18,12 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
   older than 7 days, and delete the files nothing references.
 
 Both carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
-run at a time.
+run at a time, and a `dagster-k8s/config` tag with the memory of the run's Pod
+(`RUN_RESOURCES`). Without it a run would inherit the code server's, which is
+about half of what a run needs. Each environment's Application declares
+the same request for the budget check, and the tests fail if they differ.
+Steps run in the run's own process (`in_process_executor`); dbt is still a
+process of its own.
 
 **Configuration** comes from the environment, set on the code server and on
 every run Pod:

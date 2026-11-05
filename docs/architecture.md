@@ -322,7 +322,7 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | Environment | Where | What runs there |
 |---|---|---|
 | `dev` | code on the operator's machine, data in staging | dbt and dlt run from the machine's `uv` environments against the `lagom_dev` database in staging's Postgres, through `kubectl port-forward` over the tailnet; unit tests need no database; manifests are checked with a server-side dry run ([ADR-0014](adr/0014-develop-against-staging.md)); agents use `kubectl diff -n <namespace> -f`, since `apply` is denied to them ([CONTRIBUTING](../CONTRIBUTING.md#workflow)) |
-| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; a ResourceQuota (2048Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); the pipeline as one CronJob, `usgs-pipeline` ([`cronjob-usgs.yaml`](../platform/infra/postgres-staging/cronjob-usgs.yaml)): dlt, then dbt, as init containers, then a heartbeat ping to Healthchecks.io ([ADR-0018](adr/0018-pipeline-heartbeat.md)), applied by Argo CD from `main` and pinned to staging's image digests ([ADR-0015](adr/0015-images-on-ghcr.md)). **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): webserver, daemon and the platform's code location, with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake beside the CronJob until the CronJob is retired |
+| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); the pipeline as one CronJob, `usgs-pipeline` ([`cronjob-usgs.yaml`](../platform/infra/postgres-staging/cronjob-usgs.yaml)): dlt, then dbt, as init containers, then a heartbeat ping to Healthchecks.io ([ADR-0018](adr/0018-pipeline-heartbeat.md)), applied by Argo CD from `main` and pinned to staging's image digests ([ADR-0015](adr/0015-images-on-ghcr.md)). **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): webserver, daemon and the platform's code location, with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake beside the CronJob until the CronJob is retired |
 | `prod` | namespace on the node | the full stack |
 
 **Promotion** is by image digest: staging and prod each pin their own, so a new
@@ -537,7 +537,10 @@ for k3s's growth over days and the shims of new Pods, which requests do not
 count ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It was 2.2 GB on
 the 4 GB node ([ADR-0016](adr/0016-ci-ceiling-2-2-gb.md)), where M3 did not
 fit, hence the move ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Today's
-total is 3,614 MiB with staging's Dagster; prod's adds about 1,216 more.
+total is 4,030 MiB with staging's Dagster. Prod's adds 1,568 more (800
+resident, 768 per run), and staging's code server drops by 64 once its image
+sets the runs' resources: about 5,534, some 100 MiB under the ceiling until
+the CronJobs on Postgres are retired, which frees 512.
 
 **How CI enforces it.** [`tools/resource_budget.py`](../tools/resource_budget.py)
 runs on every pull request ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)).
@@ -569,9 +572,9 @@ adds that 70 MiB request as its allowance for components outside Git.
 | CloudNativePG operator | 64 MB | measured 24 MiB with no Cluster, 31 MiB reconciling one (request 64, limit 192, `GOMEMLIMIT` 150MiB) ([ADR-0012](adr/0012-cloudnative-pg.md)) |
 | Backup: Barman Cloud plugin and cert-manager | 192 MB | plugin 32, cert-manager controller 64, cainjector 64, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
 | Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
-| Dagster | 832 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 192, daemon 256 and code location 384 MiB of requests, plus each run as an ephemeral job of 384, declared on its Application. Starting figures from the spike: ~550 MiB resident with real libraries ([ADR-0011](adr/0011-memory-viability-on-4gb.md)) |
-| **Core requests** | **~2.27 GB** | |
-| **Left within the ceiling for ephemeral jobs** | **~3.2 GB** | |
+| Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests (staging's code server stays at 384 until it runs an image whose jobs set the runs' resources), plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. The run's figure is re-measured once runs execute in one process. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
+| **Core requests** | **~2.24 GB** | |
+| **Left within the ceiling for ephemeral jobs** | **~3.3 GB** | |
 
 Staging adds ~1.2 GB:
 
@@ -579,10 +582,10 @@ Staging adds ~1.2 GB:
   second `Cluster` with the same request and limit as prod's, plus the 64 MiB
   backup sidecar, which the CI check counts like the first
   ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/cluster.yaml));
-- its own Dagster, 832 MB.
+- its own Dagster, 800 MB.
 
-That leaves **~2.0 GB** for jobs. Staging's ResourceQuota caps everything
-staging requests at 2048 MiB.
+That leaves **~2.1 GB** for jobs. Staging's ResourceQuota caps everything
+staging requests at 2432 MiB.
 dlt and dbt do not appear above: they are ephemeral jobs, and their requests
 count against what is left. In staging they are one Pod, the CronJob
 `usgs-pipeline`: dlt and dbt each request 256 MiB and run one after the other
@@ -635,14 +638,13 @@ the node allows, not a budget to fill (§1).
 - **Scaling.** Vertical is easy — Hetzner resizes, one reboot. Horizontal needs
   care with the datastore (SQLite to etcd, three nodes) and with storage
   (local-path pins the volume to a node; either node affinity or Longhorn).
-- **Postgres backup: paid on 2026-10-28, with two open checks.** The debt
+- **Postgres backup: paid on 2026-10-28, with one open check.** The debt
   accepted in [ADR-0019](adr/0019-postgres-backup-deferred.md) is paid by
   [ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md): both
   environments archive WAL and take daily backups to R2, and a restore was
-  tested (runbook, *Backup and restore*). Two things are still unproven.
-  Retention deleting expired backups can only be checked from 2026-11-05. A
-  rebuild of the node that restores from the bucket, instead of re-loading,
-  has not been run.
+  tested (runbook, *Backup and restore*). Retention deleted its first expired
+  backup on 2026-11-05 (ADR-0025 notes). Still unproven: a rebuild of the node
+  that restores from the bucket, instead of re-loading, has not been run.
 - **Changes to the gates themselves are protected by convention only.**
   Branch protection (since 2026-10-27) requires the checks to pass, but a pull
   request runs the workflow as it edits it — see
@@ -1460,13 +1462,18 @@ wrote at 14:30, in a segment not yet closed, were missing, as the RPO above
 predicts. Deleting the Cluster deletes its volume: local-path released it
 within two minutes.
 
-**Retention** is enforced by the sidecar every 30 minutes. Check it after the
-first week. An expired backup must be gone from `kubectl get backups` and from
-the bucket, with no `BadDigest` or `DeleteObjects` error in the sidecar's log:
+**Retention** is enforced by the sidecar every 30 minutes. To check it: an
+expired backup must be gone from `kubectl get backups` and from the bucket,
+with no `BadDigest` or `DeleteObjects` error in the sidecar's log. Without R2
+credentials the bucket is checked only through the catalog (ADR-0025 notes):
 
 ```bash
 kubectl --context <node-name> -n <env> logs postgres-1 -c plugin-barman-cloud --since=24h | grep -iE 'retention|delete|error'
 ```
+
+A deletion logs `Deleting backup not in the catalog` with the backup's name,
+and the ObjectStore's `status.serverRecoveryWindow` moves its
+`firstRecoverabilityPoint` forward. Staging showed both on 2026-11-05.
 
 **Memory measured** on 2026-10-28 is in §11: the sidecar used 18 Mi during a
 base backup.

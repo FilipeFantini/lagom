@@ -3,13 +3,13 @@
 #
 # Arithmetic, in memory, request / limit in Mi (finished Pods stop counting):
 #   Postgres Pod, with the backup sidecar (ADR-0025)    364 /  768
-#   Dagster webserver, daemon, code location (ADR-0026) 832 / 1920
-#   one Dagster run, inheriting the code location's      384 / 1024
+#   Dagster webserver, daemon, code server (ADR-0026)   864 / 1920
+#   one Dagster run, its own tag in the code location   768 / 1024
 #   the CronJob usgs-pipeline, while it still runs       256 /  512
 #                                                       ----   ----
-#                                                       1836 / 4224
-# rounded up to 2048 / 4608, about 200 Mi of room for a restore test or a
-# manual run. The budget check counts the same workloads against the node's
+#                                                       2252 / 4224
+# rounded up to 2432 / 4608, about 180 Mi of room for a restore test or a
+# manual run. Dagster's figures are measured (architecture.md section 11). The budget check counts the same workloads against the node's
 # ceiling (architecture.md section 11); the quota keeps staging inside them.
 apiVersion: v1
 kind: ResourceQuota
@@ -17,7 +17,7 @@ metadata:
   name: staging
 spec:
   hard:
-    requests.memory: 2048Mi
+    requests.memory: 2432Mi
     limits.memory: 4608Mi
     requests.cpu: 500m
     pods: "10"
