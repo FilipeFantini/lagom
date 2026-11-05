@@ -54,6 +54,12 @@ spec:
       work_mem: 4MB
       maintenance_work_mem: 32MB
       effective_cache_size: 256MB
+      # Close and archive a WAL segment at least once an hour, not every
+      # 5 minutes (CloudNativePG's default). Each forced close ships a whole
+      # 16 MiB segment however little was written, so the default filled the
+      # backup bucket by the clock. The cost: up to an hour of writes can be
+      # lost with the node (ADR-0027). A reload applies it; no restart.
+      archive_timeout: 1h
 
   # The instance manager runs as PID 1 in the Pod and is a resident Go process
   # (ADR-0011): without GOMEMLIMIT its heap can grow to twice its live size.

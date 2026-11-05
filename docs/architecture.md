@@ -1359,17 +1359,20 @@ Cloud plugin ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)):
 | Environment | Bucket | Retention |
 |---|---|---|
 | staging | `lagom-staging-backups` | 7 days |
-| prod | `lagom-prod-backups` | 30 days |
+| prod | `lagom-prod-backups` | 14 days ([ADR-0027](adr/0027-hourly-wal-archiving-and-14-day-prod-retention.md)) |
 
 Two kinds of copy land there:
 
 - **WAL**, continuously. Each write-ahead log segment is uploaded as soon as
-  Postgres closes it, which happens at the latest every 5 minutes.
+  Postgres closes it: when its 16 MiB fill, or after an hour
+  (`archive_timeout`, ADR-0027). CloudNativePG's default of 5 minutes shipped
+  a whole segment each time and filled the bucket by the clock.
 - **A base backup** every day at 03:00 UTC.
 
 A restore replays WAL on top of a base backup. It can reach any moment up to
-the last archived segment, so at most about **5 minutes of writes** are lost
-(the RPO).
+the last archived segment, so at most about **1 hour of writes** is lost
+(the RPO). Pipeline data is rebuilt by a re-load; Dagster's run history of that
+hour is not.
 
 **Set it up for an environment** (exercised in staging, 2026-10-28):
 
@@ -1458,7 +1461,7 @@ kubectl --context <node-name> -n <env> delete cluster restore-test
 Result in staging on 2026-10-28: ready 68 s after creation. The copy held
 every row up to the last archived WAL (14:28 UTC). The 9 rows a pipeline run
 wrote at 14:30, in a segment not yet closed, were missing, as the RPO above
-predicts. Deleting the Cluster deletes its volume: local-path released it
+predicts (the timeout was 5 minutes then). Deleting the Cluster deletes its volume: local-path released it
 within two minutes.
 
 **Retention** is enforced by the sidecar every 30 minutes. To check it: an
