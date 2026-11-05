@@ -209,3 +209,89 @@ def test_main_exit_codes(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert run("--base", "no-such-ref") == 2
     commit(repo, {"env/prod/job.yaml": cronjob(f"app:2@{DIGEST_B}")}, "prod B")
     assert run("--base", base) == 1
+
+
+def chart_application(name: str, namespace: str, values: str) -> str:
+    return f"""\
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {name}
+spec:
+  sources:
+    - repoURL: https://charts.example.com
+      chart: something
+      targetRevision: 1.0.0
+      helm:
+        valueFiles:
+          - $values/{values}
+    - repoURL: git@github.com:example/repo.git
+      targetRevision: main
+      ref: values
+  destination:
+    namespace: {namespace}
+"""
+
+
+def helm_values(digest: str) -> str:
+    return f"""\
+deployments:
+  - name: app
+    image:
+      repository: ghcr.io/example/app
+      tag: "abc123@{digest}"
+"""
+
+
+@pytest.fixture
+def chart_repo(repo: Path) -> Path:
+    """The repo fixture plus a chart Application per environment, pinned in values files."""
+    commit(
+        repo,
+        {
+            "platform/infra/apps/chart-staging.yaml": chart_application(
+                "chart-staging", "staging", "charts/staging.yaml"
+            ),
+            "platform/infra/apps/chart-prod.yaml": chart_application(
+                "chart-prod", "prod", "charts/prod.yaml"
+            ),
+            "env/staging/job.yaml": cronjob(f"app:1@{DIGEST_A}"),
+            "env/prod/job.yaml": cronjob(f"app:1@{DIGEST_A}"),
+        },
+        "charts",
+    )
+    return repo
+
+
+def test_environment_paths_include_helm_values_files(chart_repo: Path) -> None:
+    paths = environment_paths(chart_repo / "platform/infra/apps")
+    assert paths["prod"] == ["charts/prod.yaml", "env/prod"]
+    assert paths["staging"] == ["charts/staging.yaml", "env/staging"]
+
+
+def test_image_refs_reads_helm_values_images(chart_repo: Path) -> None:
+    commit(chart_repo, {"charts/prod.yaml": helm_values(DIGEST_B)}, "prod values")
+    refs = image_refs(chart_repo, ["charts/prod.yaml"])
+    assert refs == [("charts/prod.yaml", f"ghcr.io/example/app:abc123@{DIGEST_B}")]
+
+
+def test_passes_when_staging_values_pinned_the_digest_first(chart_repo: Path) -> None:
+    base = commit(chart_repo, {"charts/staging.yaml": helm_values(DIGEST_B)}, "staging B")
+    commit(chart_repo, {"charts/prod.yaml": helm_values(DIGEST_B)}, "prod B")
+    problems, checked = violations(chart_repo, base)
+    assert problems == []
+    assert checked == 3
+
+
+def test_fails_when_prod_values_pin_a_digest_staging_never_had(chart_repo: Path) -> None:
+    base = commit(chart_repo, {"charts/staging.yaml": helm_values(DIGEST_A)}, "staging A")
+    commit(chart_repo, {"charts/prod.yaml": helm_values(DIGEST_B)}, "prod B")
+    problems, _ = violations(chart_repo, base)
+    assert len(problems) == 1
+    assert "charts/prod.yaml" in problems[0] and "never pinned" in problems[0]
+
+
+def test_fails_when_a_prod_values_file_does_not_exist(chart_repo: Path) -> None:
+    base = git(chart_repo, "rev-parse", "HEAD")
+    problems, _ = violations(chart_repo, base)
+    assert "charts/prod.yaml: prod Application path does not exist" in problems
