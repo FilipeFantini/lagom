@@ -1,4 +1,4 @@
-# Who cloudflared may reach, and who may reach it (ADR-0029).
+# Who cloudflared may reach, and who may reach it (ADR-0030).
 #
 # 1. Nothing connects to cloudflared: it only dials out. This policy selects
 #    its Pod and allows no ingress. The kubelet's probes still pass, because

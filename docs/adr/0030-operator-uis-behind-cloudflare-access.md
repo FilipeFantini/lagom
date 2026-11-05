@@ -1,4 +1,4 @@
-# ADR-0029 — Operator UIs at getlagom.app hostnames, behind Cloudflare Access
+# ADR-0030 — Operator UIs at getlagom.app hostnames, behind Cloudflare Access
 
 - **Status:** Accepted
 - **Date:** 2026-11-05

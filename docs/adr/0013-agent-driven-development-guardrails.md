@@ -159,3 +159,10 @@ without rewriting it.
   Such changes stay with the operator by convention, and agent merging still
   waits for rule 3's criteria. Details in
   [CONTRIBUTING](../../CONTRIBUTING.md#branch-protection).
+- **2026-11-05 — rule 3 superseded, rule 2 amended, by
+  [ADR-0029](0029-agents-on-more-than-one-harness.md).** Any agent, on any
+  harness, may merge once the required checks are green and a reviewer
+  returned APPROVE; a guardrail change also needs the operator's explicit
+  go-ahead for that pull request. Layer 1 is no longer one harness's deny
+  rules: an agent on another harness runs in that harness's own sandbox, with
+  network access off.

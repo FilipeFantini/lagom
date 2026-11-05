@@ -29,7 +29,7 @@ dbt, Postgres, Dagster.
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | Evidence | M4 — the dashboard gallery on getlagom.app ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
-| Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `getlagom.app` hostnames ([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
+| Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `getlagom.app` hostnames ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
 | NATS | second consumer of the same stream, or a replay requirement |
 | Streamlit | an interactive app a static page cannot serve |
 | Infrastructure observability (metrics and logs), shown on getlagom.app | the USGS showcase is live on getlagom.app (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
@@ -40,9 +40,9 @@ dbt, Postgres, Dagster.
 | 8 GB node | **decided 2026-10-27** for M3 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)); obtained 2026-10-28 as a new node in another location, `lagom-shared-02`, and the platform moved to it the same day |
 | Big-data stack (Apache Iceberg, Spark or Trino, Airflow) | later, as the comparison that shows where the SME stack stops; infrastructure sized for it and its own ADR ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed) |
 | In-cluster policy engine (Kyverno, Gatekeeper) | a second writer to the cluster besides Argo CD — [ADR-0013](adr/0013-agent-driven-development-guardrails.md) |
-| Automated staging digest bump (bot commit after a build) | manual staging bumps become routine, and the bot meets [ADR-0013](adr/0013-agent-driven-development-guardrails.md) rule 3 for infrastructure manifests — [ADR-0015](adr/0015-images-on-ghcr.md) |
+| Automated staging digest bump (bot commit after a build) | manual staging bumps become routine; its pull requests pass the required checks and a reviewer like any agent's ([ADR-0030](adr/0029-agents-on-more-than-one-harness.md)) — [ADR-0015](adr/0015-images-on-ghcr.md) |
 | Run jobs without an own image (official `uv` image, clone at run time) | GitHub announces billing for Container registry storage or bandwidth — [ADR-0015](adr/0015-images-on-ghcr.md) |
-| Agent merge for a class of change | the criteria in [ADR-0013](adr/0013-agent-driven-development-guardrails.md) rule 3 — deterministic gates required by branch protection, and a run of merges with no escape |
+| A GitHub account of its own for agents | a second developer (M7), or an agent action that must be attributed apart from the operator — [ADR-0030](adr/0029-agents-on-more-than-one-harness.md) |
 
 Re-introducing a practice excluded in
 [`engineering-protocol.md`](engineering-protocol.md) §17 requires an ADR.
@@ -252,7 +252,7 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [ ] Dagster's UI at `dagster-staging.getlagom.app` and
       `dagster.getlagom.app` behind a Cloudflare Access login, instead of
       `kubectl port-forward`
-      ([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md);
+      ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md);
       [runbook](architecture.md#operator-uis-behind-cloudflare-access-m3))
 - [x] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
       prod. Staging's first week: 372 of 373 runs succeeded; prod's first run,
@@ -378,8 +378,18 @@ by its own trigger, like any other piece.
       repository became public; what it enforces and what it does not is in
       [CONTRIBUTING](../CONTRIBUTING.md#branch-protection). The prerequisite
       for any agent merge
-- [ ] First class of change merged by an agent (documentation is the
-      candidate) — by the trigger in the table above
+- [x] **Agents merge** — any agent, once the required checks are green and a
+      reviewer returned APPROVE; a guardrail change also needs the operator's
+      explicit go-ahead. Decided 2026-11-05, replacing the class-by-class
+      promotion of ADR-0013 rule 3
+      ([ADR-0030](adr/0029-agents-on-more-than-one-harness.md))
+- [x] **Agents beyond Claude Code** — [`AGENTS.md`](../AGENTS.md) as the one
+      rulebook; an agent on another harness runs in that harness's sandbox
+      with network access off
+      ([ADR-0030](adr/0029-agents-on-more-than-one-harness.md)). An
+      orchestration layer (Paseo, in a sealed container) was built and removed
+      the same day; the ADR keeps its design for when several agents at once,
+      or work from the phone, become a need
 
 ## Repository layout
 

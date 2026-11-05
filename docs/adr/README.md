@@ -32,7 +32,7 @@ decision, consequences, and how to reverse it.
 | [0010](0010-sealed-secrets.md) | Sealed Secrets for secrets in Git, key renewal off | Accepted |
 | [0011](0011-memory-viability-on-4gb.md) | Memory viability on the 4 GB node, measured before M2 | Accepted, decision 3 superseded by 0016 |
 | [0012](0012-cloudnative-pg.md) | CloudNativePG runs Postgres; backup mechanism chosen at its trigger | Accepted, partially superseded by 0019 |
-| [0013](0013-agent-driven-development-guardrails.md) | Agent-driven development behind enforced guardrails | Accepted |
+| [0013](0013-agent-driven-development-guardrails.md) | Agent-driven development behind enforced guardrails | Accepted; rule 3 superseded and rule 2 amended by 0029 |
 | [0014](0014-develop-against-staging.md) | Develop against staging, with no local services | Accepted |
 | [0015](0015-images-on-ghcr.md) | Images built in CI, published privately to GHCR, promoted by digest | Accepted |
 | [0016](0016-ci-ceiling-2-2-gb.md) | CI ceiling lowered to 2.2 GB from the measured overhead | Superseded by 0024 |
@@ -45,7 +45,8 @@ decision, consequences, and how to reverse it.
 | [0023](0023-sme-stack-duckdb-on-ducklake.md) | The SME stack: DuckDB on DuckLake, Postgres as catalog, data on R2 | Proposed |
 | [0024](0024-ci-ceiling-on-the-8-gb-node.md) | CI ceiling raised to 5.5 GB, measured on the 8 GB node | Accepted |
 | [0025](0025-postgres-backup-barman-cloud-to-r2.md) | Postgres backup: the Barman Cloud plugin to Cloudflare R2, staging first | Accepted; retention checked 2026-11-05; RPO and prod retention superseded by 0027 |
-| [0026](0026-dagster-one-instance-per-environment.md) | Dagster, one instance per environment, running USGS on DuckLake | Accepted, UI access superseded by 0028, then 0029 |
+| [0026](0026-dagster-one-instance-per-environment.md) | Dagster, one instance per environment, running USGS on DuckLake | Accepted, UI access superseded by 0028, then 0030 |
 | [0027](0027-hourly-wal-archiving-and-14-day-prod-retention.md) | WAL archived hourly, prod backups kept 14 days | Accepted |
-| [0028](0028-dagster-ui-over-the-tailnet.md) | Dagster's UI over the tailnet, by `tailscale serve` on the node | Superseded by 0029 |
-| [0029](0029-operator-uis-behind-cloudflare-access.md) | Operator UIs at getlagom.app hostnames, behind Cloudflare Access | Accepted |
+| [0028](0028-dagster-ui-over-the-tailnet.md) | Dagster's UI over the tailnet, by `tailscale serve` on the node | Superseded by 0030 |
+| [0029](0029-agents-on-more-than-one-harness.md) | Agents on more than one harness: one rulebook, and who may merge | Accepted |
+| [0030](0030-operator-uis-behind-cloudflare-access.md) | Operator UIs at getlagom.app hostnames, behind Cloudflare Access | Accepted |

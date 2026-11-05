@@ -1,4 +1,4 @@
-# What the tunnel serves (ADR-0029). This file is the whole list of what the
+# What the tunnel serves (ADR-0030). This file is the whole list of what the
 # internet can ask for through it: a hostname not listed here gets a 404 from
 # the tunnel, whatever the DNS says.
 #

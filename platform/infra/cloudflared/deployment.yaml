@@ -1,6 +1,6 @@
 # One cloudflared, which opens four outbound connections to Cloudflare's edge
 # and receives requests through them; nothing listens for the internet on the
-# node (ADR-0029). One replica: the node is single, so a second one would add
+# node (ADR-0030). One replica: the node is single, so a second one would add
 # memory without surviving anything the first does not.
 apiVersion: apps/v1
 kind: Deployment
