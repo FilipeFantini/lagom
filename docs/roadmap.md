@@ -241,8 +241,9 @@ The node that M3 needs, and the orchestration every showcase uses.
       to R2 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)), in
       staging and prod since 2026-10-28; a restore in staging was tested
       ([runbook](architecture.md#backup-and-restore-m3))
-- [ ] Check backup retention on 2026-11-05: staging's 7-day retention must
-      delete its first expired backup without error (ADR-0025 notes)
+- [x] Check backup retention on 2026-11-05: staging's 7-day retention must
+      delete its first expired backup without error. Passed on 2026-11-05
+      (ADR-0025 notes)
 - [ ] Dagster with Postgres metastore, one instance per environment
       ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): the code
       location first (image `lagom-orchestration`), then each environment's
