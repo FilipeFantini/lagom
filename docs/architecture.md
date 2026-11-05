@@ -1554,6 +1554,12 @@ an hour the Pod is gone, and the run is read in the UI.
 → Launch Run*. The run appears in *Runs*. If a scheduled run is in progress,
 it waits as *Queued*.
 
+Start runs from the job's page, not from *Catalog* or the asset graph. A run
+started there belongs to Dagster's implicit asset job, which has none of the
+jobs' tags: the queue does not hold it back from a scheduled run, so two
+loads can overlap on dlt's cursor, and it takes the code server's memory
+instead of the run's (§11).
+
 **Pitfalls hit on the way in** (staging, 2026-10-28). Each made the code
 server or the first runs fail:
 
