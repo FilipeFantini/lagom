@@ -35,6 +35,12 @@ spec:
       work_mem: 4MB
       maintenance_work_mem: 32MB
       effective_cache_size: 256MB
+      # Close and archive a WAL segment at least once an hour, not every
+      # 5 minutes (CloudNativePG's default). Each forced close ships a whole
+      # 16 MiB segment however little was written, so the default filled the
+      # backup bucket by the clock. The cost: up to an hour of writes can be
+      # lost with the node (ADR-0027). A reload applies it; no restart.
+      archive_timeout: 1h
 
     # Postgres grants CONNECT on every database to every role by default, so
     # owning `lagom_dev` does not keep the developer out of `lagom`, staging's

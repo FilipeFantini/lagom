@@ -1359,17 +1359,20 @@ Cloud plugin ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)):
 | Environment | Bucket | Retention |
 |---|---|---|
 | staging | `lagom-staging-backups` | 7 days |
-| prod | `lagom-prod-backups` | 30 days |
+| prod | `lagom-prod-backups` | 14 days ([ADR-0027](adr/0027-hourly-wal-archiving-and-14-day-prod-retention.md)) |
 
 Two kinds of copy land there:
 
 - **WAL**, continuously. Each write-ahead log segment is uploaded as soon as
-  Postgres closes it, which happens at the latest every 5 minutes.
+  Postgres closes it: when its 16 MiB fill, or after an hour
+  (`archive_timeout`, ADR-0027). CloudNativePG's default of 5 minutes shipped
+  a whole segment each time and filled the bucket by the clock.
 - **A base backup** every day at 03:00 UTC.
 
 A restore replays WAL on top of a base backup. It can reach any moment up to
-the last archived segment, so at most about **5 minutes of writes** are lost
-(the RPO).
+the last archived segment, so at most about **1 hour of writes** is lost
+(the RPO). Pipeline data is rebuilt by a re-load; Dagster's run history of that
+hour is not.
 
 **Set it up for an environment** (exercised in staging, 2026-10-28):
 
@@ -1458,7 +1461,7 @@ kubectl --context <node-name> -n <env> delete cluster restore-test
 Result in staging on 2026-10-28: ready 68 s after creation. The copy held
 every row up to the last archived WAL (14:28 UTC). The 9 rows a pipeline run
 wrote at 14:30, in a segment not yet closed, were missing, as the RPO above
-predicts. Deleting the Cluster deletes its volume: local-path released it
+predicts (the timeout was 5 minutes then). Deleting the Cluster deletes its volume: local-path released it
 within two minutes.
 
 **Retention** is enforced by the sidecar every 30 minutes. To check it: an
@@ -1477,6 +1480,116 @@ and the ObjectStore's `status.serverRecoveryWindow` moves its
 
 **Memory measured** on 2026-10-28 is in §11: the sidecar used 18 Mi during a
 base backup.
+
+### Dagster (M3)
+
+Each environment runs its own Dagster in its namespace
+([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), from
+`platform/infra/dagster-<env>/values.yaml`. Three Pods stay up:
+
+- the **webserver**, the UI;
+- the **daemon**, which evaluates the schedules and starts queued runs;
+- the **code server** (`dagster-dagster-user-deployments-lagom-…`), which
+  loads the code location and answers the other two.
+
+A **run** is not one of them. For each run the daemon creates a Kubernetes
+Job named `dagster-run-<run id>`, whose Pod uses the code server's image and
+environment; its memory is in §11. The Job and its Pod are deleted an hour after they
+finish. The run's history stays in the database `dagster` of the same
+environment's Postgres.
+
+Exercised in staging on 2026-10-28. Prod has no Dagster yet; once it does,
+replace `staging` with `prod`.
+
+**The jobs** (code in [`platform/orchestration/`](../platform/orchestration/README.md)):
+
+| Job | Schedule (UTC) | What it does |
+|---|---|---|
+| `usgs` | every 30 minutes, at :00 and :30 | dlt loads the events USGS updated since the last cursor into DuckLake (`bronze.usgs_events`), then `dbt build` builds silver and gold on the `lake` target and runs their 33 tests |
+| `lake_maintenance` | daily at 04:15 | merges small Parquet files, expires snapshots older than 7 days, deletes files nothing references |
+
+Both carry the tag `lagom/pipeline=usgs`, and the daemon's queue starts one
+run with that tag at a time. A second run waits as *Queued* until the first
+ends. In staging's first week (2026-10-28 to 11-05), 372 of 373 `usgs` runs
+succeeded, in 43 s at the median and 136 s at most; the one failure was the
+driver pitfall below. All 8 `lake_maintenance` runs succeeded, in 10 to 17 s.
+In the 21:30 run of 2026-10-28, the load took 7 s and dbt 23 s; the rest was
+Dagster's own start-up and per-step overhead.
+
+**Check it is healthy:**
+
+```bash
+kubectl --context <node-name> -n argocd get application dagster-staging   # Synced / Healthy
+kubectl --context <node-name> -n staging get pods | grep dagster           # three Running, plus finished runs
+```
+
+**Open the UI.** It has no login: whoever reaches the port controls Dagster.
+So it is reached only through `kubectl port-forward`, which needs the
+kubeconfig, over the tailnet. Leave the command running, then browse
+http://localhost:3000; stop it with Ctrl+C:
+
+```bash
+kubectl --context <node-name> -n staging port-forward svc/dagster-dagster-webserver 3000:80
+```
+
+*Runs* lists every run with its status and duration; open one to see each
+step, its logs and the dbt tests as asset checks. *Jobs* and *Automation*
+show the two jobs and their schedules. Times are shown in the browser's time
+zone. The first visit shows a newsletter prompt: *Skip* closes it.
+
+**Find and read a run from the terminal**, when the UI is not open or the
+run's Pod still exists:
+
+```bash
+kubectl --context <node-name> -n staging get jobs | grep dagster-run            # Complete or Failed, with duration
+kubectl --context <node-name> -n staging logs job/dagster-run-<run id> \
+  | grep -E ' - (RUN_SUCCESS|RUN_FAILURE|STEP_SUCCESS|STEP_FAILURE) - |loaded .* rows|PASS='
+kubectl --context <node-name> -n staging logs deploy/dagster-daemon --since=1h | grep -E 'schedule|Launched'
+```
+
+A healthy run shows `loaded N rows into usgs_events`, two `STEP_SUCCESS`
+(`usgs__events`, then `warehouse`), dbt's `PASS=33`, and `RUN_SUCCESS`. The
+daemon logs `Completed scheduled launch of run …` at each :00 and :30. After
+an hour the Pod is gone, and the run is read in the UI.
+
+**Start a run on demand.** In the UI, *Jobs → usgs → Materialize all*. For
+`lake_maintenance`, which has no assets, *Jobs → lake_maintenance → Launchpad
+→ Launch Run*. The run appears in *Runs*. If a scheduled run is in progress,
+it waits as *Queued*. Exercised on 2026-11-05: a `usgs` run started at
+11:17 UTC, loaded 4 rows, `PASS=33`, in under a minute.
+
+Start runs from the job's page, not from *Catalog* or the asset graph. A run
+started there belongs to Dagster's implicit asset job, which has none of the
+jobs' tags: the queue does not hold it back from a scheduled run, so two
+loads can overlap on dlt's cursor, and it takes the code server's memory
+instead of the run's (§11).
+
+**Pitfalls hit on the way in** (staging, 2026-10-28). Each made the code
+server or the first runs fail:
+
+- **An `ENTRYPOINT` in the image** (PR #33). The chart and the run launcher
+  each pass a full command starting with `dagster`. With
+  `ENTRYPOINT ["dagster"]` the container ran `dagster dagster api grpc …` and
+  failed with `No such command 'dagster'`. The image has no `ENTRYPOINT`, and
+  CI imports the definitions inside the built image.
+- **psycopg 3 missing** (PR #34). SQLAlchemy 2.1 opens `postgresql://` URLs
+  with psycopg 3, which `dagster-postgres` does not declare. The schedule's
+  first tick failed with `ModuleNotFoundError: No module named 'psycopg'`, and
+  no run was launched.
+- **The wrong driver for Dagster's SQL** (PR #36). With psycopg 3 installed,
+  the first run failed in Dagster's run storage with
+  `syntax error at or near "$1"`: psycopg 3 sends parameters to the server
+  separately, a form Dagster's statements were not written for.
+  `postgresql.postgresqlScheme: postgresql+psycopg2` in the values selects
+  psycopg2 for every Dagster Pod, without rebuilding the image.
+
+**The first pull is slow.** The image is 961 MiB ([§9a](#9a-environments)). The first pull on the node
+took **4 min 25 s**. Until it ends, the Pod is `ContainerCreating` and
+`kubectl describe pod` shows `Pulling image`: that is not a failure. Runs use
+`imagePullPolicy: IfNotPresent` and the image is pinned by digest, so later
+runs start from the node's copy. A new digest is pulled once.
+
+**Memory** of each Pod and of a run, measured, is in §11.
 
 ### Disaster recovery
 
