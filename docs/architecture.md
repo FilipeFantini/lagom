@@ -72,7 +72,8 @@ price the one the Console shows. Object storage (R2) enters with the SME-stack
 spike in M3, on its free tier ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed); the prices checked earlier are in ADR-0008.
 
 **Outside the cluster, principle 3 does not hold yet.** The server, its
-firewall, the Tailscale ACL, and the Healthchecks.io checks are created by
+firewall, the Tailscale ACL, the `tailscale serve` setting that puts
+Dagster's UI on the tailnet, and the Healthchecks.io checks are created by
 hand, following the runbook (§13); the domain's zone at Cloudflare was set up by
 hand in its console, and Cloudflare Access does not exist yet (it enters by
 trigger, with the first content that must not be public). Argo CD
@@ -238,6 +239,12 @@ Until Dagster takes over the alarm, the CronJobs keep running and each run
 reports success to Healthchecks.io, which e-mails the operator when a report
 is missing ([ADR-0018](adr/0018-pipeline-heartbeat.md); runbook: *Pipeline
 heartbeat*).
+
+**The UI has no login**, so reaching it is the access control. Each
+environment's UI has a stable URL on the tailnet, served by `tailscale serve`
+on the node and reachable only from operators' devices; nothing is published
+on the internet ([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md); runbook:
+*Dagster UI over the tailnet*).
 
 Airflow and Prefect are excluded on resident RAM.
 
@@ -418,6 +425,12 @@ the cluster through a pull request and Argo CD, and inspection goes through
 WireGuard mesh, ACL by identity, **no open ports**. Headscale is the
 self-hosted control plane if a fully open-source server is required — the
 Tailscale client is already open source.
+
+Besides SSH and the Kubernetes API, it carries the operator's web UIs: the
+node's `tailscaled` forwards a tailnet port per UI to a Service in the
+cluster (`tailscale serve`), so a browser on a tailnet device opens it by the
+node's MagicDNS name. Today that is Dagster's UI in staging
+([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md)).
 
 ### Cloudflare Tunnel + Access
 
@@ -887,13 +900,14 @@ below, applied in the admin console (*Access controls*), replaces it:
     "tag:lagom-node": ["group:operators"],
   },
   "grants": [
-    // Operators reach the node: SSH (break-glass) and the Kubernetes API only.
-    {"src": ["group:operators"], "dst": ["tag:lagom-node"], "ip": ["tcp:22", "tcp:6443"]},
+    // Operators reach the node: SSH (break-glass), the Kubernetes API, and
+    // staging's Dagster UI (tailscale serve, ADR-0028) only.
+    {"src": ["group:operators"], "dst": ["tag:lagom-node"], "ip": ["tcp:22", "tcp:6443", "tcp:8080"]},
     // Each person's own devices keep reaching each other.
     {"src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"]},
   ],
   "tests": [
-    {"src": "<operator-tailscale-login>", "accept": ["tag:lagom-node:22", "tag:lagom-node:6443"], "deny": ["tag:lagom-node:10250"]},
+    {"src": "<operator-tailscale-login>", "accept": ["tag:lagom-node:22", "tag:lagom-node:6443", "tag:lagom-node:8080"], "deny": ["tag:lagom-node:10250"]},
     {"src": "tag:lagom-node", "deny": ["<operator-tailscale-login>:22"]},
   ],
 }
@@ -903,8 +917,8 @@ Then *Machines →* `<node-name>` *→ Edit ACL tags →* `tag:lagom-node`.
 
 **Why it works.** A tagged machine belongs to its tag, not to a person, so rules
 name roles — operators reach Lagom nodes — instead of people. Anything not
-granted is denied, in both directions: operators get SSH and the API and nothing
-else (not even the kubelet), and the node can open no connection to anyone's
+granted is denied, in both directions: operators get SSH, the API and
+Dagster's UI and nothing else (not even the kubelet), and the node can open no connection to anyone's
 device, so a compromised node cannot reach the operator's machine. `tests` are
 assertions the console checks on every save; a policy that breaks them is
 rejected.
@@ -1351,6 +1365,98 @@ above. No Job at all means the CronJob is not scheduling or the node is down;
 three `heartbeat attempt … failed` lines means the run worked and the ping did
 not.
 
+### Dagster UI over the tailnet (M3)
+
+Each environment's Dagster UI gets a URL that works from any of the
+operator's tailnet devices, with no command left running
+([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md)). Staging's is
+`http://<node-name>:8080`; prod's will be 8081, once its Dagster exists.
+
+**What each piece is:**
+
+| Piece | What it is |
+|---|---|
+| `tailscale serve` | A setting of the Tailscale daemon on the node. It answers on one port of the node's tailnet address and passes every request on to another address, like a receptionist forwarding calls. Devices the ACL does not admit cannot even reach the port |
+| Cluster IP | An address a Service answers on inside the cluster. Only the node and its Pods can reach it. The Service `dagster-ui-tailnet` asks for a fixed one, `10.43.0.30`, so serve's target never changes ([`tailnet-access/`](../platform/infra/tailnet-access/)) |
+| MagicDNS | Tailscale's name lookup. `<node-name>` resolves only on tailnet devices, and nothing is published in public DNS |
+
+The path of a request:
+
+```
+browser on the Mac -> tailnet (WireGuard) -> <node-name>:8080 (tailscaled)
+  -> 10.43.0.30:80 (Service, through kube-proxy's rules on the node) -> webserver Pod
+```
+
+**Plain HTTP, on purpose.** WireGuard already encrypts and authenticates the
+connection end to end. An HTTPS certificate for the `ts.net` name would be
+written to the public Certificate Transparency logs, node name included. The
+browser shows "Not secure", and a few copy buttons may not work (ADR-0028).
+
+**Set it up** once the `tailnet-access` Application is synced. Every command
+below is the operator's; none involves a credential.
+
+1. **The Service has an endpoint.** The second command must list the
+   webserver Pod's address:
+
+   ```bash
+   kubectl --context <node-name> -n staging get svc dagster-ui-tailnet
+   kubectl --context <node-name> -n staging get endpointslices -l kubernetes.io/service-name=dagster-ui-tailnet
+   ```
+
+2. **The ACL admits the port.** In the admin console (*Access controls*),
+   apply the policy in [Tailscale ACL](#tailscale-acl-and-zero-inbound-ports-m1):
+   it adds `tcp:8080` to the operators' grant and to the `tests`. The console
+   rejects a policy whose tests fail.
+
+3. **Serve, on the node:**
+
+   ```bash
+   ssh <admin-user>@<node-name>
+   tailscale version                                   # 1.92 or later
+   sudo ss -ltnp | grep -w 8080 || echo "8080 free"    # nothing else may hold the port
+   curl -sS -o /dev/null -w '%{http_code}\n' http://10.43.0.30/server_info   # 200: the node reaches the Service
+   ps -o rss= -C tailscaled                            # KiB, before
+   sudo tailscale serve --bg --http=8080 http://10.43.0.30:80
+   tailscale serve status
+   ps -o rss= -C tailscaled                            # KiB, after; record both in ADR-0028's notes
+   ```
+
+   `--bg` keeps the setting in `tailscaled`'s state, so it survives restarts
+   and reboots. Without it, serve stops when the command exits.
+
+**Verify**, from the Mac, on the tailnet:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://<node-name>:8080/server_info   # 200
+open http://<node-name>:8080
+```
+
+Then from off the tailnet. Disconnect Tailscale on the Mac (menu bar →
+*Disconnect*), then:
+
+```bash
+curl -sS -m 5 http://<node-name>:8080/server_info        # fails: the name does not resolve
+curl -sS -m 5 http://<node-tailnet-ip>:8080/server_info  # fails: no route
+nc -z -G 5 -w 5 <public-ipv4> 8080 && echo OPEN || echo closed   # closed
+nc -6 -z -G 5 -w 5 <public-ipv6> 8080 && echo OPEN || echo closed # closed
+```
+
+Reconnect afterwards.
+
+**If the URL fails:**
+
+- **Connection refused or timeout on the tailnet:** serve is off or the ACL
+  lacks the port. Run `tailscale serve status` on the node, and check the
+  grant.
+- **502:** serve works, but nothing answers behind it. Either the Service
+  has no endpoint (step 1; the webserver Pod is down, or a chart upgrade
+  changed its labels), or the Service is missing.
+- **In the meantime,** the port-forward still works:
+  `kubectl --context <node-name> -n staging port-forward svc/dagster-dagster-webserver 3000:80`.
+
+**Turn it off:** `sudo tailscale serve --http=8080 off`, then remove the port
+from the ACL.
+
 ### Backup and restore (M3)
 
 Each environment's Postgres is backed up to its own R2 bucket by the Barman
@@ -1523,9 +1629,11 @@ kubectl --context <node-name> -n argocd get application dagster-staging   # Sync
 kubectl --context <node-name> -n staging get pods | grep dagster           # three Running, plus finished runs
 ```
 
-**Open the UI.** It has no login: whoever reaches the port controls Dagster.
-So it is reached only through `kubectl port-forward`, which needs the
-kubeconfig, over the tailnet. Leave the command running, then browse
+**Open the UI.** Staging's is on the tailnet at `http://<node-name>:8080`
+([Dagster UI over the tailnet](#dagster-ui-over-the-tailnet-m3)). Prod's, and
+staging's when that address is down, is reached by `kubectl port-forward`,
+which needs the kubeconfig. The UI has no login: whoever reaches the port
+controls Dagster. Leave the command running, then browse
 http://localhost:3000; stop it with Ctrl+C:
 
 ```bash
@@ -1635,6 +1743,8 @@ next index:
    [the CronJob section](#staging-the-pipeline-cronjob)): `bronze >= silver >=
    gold`. dbt's `reconcile_*` tests already assert the relations between
    layers in step 8.
+10. [Put Dagster's UI back on the tailnet](#dagster-ui-over-the-tailnet-m3):
+    the `tailscale serve` setting lives on the old node, not in Git.
 
 **While two clusters run at once** (a move, or a drill with the old node up):
 
