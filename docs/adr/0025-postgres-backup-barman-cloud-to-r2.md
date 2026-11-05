@@ -136,7 +136,9 @@ without rewriting it.
     any point in the last 7 days.
   - The sidecar logged no error in 8 days, in staging or prod.
 
-  The bucket was not listed directly, because agents hold no R2 credentials.
-  Old WAL files being removed with the backup is therefore inferred from the
-  catalog, not seen. Prod's 30-day retention uses the same code path; its first
+  Agents hold no R2 credentials, so the operator listed the bucket in the
+  Cloudflare console the same day: `base/` held only the eight daily backups
+  from 2026-10-29 to 2026-11-05, and nothing from 2026-10-28. Old WAL files
+  being removed with the backup was not looked at; it is inferred from the
+  catalog. Prod's 30-day retention uses the same code path; its first
   deletion is due around 2026-11-28.
