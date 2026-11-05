@@ -1,0 +1,177 @@
+# Helm values for Dagster in prod (ADR-0026).
+#
+# Prod mirrors staging on purpose (dagster-staging/values.yaml), so it runs
+# what staging tested: the files differ only in the environment's names and
+# its bucket, and a change to one is made to both. The image is promoted by
+# digest from staging (ADR-0015).
+# Chart: dagster/dagster 1.13.27, from https://dagster-io.github.io/helm.
+# Only what differs from the chart defaults is set here.
+#
+# Memory figures are set from measurement in staging (architecture.md
+# section 11): peaks by the kubelet over an hour of runs on 2026-10-28, and
+# again after seven days of uptime on 2026-11-05.
+
+# The metadata lives in the database `dagster` of prod's Postgres, as the
+# role `dagster` (postgres-prod/cluster.yaml). Its password is in the
+# sealed Secret dagster-db, under the key the chart reads.
+global:
+  postgresqlSecretName: dagster-db
+generatePostgresqlPasswordSecret: false
+postgresql:
+  enabled: false
+  postgresqlHost: postgres-rw
+  postgresqlUsername: dagster
+  postgresqlDatabase: dagster
+  # Pod to Service: TLS required, as every in-cluster client here.
+  postgresqlParams:
+    sslmode: require
+  # psycopg2, the driver dagster-postgres declares and Dagster's SQL is written
+  # for. SQLAlchemy 2.1 would pick psycopg 3, whose server-side parameters
+  # ("\$1") Dagster's statements reject: the first staging run failed with
+  # `syntax error at or near "$1"` (2026-10-28).
+  postgresqlScheme: postgresql+psycopg2
+  service:
+    port: 5432
+
+telemetry:
+  enabled: false
+
+dagsterWebserver:
+  # Measured 127-141 MiB.
+  resources:
+    requests: {cpu: 25m, memory: 160Mi}
+    limits: {memory: 384Mi}
+  # The init container only waits for Postgres.
+  initContainerResources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {memory: 32Mi}
+
+dagsterDaemon:
+  # Measured 104 MiB at start, 206 after four hours, 263 after seven days:
+  # it grows with uptime. Watched; the limit is what stops it.
+  resources:
+    requests: {cpu: 25m, memory: 320Mi}
+    limits: {memory: 512Mi}
+  initContainerResources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {memory: 32Mi}
+  runCoordinator:
+    enabled: true
+    type: QueuedRunCoordinator
+    config:
+      queuedRunCoordinator:
+        # Two runs of the pipeline never overlap: both would read dlt's cursor
+        # and write it back (the CronJob's concurrencyPolicy: Forbid).
+        tagConcurrencyLimits:
+          - key: lagom/pipeline
+            value: usgs
+            limit: 1
+
+runLauncher:
+  type: K8sRunLauncher
+  config:
+    k8sRunLauncher:
+      # The image is pinned by digest, so a cached copy is the right copy.
+      imagePullPolicy: IfNotPresent
+      runK8sConfig:
+        # The code location's container securityContext does not reach runs:
+        # the chart passes only the Pod-level one. It is set here for every
+        # run's container (found in review of PR #32).
+        containerConfig:
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+        jobSpecConfig:
+          # No retry from Kubernetes: Dagster decides, and a failed run waits
+          # for the next schedule. A finished Job and its Pod go after an hour,
+          # and a hung run is stopped after 25 minutes, before the next slot.
+          backoffLimit: 0
+          ttlSecondsAfterFinished: 3600
+          activeDeadlineSeconds: 1500
+
+dagster-user-deployments:
+  enabled: true
+  enableSubchart: true
+  imagePullSecrets:
+    - name: ghcr-pull
+  deployments:
+    - name: lagom
+      image:
+        repository: ghcr.io/filipefantini/lagom-orchestration
+        # Pinned by digest (ADR-0015): built from main at d6716cc (PR #38,
+        # runs set their own resources and run their steps in one process).
+        tag: "d6716cc89dec747823dc4260e8b42196da2800db@sha256:ce87e595dcdb1d61e12608ed4fb57db13d4da8a4f41b59814d915d1cf99b6c1b"
+        pullPolicy: IfNotPresent
+      dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
+      port: 3030
+      # Runs inherit this deployment's image, environment, volumes and Pod
+      # security context, in this namespace. The container security context
+      # is set for runs in runLauncher above. Their resources are not these:
+      # a tag on each job in the code location sets them (RUN_RESOURCES in
+      # lagom_orchestration/definitions.py), and wins.
+      includeConfigInLaunchedRuns:
+        enabled: true
+      # The code server alone: measured 203-291 MiB. The limit stays at 1Gi
+      # for one case: a run launched from the asset catalog instead of a job
+      # belongs to Dagster's implicit asset job, which has no RUN_RESOURCES
+      # tag, so it takes these figures. With 1Gi it has room for a run's peak
+      # instead of being OOM-killed. Start runs from the job page instead.
+      resources:
+        requests: {cpu: 50m, memory: 320Mi}
+        limits: {memory: 1Gi}
+      podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities: {drop: ["ALL"]}
+      # Every writer goes to /tmp: dlt, dbt, DuckDB's extensions and spill.
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 1Gi}
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      # Kubernetes expands $(NAME) from variables defined above it in the list.
+      env:
+        # The DuckLake catalog: prod's `lagom` database, as its owner, from
+        # the Secret CloudNativePG generates. TLS required.
+        - name: PG_URI
+          valueFrom: {secretKeyRef: {name: postgres-app, key: uri}}
+        - name: PGSSLMODE
+          value: require
+        # The R2 token for lagom-prod-lake, sealed in r2-lake-sealed.yaml.
+        - name: LAGOM_R2_ACCESS_KEY_ID
+          valueFrom: {secretKeyRef: {name: r2-lake, key: ACCESS_KEY_ID}}
+        - name: LAGOM_R2_SECRET_ACCESS_KEY
+          valueFrom: {secretKeyRef: {name: r2-lake, key: ACCESS_SECRET_KEY}}
+        - name: LAGOM_R2_ENDPOINT
+          valueFrom: {secretKeyRef: {name: r2-lake, key: ENDPOINT}}
+        # dlt's DuckLake destination.
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG
+          value: "$(PG_URI)"
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__DUCKLAKE_NAME
+          value: lagom
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__METADATA_SCHEMA
+          value: ducklake
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL
+          value: s3://lagom-prod-lake
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__AWS_ACCESS_KEY_ID
+          value: "$(LAGOM_R2_ACCESS_KEY_ID)"
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__AWS_SECRET_ACCESS_KEY
+          value: "$(LAGOM_R2_SECRET_ACCESS_KEY)"
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__ENDPOINT_URL
+          value: "$(LAGOM_R2_ENDPOINT)"
+        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__REGION_NAME
+          value: auto
+        # The same lake for dbt's `lake` target and the maintenance job.
+        - name: LAGOM_LAKE_CATALOG
+          value: "ducklake:postgres:$(PG_URI)?sslmode=require"
+        - name: LAGOM_LAKE_DATA_PATH
+          value: s3://lagom-prod-lake/
+        - name: LAGOM_LAKE_METADATA_SCHEMA
+          value: ducklake

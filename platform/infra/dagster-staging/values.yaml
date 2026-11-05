@@ -1,4 +1,5 @@
-# Helm values for Dagster in staging (ADR-0026).
+# Helm values for Dagster in staging (ADR-0026). Prod's file
+# (dagster-prod/values.yaml) mirrors this one; a change to one is made to both.
 # Chart: dagster/dagster 1.13.27, from https://dagster-io.github.io/helm.
 # Only what differs from the chart defaults is set here.
 #

@@ -1,0 +1,37 @@
+# Dagster for prod (ADR-0026): webserver, daemon and the platform's code
+# location, in the prod namespace, with its metadata in prod's Postgres.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dagster-prod
+  namespace: argocd
+  annotations:
+    # Each run is a Pod the run launcher creates at run time, so nothing
+    # rendered from this Application shows it. tools/resource_budget.py counts
+    # this request as one ephemeral job. The run's resources are a tag in the
+    # code location (RUN_RESOURCES in platform/orchestration/lagom_orchestration/
+    # definitions.py), so they travel with the image; its tests fail if this
+    # figure differs.
+    lagom.dev/ephemeral-memory-request: 768Mi
+spec:
+  project: default
+  sources:
+    - repoURL: https://dagster-io.github.io/helm
+      chart: dagster
+      targetRevision: 1.13.27
+      helm:
+        releaseName: dagster
+        valueFiles:
+          - $values/platform/infra/dagster-prod/values.yaml
+    - repoURL: https://github.com/FilipeFantini/lagom-data-solutions.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  syncPolicy:
+    automated:
+      # Dagster's state is in Postgres, not in these objects, so removing one
+      # from Git may remove it here.
+      prune: true
+      selfHeal: true

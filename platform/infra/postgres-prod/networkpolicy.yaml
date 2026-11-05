@@ -6,7 +6,10 @@
 # the traffic it allows reaches that Pod. This one selects every Pod in the
 # namespace and allows traffic from two places: Pods in `prod` itself, and the
 # CloudNativePG operator in `cnpg-system`, which calls each instance manager's
-# status port. Everything else, staging included, is dropped. There is
+# status port. Everything else, staging included, is dropped. Dagster's Pods
+# (webserver, daemon, code server and each run) live in `prod` too, so they
+# reach Postgres and one another; the policy selects them as well, which is
+# what keeps staging out of prod's Dagster. There is
 # deliberately no namespace here: Argo CD's destination (apps/postgres-prod.yaml)
 # sets it.
 #
