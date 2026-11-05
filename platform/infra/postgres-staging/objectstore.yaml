@@ -4,7 +4,7 @@
 #
 # Two kinds of copy land in the bucket. WAL archiving ships every completed
 # write-ahead log segment as soon as Postgres closes it (at the latest every
-# 5 minutes, CloudNativePG's archive_timeout). Base backups are full copies,
+# hour, archive_timeout in cluster.yaml, ADR-0027). Base backups are full copies,
 # taken by scheduledbackup.yaml. A restore starts from a base backup and
 # replays WAL up to any moment after it: point-in-time recovery.
 apiVersion: barmancloud.cnpg.io/v1

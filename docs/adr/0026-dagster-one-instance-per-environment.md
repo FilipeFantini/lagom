@@ -125,6 +125,6 @@ without rewriting it.
   the run launcher's values, which would have duplicated it.
 - **2026-11-05 — the UI over the tailnet.** "The UI is reached by `kubectl
   port-forward`" is superseded by
-  [ADR-0027](0027-dagster-ui-over-the-tailnet.md): each environment's UI has
+  [ADR-0028](0028-dagster-ui-over-the-tailnet.md): each environment's UI has
   a stable tailnet URL, served by `tailscale serve` on the node, reachable
   only from operators' devices. The port-forward stays as the fallback.

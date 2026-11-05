@@ -243,7 +243,7 @@ heartbeat*).
 **The UI has no login**, so reaching it is the access control. Each
 environment's UI has a stable URL on the tailnet, served by `tailscale serve`
 on the node and reachable only from operators' devices; nothing is published
-on the internet ([ADR-0027](adr/0027-dagster-ui-over-the-tailnet.md); runbook:
+on the internet ([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md); runbook:
 *Dagster UI over the tailnet*).
 
 Airflow and Prefect are excluded on resident RAM.
@@ -430,7 +430,7 @@ Besides SSH and the Kubernetes API, it carries the operator's web UIs: the
 node's `tailscaled` forwards a tailnet port per UI to a Service in the
 cluster (`tailscale serve`), so a browser on a tailnet device opens it by the
 node's MagicDNS name. Today that is Dagster's UI in staging
-([ADR-0027](adr/0027-dagster-ui-over-the-tailnet.md)).
+([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md)).
 
 ### Cloudflare Tunnel + Access
 
@@ -550,9 +550,8 @@ for k3s's growth over days and the shims of new Pods, which requests do not
 count ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It was 2.2 GB on
 the 4 GB node ([ADR-0016](adr/0016-ci-ceiling-2-2-gb.md)), where M3 did not
 fit, hence the move ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Today's
-total is 4,030 MiB with staging's Dagster. Prod's adds 1,568 more (800
-resident, 768 per run), and staging's code server drops by 64 once its image
-sets the runs' resources: about 5,534, some 100 MiB under the ceiling until
+total is 3,966 MiB with staging's Dagster. Prod's adds 1,568 more (800
+resident, 768 per run), to about 5,534: some 100 MiB under the ceiling until
 the CronJobs on Postgres are retired, which frees 512.
 
 **How CI enforces it.** [`tools/resource_budget.py`](../tools/resource_budget.py)
@@ -585,7 +584,7 @@ adds that 70 MiB request as its allowance for components outside Git.
 | CloudNativePG operator | 64 MB | measured 24 MiB with no Cluster, 31 MiB reconciling one (request 64, limit 192, `GOMEMLIMIT` 150MiB) ([ADR-0012](adr/0012-cloudnative-pg.md)) |
 | Backup: Barman Cloud plugin and cert-manager | 192 MB | plugin 32, cert-manager controller 64, cainjector 64, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
 | Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
-| Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests (staging's code server stays at 384 until it runs an image whose jobs set the runs' resources), plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. The run's figure is re-measured once runs execute in one process. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
+| Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. The run's figure is re-measured once runs execute in one process. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
 | **Core requests** | **~2.24 GB** | |
 | **Left within the ceiling for ephemeral jobs** | **~3.3 GB** | |
 
@@ -902,7 +901,7 @@ below, applied in the admin console (*Access controls*), replaces it:
   },
   "grants": [
     // Operators reach the node: SSH (break-glass), the Kubernetes API, and
-    // staging's Dagster UI (tailscale serve, ADR-0027) only.
+    // staging's Dagster UI (tailscale serve, ADR-0028) only.
     {"src": ["group:operators"], "dst": ["tag:lagom-node"], "ip": ["tcp:22", "tcp:6443", "tcp:8080"]},
     // Each person's own devices keep reaching each other.
     {"src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"]},
@@ -1370,7 +1369,7 @@ not.
 
 Each environment's Dagster UI gets a URL that works from any of the
 operator's tailnet devices, with no command left running
-([ADR-0027](adr/0027-dagster-ui-over-the-tailnet.md)). Staging's is
+([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md)). Staging's is
 `http://<node-name>:8080`; prod's will be 8081, once its Dagster exists.
 
 **What each piece is:**
@@ -1391,7 +1390,7 @@ browser on the Mac -> tailnet (WireGuard) -> <node-name>:8080 (tailscaled)
 **Plain HTTP, on purpose.** WireGuard already encrypts and authenticates the
 connection end to end. An HTTPS certificate for the `ts.net` name would be
 written to the public Certificate Transparency logs, node name included. The
-browser shows "Not secure", and a few copy buttons may not work (ADR-0027).
+browser shows "Not secure", and a few copy buttons may not work (ADR-0028).
 
 **Set it up** once the `tailnet-access` Application is synced. Every command
 below is the operator's; none involves a credential.
@@ -1419,7 +1418,7 @@ below is the operator's; none involves a credential.
    ps -o rss= -C tailscaled                            # KiB, before
    sudo tailscale serve --bg --http=8080 http://10.43.0.30:80
    tailscale serve status
-   ps -o rss= -C tailscaled                            # KiB, after; record both in ADR-0027's notes
+   ps -o rss= -C tailscaled                            # KiB, after; record both in ADR-0028's notes
    ```
 
    `--bg` keeps the setting in `tailscaled`'s state, so it survives restarts
@@ -1466,17 +1465,20 @@ Cloud plugin ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)):
 | Environment | Bucket | Retention |
 |---|---|---|
 | staging | `lagom-staging-backups` | 7 days |
-| prod | `lagom-prod-backups` | 30 days |
+| prod | `lagom-prod-backups` | 14 days ([ADR-0027](adr/0027-hourly-wal-archiving-and-14-day-prod-retention.md)) |
 
 Two kinds of copy land there:
 
 - **WAL**, continuously. Each write-ahead log segment is uploaded as soon as
-  Postgres closes it, which happens at the latest every 5 minutes.
+  Postgres closes it: when its 16 MiB fill, or after an hour
+  (`archive_timeout`, ADR-0027). CloudNativePG's default of 5 minutes shipped
+  a whole segment each time and filled the bucket by the clock.
 - **A base backup** every day at 03:00 UTC.
 
 A restore replays WAL on top of a base backup. It can reach any moment up to
-the last archived segment, so at most about **5 minutes of writes** are lost
-(the RPO).
+the last archived segment, so at most about **1 hour of writes** is lost
+(the RPO). Pipeline data is rebuilt by a re-load; Dagster's run history of that
+hour is not.
 
 **Set it up for an environment** (exercised in staging, 2026-10-28):
 
@@ -1565,7 +1567,7 @@ kubectl --context <node-name> -n <env> delete cluster restore-test
 Result in staging on 2026-10-28: ready 68 s after creation. The copy held
 every row up to the last archived WAL (14:28 UTC). The 9 rows a pipeline run
 wrote at 14:30, in a segment not yet closed, were missing, as the RPO above
-predicts. Deleting the Cluster deletes its volume: local-path released it
+predicts (the timeout was 5 minutes then). Deleting the Cluster deletes its volume: local-path released it
 within two minutes.
 
 **Retention** is enforced by the sidecar every 30 minutes. To check it: an

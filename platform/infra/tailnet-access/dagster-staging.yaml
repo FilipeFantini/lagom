@@ -1,4 +1,4 @@
-# Staging's Dagster UI at a cluster IP that never changes (ADR-0027).
+# Staging's Dagster UI at a cluster IP that never changes (ADR-0028).
 #
 # `tailscale serve` on the node forwards tailnet port 8080 to this address
 # (runbook: "Dagster UI over the tailnet"). The chart's own Service,

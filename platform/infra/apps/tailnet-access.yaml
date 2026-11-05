@@ -1,5 +1,5 @@
 # What the operator reaches over the tailnet by a stable address, not by
-# kubectl port-forward (ADR-0027). Each object here is a Service at a fixed
+# kubectl port-forward (ADR-0028). Each object here is a Service at a fixed
 # cluster IP; `tailscale serve` on the node, configured by hand from the
 # runbook, forwards one tailnet port to each. Nothing here runs a Pod.
 apiVersion: argoproj.io/v1alpha1

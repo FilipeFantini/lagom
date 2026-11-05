@@ -1,4 +1,4 @@
-# ADR-0027 — Dagster's UI over the tailnet, by `tailscale serve` on the node
+# ADR-0028 — Dagster's UI over the tailnet, by `tailscale serve` on the node
 
 - **Status:** Accepted
 - **Date:** 2026-11-05
@@ -28,7 +28,7 @@ over Tailscale, where the node is `tag:lagom-node` and the ACL grants
 operators SSH and the Kubernetes API only
 ([runbook](../architecture.md#tailscale-acl-and-zero-inbound-ports-m1)).
 
-Memory is tight right now. Today's declared total is 4,030 MiB of the 5,632
+Memory is tight right now. Today's declared total is 3,966 MiB of the 5,632
 MiB CI ceiling. Prod's Dagster brings it to about 5,534, leaving ~100 MiB
 until the CronJobs on Postgres are retired
 ([architecture.md §11](../architecture.md#11-resource-budget)).
@@ -217,7 +217,7 @@ Cost: zero.
 **Memory:**
 
 - **In the cluster:** 0 MiB, since a Service has no Pod.
-  `tools/resource_budget.py` reports 4,030 MiB before and after this change.
+  `tools/resource_budget.py` reports the same total before and after this change (3,966 MiB on 2026-11-05).
 - **On the node:** `tailscaled`'s RSS, before and after serve is enabled,
   is measured by the operator in the runbook step and recorded in a note
   here. It is node overhead (§11), outside the CI ceiling.

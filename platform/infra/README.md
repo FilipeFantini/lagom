@@ -17,7 +17,7 @@ bootstrap — merge to `main` and Argo CD converges.
 | `postgres-prod/` | The prod database: one CloudNativePG `Cluster`. The operator generates its credentials in the cluster; nothing is committed. Its `NetworkPolicy` admits only `prod` and the operator, so staging cannot reach it. Backed up to R2 (`ObjectStore`, `ScheduledBackup`, the sealed R2 token) |
 | `postgres-staging/` | The staging database: a `Cluster` mirroring prod's, the developer's `lagom_dev` role and database, a ResourceQuota and LimitRange, the sealed credential for that role, its backup to R2 (`ObjectStore`, `ScheduledBackup`, the sealed R2 token), and Dagster's role, database and sealed secrets |
 | `dagster-staging/values.yaml` | Helm values for staging's Dagster: webserver, daemon and the platform's code location, with its metadata in staging's Postgres ([ADR-0026](../../docs/adr/0026-dagster-one-instance-per-environment.md)). Its secrets (`dagster-db`, `r2-lake`) are sealed in `postgres-staging/`, which Argo CD applies as a directory |
-| `tailnet-access/` | Services at fixed cluster IPs that `tailscale serve` on the node forwards tailnet ports to: today staging's Dagster UI ([ADR-0027](../../docs/adr/0027-dagster-ui-over-the-tailnet.md)). The serve setting itself is host configuration, in the runbook |
+| `tailnet-access/` | Services at fixed cluster IPs that `tailscale serve` on the node forwards tailnet ports to: today staging's Dagster UI ([ADR-0028](../../docs/adr/0028-dagster-ui-over-the-tailnet.md)). The serve setting itself is host configuration, in the runbook |
 | `hello/` | A trivial nginx that proves the loop works |
 
 How it fits together, and why: [ADR-0009](../../docs/adr/0009-argocd-bootstrap-and-self-management.md).
