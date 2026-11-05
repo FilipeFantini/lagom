@@ -635,14 +635,13 @@ the node allows, not a budget to fill (§1).
 - **Scaling.** Vertical is easy — Hetzner resizes, one reboot. Horizontal needs
   care with the datastore (SQLite to etcd, three nodes) and with storage
   (local-path pins the volume to a node; either node affinity or Longhorn).
-- **Postgres backup: paid on 2026-10-28, with two open checks.** The debt
+- **Postgres backup: paid on 2026-10-28, with one open check.** The debt
   accepted in [ADR-0019](adr/0019-postgres-backup-deferred.md) is paid by
   [ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md): both
   environments archive WAL and take daily backups to R2, and a restore was
-  tested (runbook, *Backup and restore*). Two things are still unproven.
-  Retention deleting expired backups can only be checked from 2026-11-05. A
-  rebuild of the node that restores from the bucket, instead of re-loading,
-  has not been run.
+  tested (runbook, *Backup and restore*). Retention deleted its first expired
+  backup on 2026-11-05 (ADR-0025 notes). Still unproven: a rebuild of the node
+  that restores from the bucket, instead of re-loading, has not been run.
 - **Changes to the gates themselves are protected by convention only.**
   Branch protection (since 2026-10-27) requires the checks to pass, but a pull
   request runs the workflow as it edits it — see
@@ -1467,6 +1466,10 @@ the bucket, with no `BadDigest` or `DeleteObjects` error in the sidecar's log:
 ```bash
 kubectl --context <node-name> -n <env> logs postgres-1 -c plugin-barman-cloud --since=24h | grep -iE 'retention|delete|error'
 ```
+
+A deletion logs `Deleting backup not in the catalog` with the backup's name,
+and the ObjectStore's `status.serverRecoveryWindow` moves its
+`firstRecoverabilityPoint` forward. Staging showed both on 2026-11-05.
 
 **Memory measured** on 2026-10-28 is in §11: the sidecar used 18 Mi during a
 base backup.

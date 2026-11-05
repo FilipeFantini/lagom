@@ -124,3 +124,19 @@ without rewriting it.
   `lagom-prod-backups` with 30-day retention. **Retention is checked on
   2026-11-05** in staging's sidecar log. If it fails there, prod's retention is
   revisited before its bucket outgrows the free tier.
+- **2026-11-05 — step 4 passed: retention deletes expired backups.** In
+  staging, the plugin applies the 7-day policy every 30 minutes. At 03:10 UTC,
+  right after that day's backup, it dropped the first backup that fell out of
+  the window: the manual one from 2026-10-28. Three things show it:
+  - The sidecar logged `Deleting backup not in the catalog` for
+    `manual-20261028`. The plugin removes a Backup object only once its backup
+    is gone from the catalog in the bucket.
+  - The ObjectStore's `firstRecoverabilityPoint` moved from 2026-10-28 to
+    2026-10-29 03:00 UTC. That is the oldest backup still needed to recover
+    any point in the last 7 days.
+  - The sidecar logged no error in 8 days, in staging or prod.
+
+  The bucket was not listed directly, because agents hold no R2 credentials.
+  Old WAL files being removed with the backup is therefore inferred from the
+  catalog, not seen. Prod's 30-day retention uses the same code path; its first
+  deletion is due around 2026-11-28.
