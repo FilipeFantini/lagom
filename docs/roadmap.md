@@ -40,9 +40,10 @@ dbt, Postgres, Dagster.
 | 8 GB node | **decided 2026-10-27** for M3 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)); obtained 2026-10-28 as a new node in another location, `lagom-shared-02`, and the platform moved to it the same day |
 | Big-data stack (Apache Iceberg, Spark or Trino, Airflow) | later, as the comparison that shows where the SME stack stops; infrastructure sized for it and its own ADR ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed) |
 | In-cluster policy engine (Kyverno, Gatekeeper) | a second writer to the cluster besides Argo CD — [ADR-0013](adr/0013-agent-driven-development-guardrails.md) |
-| Automated staging digest bump (bot commit after a build) | manual staging bumps become routine, and the bot meets [ADR-0013](adr/0013-agent-driven-development-guardrails.md) rule 3 for infrastructure manifests — [ADR-0015](adr/0015-images-on-ghcr.md) |
+| Automated staging digest bump (bot commit after a build) | manual staging bumps become routine; its pull requests pass the required checks and a reviewer like any agent's ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md)) — [ADR-0015](adr/0015-images-on-ghcr.md) |
 | Run jobs without an own image (official `uv` image, clone at run time) | GitHub announces billing for Container registry storage or bandwidth — [ADR-0015](adr/0015-images-on-ghcr.md) |
-| Agent merge for a class of change | the criteria in [ADR-0013](adr/0013-agent-driven-development-guardrails.md) rule 3 — deterministic gates required by branch protection, and a run of merges with no escape |
+| Read-only kubeconfig for the agent workstation | an agent in the workstation needs cluster state; RBAC and a credential, so a guardrail change — [ADR-0029](adr/0029-agents-on-more-than-one-harness.md) |
+| A GitHub account of its own for agents | a second developer (M7), or an agent action that must be attributed apart from the operator — [ADR-0029](adr/0029-agents-on-more-than-one-harness.md) |
 
 Re-introducing a practice excluded in
 [`engineering-protocol.md`](engineering-protocol.md) §17 requires an ADR.
@@ -372,8 +373,16 @@ by its own trigger, like any other piece.
       repository became public; what it enforces and what it does not is in
       [CONTRIBUTING](../CONTRIBUTING.md#branch-protection). The prerequisite
       for any agent merge
-- [ ] First class of change merged by an agent (documentation is the
-      candidate) — by the trigger in the table above
+- [x] **Agents merge** — any agent, once the required checks are green and a
+      reviewer returned APPROVE; a guardrail change also needs the operator's
+      explicit go-ahead. Decided 2026-11-05, replacing the class-by-class
+      promotion of ADR-0013 rule 3
+      ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md))
+- [x] **Agents beyond Claude Code** — [`AGENTS.md`](../AGENTS.md) as the one
+      rulebook, and the agent workstation for every other harness: Paseo with
+      Claude Code and Codex in a container with no cluster credential and no
+      route to the tailnet ([`tools/agents/`](../tools/agents/README.md),
+      [ADR-0029](adr/0029-agents-on-more-than-one-harness.md))
 
 ## Repository layout
 

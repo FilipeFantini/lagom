@@ -74,7 +74,7 @@ come later, as the comparison that shows where the small one stops.
 | [`docs/roadmap.md`](docs/roadmap.md) | what exists, what comes next, and what is left out on purpose |
 | [`docs/adr/`](docs/adr/) | why things are the way they are |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the workflow, before a first pull request |
-| [`CLAUDE.md`](CLAUDE.md) and [`docs/engineering-protocol.md`](docs/engineering-protocol.md) | the working rules, for people and AI agents alike |
+| [`AGENTS.md`](AGENTS.md) and [`docs/engineering-protocol.md`](docs/engineering-protocol.md) | the working rules, for people and AI agents alike |
 
 ## Running it
 
@@ -88,7 +88,7 @@ every change reaches the cluster through a pull request.
 platform/   the shared backbone: cluster manifests, Argo CD apps, the dbt project
 services/   one directory per data source: ingestion, its tests and image
 products/   what people see: the site and its dashboards
-tools/      CI checks and operational scripts
+tools/      CI checks, operational scripts, and the agent workstation
 docs/       architecture, roadmap, decisions (ADRs), runbook
 ```
 

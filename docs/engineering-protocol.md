@@ -1,6 +1,6 @@
 # Engineering Quality & Security Protocol
 
-Full protocol for this repository. [`CLAUDE.md`](../CLAUDE.md) carries the
+Full protocol for this repository. [`AGENTS.md`](../AGENTS.md) carries the
 condensed, always-loaded subset; this document is the complete reference and
 must be read before any task larger than a single-file change.
 
@@ -242,7 +242,7 @@ A change is not ready for approval when:
 - A known regression exists without justification and approval.
 - A required check was skipped without authorization.
 - **The declared resource budget is exceeded** (§16.5).
-- **Documentation required by `CLAUDE.md` §5 was not updated.**
+- **Documentation required by `AGENTS.md` §5 was not updated.**
 - Validation cannot be demonstrated but completion is presented as proven.
 
 A pre-existing failure must be identified and compared against the baseline.
@@ -386,7 +386,7 @@ Fix what is found and re-run the affected validations.
 
 **Phase F — Final audit.** Inspect the complete diff. Confirm the changes belong
 to the task, that no secrets are present, that no check was improperly weakened,
-that documentation required by `CLAUDE.md` §5 was updated, and that reported
+that documentation required by `AGENTS.md` §5 was updated, and that reported
 results match real executions.
 
 **Phase G — Report.** Present evidence and limitations. Do not declare full
@@ -417,7 +417,7 @@ A task may be reported complete only when:
 3. Relevant risks were assessed.
 4. Adversarial review and diff audit are done.
 5. Important decisions and limitations are documented, and the documents in
-   `CLAUDE.md` §5 are up to date.
+   `AGENTS.md` §5 are up to date.
 6. No known failure is hidden or presented as resolved.
 
 If any item is pending, report the state as partial or blocked.
@@ -592,7 +592,9 @@ names what covers that risk instead.
 
 Agents build, test, and propose changes; guardrails keep them correct. The model
 and its reasoning are in
-[ADR-0013](adr/0013-agent-driven-development-guardrails.md). The rules that bind
+[ADR-0013](adr/0013-agent-driven-development-guardrails.md), and how agents on
+more than one harness fit it in
+[ADR-0029](adr/0029-agents-on-more-than-one-harness.md). The rules that bind
 every change:
 
 1. **A rule lives in the most deterministic layer that can express it** —
@@ -602,12 +604,18 @@ every change:
    together with the check that would have caught it, or a stated reason why
    none can.
 3. **A gate never approves a change to itself.** CI, agent definitions,
-   permissions, RBAC, and secrets are merged by the operator. This holds by
+   permissions, RBAC, secrets, and the agent workstation need the operator's
+   explicit go-ahead before merge. This holds by
    convention: branch protection requires the checks to pass, but a pull
    request runs the workflow as it edits it — see
    [CONTRIBUTING](../CONTRIBUTING.md#branch-protection).
-4. **Autonomy is earned per class of change** — gates required by branch
-   protection, and a run of merges with no escape (ADR-0013 rule 3); until
-   then every merge is the operator's.
+4. **A merge needs green required checks and a reviewer's APPROVE**, from a
+   session other than the author's; any agent may then merge (ADR-0029, which
+   supersedes ADR-0013 rule 3).
 5. **Every gate states what it does not check**, so a green result is not read
    as more than it proves.
+6. **An agent's authority is what its environment can reach.** Deny rules bind
+   only the harness that reads them, so an agent on any harness other than the
+   operator's own Claude Code session runs in the agent workstation
+   ([`tools/agents/`](../tools/agents/README.md)), which holds no cluster
+   credential and cannot reach the tailnet.

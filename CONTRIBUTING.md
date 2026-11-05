@@ -3,7 +3,7 @@
 The workflow is in place from the first commit, even with one developer, so that
 adding the second changes nothing.
 
-Start with [`CLAUDE.md`](CLAUDE.md). For anything larger than a single-file
+Start with [`AGENTS.md`](AGENTS.md). For anything larger than a single-file
 change, read [`docs/engineering-protocol.md`](docs/engineering-protocol.md)
 first.
 
@@ -26,7 +26,19 @@ messages.
    Blocker and major findings are fixed before merge. GitHub does not let an
    author approve their own pull request, so the architect posts the verdict
    with `gh pr review --comment`.
-5. Merge to `main`. Argo CD converges the cluster.
+5. Merge to `main`. Argo CD converges the cluster. Who may merge — any agent,
+   once the required checks are green and a reviewer returned APPROVE, with the
+   operator's explicit go-ahead for a guardrail change — is
+   [`AGENTS.md`](AGENTS.md) §6
+   ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
+
+**More than one harness.** Agents can run on Claude Code, Codex, or another
+harness. Everything below about `.claude/settings.json` binds Claude Code only.
+An agent on any other harness runs in the agent workstation
+([`tools/agents/`](tools/agents/README.md)): a container on the operator's Mac
+with no cluster credential, no SSH key, no route to the tailnet, and a GitHub
+token for this repository that cannot change workflows. Its limits are what it
+can reach, not what it is told.
 
 **Agents.** The main Claude session acts as architect. It can hand a scoped
 task to the `implementer` agent
@@ -127,10 +139,16 @@ What it does not enforce:
   second developer joins (M7).
 - **A gate approving a change to itself.** A pull request runs the workflow as
   it edits it, so a change under `.github/workflows/` can change what its own
-  required checks do. Changes to CI, agent definitions, permissions, RBAC, and
-  secrets are therefore merged by the operator, by convention
-  ([ADR-0013](docs/adr/0013-agent-driven-development-guardrails.md) rule 2).
-  No agent merges on its own until rule 3's criteria are met.
+  required checks do. Changes to CI, agent definitions, permissions, RBAC,
+  secrets, and the agent workstation therefore need the operator's explicit
+  go-ahead before merge, by convention
+  ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)). The agent
+  workstation's token has no *Workflows* permission, so GitHub refuses its
+  pushes to `.github/workflows/`; an agent on the Mac's own credentials is held
+  by the convention only.
+- **The reviewer's APPROVE.** Agents may merge after it
+  ([`AGENTS.md`](AGENTS.md) §6), but GitHub does not see it: a token that can
+  merge can merge without it.
 
 Until 2026-10-27 `main` had no protection: on a private repository it needs a
 paid plan, and the operator accepted that as an exception (2026-10-13) and as
@@ -150,7 +168,7 @@ A pull request states:
   deterministic check that now catches it — or why none can
   ([ADR-0013](docs/adr/0013-agent-driven-development-guardrails.md) rule 1).
 
-Guardrail changes are merged by the operator only
+Guardrail changes need the operator's explicit go-ahead before merge
 ([`engineering-protocol.md`](docs/engineering-protocol.md) §18 rule 3).
 
 Do not include unrelated refactoring. A diff that touches files the description
@@ -165,7 +183,7 @@ A pull request is not ready while any of these is true:
 - A secret appears in the diff.
 - Declared resource requests exceed the ceiling in
   [`docs/architecture.md`](docs/architecture.md).
-- Documentation required by [`CLAUDE.md`](CLAUDE.md) §5 was not updated.
+- Documentation required by [`AGENTS.md`](AGENTS.md) §5 was not updated.
 
 Never weaken a check to get a green result. If a check is wrong, fix the check
 in its own commit, with the reason stated.
