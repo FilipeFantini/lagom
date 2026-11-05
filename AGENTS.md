@@ -133,9 +133,8 @@ decides macro questions.
 
 **Merging.** Any agent, on any harness, may merge a pull request once every
 required check is green and a reviewer returned APPROVE. A guardrail change —
-CI, agent definitions or instructions, permissions, RBAC, secrets, the agent
-workstation — also needs the operator's explicit go-ahead for that pull
-request. Workflow detail: [`CONTRIBUTING.md`](CONTRIBUTING.md#workflow).
+CI, agent definitions or instructions, permissions, RBAC, secrets — also
+needs the operator's explicit go-ahead for that pull request. Workflow detail: [`CONTRIBUTING.md`](CONTRIBUTING.md#workflow).
 
 **Commits** say which model wrote them: end the message with a
 `Co-Authored-By:` line naming the agent and model, so the history shows who did
@@ -182,9 +181,11 @@ a proven functional failure.
 ## 10. More than one harness
 
 Only Claude Code reads the deny rules in
-[`.claude/settings.json`](.claude/settings.json); other harnesses do not. So
-the boundary that holds for every agent is what its environment can reach:
-an agent on any other harness runs only in the agent workstation
-([`tools/agents/`](tools/agents/README.md)), which holds no cluster credential,
-no SSH key, and a GitHub token that cannot change workflows. Never hand an
-agent a credential to get around that — ask the operator instead.
+[`.claude/settings.json`](.claude/settings.json); other harnesses do not. An
+agent on another harness runs inside that harness's own sandbox, with network
+access off for its commands — for Codex, `workspace-write` with
+`network_access` left off. It edits and commits in its checkout; a session
+with network access pushes and opens the pull request. A harness with no
+sandbox is not used here. Never turn the sandbox off or hand an agent a
+credential to get around it — ask the operator instead
+([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).

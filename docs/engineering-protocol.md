@@ -604,8 +604,8 @@ every change:
    together with the check that would have caught it, or a stated reason why
    none can.
 3. **A gate never approves a change to itself.** CI, agent definitions,
-   permissions, RBAC, secrets, and the agent workstation need the operator's
-   explicit go-ahead before merge. This holds by
+   permissions, RBAC, and secrets need the operator's explicit go-ahead before
+   merge. This holds by
    convention: branch protection requires the checks to pass, but a pull
    request runs the workflow as it edits it — see
    [CONTRIBUTING](../CONTRIBUTING.md#branch-protection).
@@ -614,8 +614,7 @@ every change:
    supersedes ADR-0013 rule 3).
 5. **Every gate states what it does not check**, so a green result is not read
    as more than it proves.
-6. **An agent's authority is what its environment can reach.** Deny rules bind
-   only the harness that reads them, so an agent on any harness other than the
-   operator's own Claude Code session runs in the agent workstation
-   ([`tools/agents/`](../tools/agents/README.md)), which holds no cluster
-   credential and cannot reach the tailnet.
+6. **Deny rules bind only the harness that reads them.** An agent on a harness
+   other than Claude Code runs inside that harness's sandbox with network
+   access off, so it cannot reach the cluster, GitHub, or the tailnet
+   ([`AGENTS.md`](../AGENTS.md) §10).

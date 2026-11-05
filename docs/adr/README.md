@@ -48,4 +48,4 @@ decision, consequences, and how to reverse it.
 | [0026](0026-dagster-one-instance-per-environment.md) | Dagster, one instance per environment, running USGS on DuckLake | Accepted, UI access superseded by 0028 |
 | [0027](0027-hourly-wal-archiving-and-14-day-prod-retention.md) | WAL archived hourly, prod backups kept 14 days | Accepted |
 | [0028](0028-dagster-ui-over-the-tailnet.md) | Dagster's UI over the tailnet, by `tailscale serve` on the node | Accepted |
-| [0029](0029-agents-on-more-than-one-harness.md) | Agents on more than one harness: one rulebook, a sealed workstation, and who may merge | Accepted |
+| [0029](0029-agents-on-more-than-one-harness.md) | Agents on more than one harness: one rulebook, and who may merge | Accepted |

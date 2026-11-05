@@ -42,7 +42,6 @@ dbt, Postgres, Dagster.
 | In-cluster policy engine (Kyverno, Gatekeeper) | a second writer to the cluster besides Argo CD — [ADR-0013](adr/0013-agent-driven-development-guardrails.md) |
 | Automated staging digest bump (bot commit after a build) | manual staging bumps become routine; its pull requests pass the required checks and a reviewer like any agent's ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md)) — [ADR-0015](adr/0015-images-on-ghcr.md) |
 | Run jobs without an own image (official `uv` image, clone at run time) | GitHub announces billing for Container registry storage or bandwidth — [ADR-0015](adr/0015-images-on-ghcr.md) |
-| Read-only kubeconfig for the agent workstation | an agent in the workstation needs cluster state; RBAC and a credential, so a guardrail change — [ADR-0029](adr/0029-agents-on-more-than-one-harness.md) |
 | A GitHub account of its own for agents | a second developer (M7), or an agent action that must be attributed apart from the operator — [ADR-0029](adr/0029-agents-on-more-than-one-harness.md) |
 
 Re-introducing a practice excluded in
@@ -379,10 +378,12 @@ by its own trigger, like any other piece.
       promotion of ADR-0013 rule 3
       ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md))
 - [x] **Agents beyond Claude Code** — [`AGENTS.md`](../AGENTS.md) as the one
-      rulebook, and the agent workstation for every other harness: Paseo with
-      Claude Code and Codex in a container with no cluster credential and no
-      route to the tailnet ([`tools/agents/`](../tools/agents/README.md),
-      [ADR-0029](adr/0029-agents-on-more-than-one-harness.md))
+      rulebook; an agent on another harness runs in that harness's sandbox
+      with network access off
+      ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md)). An
+      orchestration layer (Paseo, in a sealed container) was built and removed
+      the same day; the ADR keeps its design for when several agents at once,
+      or work from the phone, become a need
 
 ## Repository layout
 

@@ -34,11 +34,10 @@ messages.
 
 **More than one harness.** Agents can run on Claude Code, Codex, or another
 harness. Everything below about `.claude/settings.json` binds Claude Code only.
-An agent on any other harness runs in the agent workstation
-([`tools/agents/`](tools/agents/README.md)): a container on the operator's Mac
-with no cluster credential, no SSH key, no route to the tailnet, and a GitHub
-token for this repository that cannot change workflows. Its limits are what it
-can reach, not what it is told.
+An agent on any other harness runs inside its harness's own sandbox with
+network access off — for Codex, `workspace-write` — so its commands can edit
+the checkout but cannot reach the cluster, GitHub, or the tailnet; a session
+with network access pushes its commits ([`AGENTS.md`](AGENTS.md) §10).
 
 **Agents.** The main Claude session acts as architect. It can hand a scoped
 task to the `implementer` agent
@@ -140,12 +139,8 @@ What it does not enforce:
 - **A gate approving a change to itself.** A pull request runs the workflow as
   it edits it, so a change under `.github/workflows/` can change what its own
   required checks do. Changes to CI, agent definitions, permissions, RBAC,
-  secrets, and the agent workstation therefore need the operator's explicit
-  go-ahead before merge, by convention
-  ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)). The agent
-  workstation's token has no *Workflows* permission, so GitHub refuses its
-  pushes to `.github/workflows/`; an agent on the Mac's own credentials is held
-  by the convention only.
+  and secrets therefore need the operator's explicit go-ahead before merge, by
+  convention ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
 - **The reviewer's APPROVE.** Agents may merge after it
   ([`AGENTS.md`](AGENTS.md) §6), but GitHub does not see it: a token that can
   merge can merge without it.

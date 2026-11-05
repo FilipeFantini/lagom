@@ -164,5 +164,5 @@ without rewriting it.
   harness, may merge once the required checks are green and a reviewer
   returned APPROVE; a guardrail change also needs the operator's explicit
   go-ahead for that pull request. Layer 1 is no longer one harness's deny
-  rules: agents on other harnesses run in a workstation that holds no cluster
-  credential and cannot reach the tailnet.
+  rules: an agent on another harness runs in that harness's own sandbox, with
+  network access off.
