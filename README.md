@@ -60,7 +60,7 @@ with this repository, so changes arrive through Git, not by hand.
 | Transformation | dbt, on Postgres or DuckDB |
 | Orchestration | Dagster |
 | Dashboards | Evidence, rebuilt after each run and published on getlagom.app ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
-| Platform | k3s on a single ARM node, Argo CD, Sealed Secrets, CloudNativePG, Tailscale |
+| Platform | k3s on a single ARM node, Argo CD, Sealed Secrets, CloudNativePG, Tailscale, Cloudflare Tunnel + Access |
 
 Each choice is written down with the alternatives it beat and the trade-offs it
 accepts, in [`docs/adr/`](docs/adr/). Heavier stacks (Iceberg, Spark, Trino)

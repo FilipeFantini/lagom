@@ -72,9 +72,9 @@ price the one the Console shows. Object storage (R2) enters with the SME-stack
 spike in M3, on its free tier ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed); the prices checked earlier are in ADR-0008.
 
 **Outside the cluster, principle 3 does not hold yet.** The server, its
-firewall, the Tailscale ACL, the `tailscale serve` setting that puts
-Dagster's UI on the tailnet, and the Healthchecks.io checks are created by
-hand, following the runbook (§13); the domain's zone at Cloudflare was set up by
+firewall, the Tailscale ACL, the Cloudflare Access application and its DNS
+records, and the Healthchecks.io checks are created by hand, following the
+runbook (§13); the domain's zone at Cloudflare was set up by
 hand in its console, and Cloudflare Access does not exist yet (it enters by
 trigger, with the first content that must not be public). Argo CD
 reconciles only what runs inside the cluster. Terraform takes over these
@@ -241,10 +241,10 @@ is missing ([ADR-0018](adr/0018-pipeline-heartbeat.md); runbook: *Pipeline
 heartbeat*).
 
 **The UI has no login**, so reaching it is the access control. Each
-environment's UI has a stable URL on the tailnet, served by `tailscale serve`
-on the node and reachable only from operators' devices; nothing is published
-on the internet ([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md); runbook:
-*Dagster UI over the tailnet*).
+environment's UI is at a `getlagom.app` hostname behind a Cloudflare Access
+login, served through an outbound-only tunnel
+([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md); runbook:
+*Operator UIs behind Cloudflare Access*).
 
 Airflow and Prefect are excluded on resident RAM.
 
@@ -427,19 +427,22 @@ WireGuard mesh, ACL by identity, **no open ports**. Headscale is the
 self-hosted control plane if a fully open-source server is required — the
 Tailscale client is already open source.
 
-Besides SSH and the Kubernetes API, it carries the operator's web UIs: the
-node's `tailscaled` forwards a tailnet port per UI to a Service in the
-cluster (`tailscale serve`), so a browser on a tailnet device opens it by the
-node's MagicDNS name. Today that is Dagster's UI in staging
-([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md)).
-
 ### Cloudflare Tunnel + Access
 
-Deferred with a trigger: enters with the first content that must not be
-public ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). A light
-agent (`cloudflared`, ~30 MB) opens an **outbound-only** connection. Access puts
-identity in front with per-application policy. The partner gets a link, logs in,
-and sees the dashboard — no install, with WAF and rate limiting included.
+Entered on 2026-11-05 with the first content that must not be public: the
+operator's own web UIs, Dagster's first
+([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md)). A light
+agent (`cloudflared`) opens an **outbound-only** connection. Access puts
+identity in front with per-application policy. The user gets a link, logs in,
+and sees the tool — no install, with WAF and rate limiting included. The same
+path will serve partners' reports, each with its own Access application and
+policy.
+
+What the tunnel serves is the list of rules in
+[`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml); any
+other hostname gets a 404. `cloudflared` also checks the token Access signs
+after login, so a request that did not pass the login is refused even if the
+Access application is misconfigured.
 
 ### Signed URL
 
@@ -551,9 +554,11 @@ for k3s's growth over days and the shims of new Pods, which requests do not
 count ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It was 2.2 GB on
 the 4 GB node ([ADR-0016](adr/0016-ci-ceiling-2-2-gb.md)), where M3 did not
 fit, hence the move ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Today's
-total is 5,534 MiB with Dagster in both environments (each 800 resident and
-768 per run): 98 MiB under the ceiling until the CronJobs on Postgres are
-retired, which frees 512. Nothing else is added before then.
+total is 5,582 MiB: Dagster in both environments (each 800 resident and 768
+per run) and `cloudflared`, 48, which serves their UIs behind a login
+([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md)). That is 50 MiB
+under the ceiling until the CronJobs on Postgres are retired, which frees 512.
+Nothing else is added before then.
 
 **How CI enforces it.** [`tools/resource_budget.py`](../tools/resource_budget.py)
 runs on every pull request ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)).
@@ -586,7 +591,8 @@ adds that 70 MiB request as its allowance for components outside Git.
 | Backup: Barman Cloud plugin and cert-manager | 192 MB | plugin 32, cert-manager controller 64, cainjector 64, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
 | Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
 | Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. The run's figure is re-measured once runs execute in one process. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
-| **Core requests** | **~2.24 GB** | |
+| `cloudflared` | 48 MB | the tunnel that serves the operator's UIs behind Cloudflare Access, both environments ([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md)): request 48 MiB, limit 128 MiB, `GOMEMLIMIT` 100MiB. Not measured yet; Cloudflare's figure is ~30 MB. Set from `kubectl top` after a week |
+| **Core requests** | **~2.29 GB** | |
 | **Left within the ceiling for ephemeral jobs** | **~3.3 GB** | |
 
 Staging adds ~1.2 GB:
@@ -901,14 +907,13 @@ below, applied in the admin console (*Access controls*), replaces it:
     "tag:lagom-node": ["group:operators"],
   },
   "grants": [
-    // Operators reach the node: SSH (break-glass), the Kubernetes API, and
-    // staging's Dagster UI (tailscale serve, ADR-0028) only.
-    {"src": ["group:operators"], "dst": ["tag:lagom-node"], "ip": ["tcp:22", "tcp:6443", "tcp:8080"]},
+    // Operators reach the node: SSH (break-glass) and the Kubernetes API only.
+    {"src": ["group:operators"], "dst": ["tag:lagom-node"], "ip": ["tcp:22", "tcp:6443"]},
     // Each person's own devices keep reaching each other.
     {"src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"]},
   ],
   "tests": [
-    {"src": "<operator-tailscale-login>", "accept": ["tag:lagom-node:22", "tag:lagom-node:6443", "tag:lagom-node:8080"], "deny": ["tag:lagom-node:10250"]},
+    {"src": "<operator-tailscale-login>", "accept": ["tag:lagom-node:22", "tag:lagom-node:6443"], "deny": ["tag:lagom-node:10250"]},
     {"src": "tag:lagom-node", "deny": ["<operator-tailscale-login>:22"]},
   ],
 }
@@ -918,8 +923,8 @@ Then *Machines →* `<node-name>` *→ Edit ACL tags →* `tag:lagom-node`.
 
 **Why it works.** A tagged machine belongs to its tag, not to a person, so rules
 name roles — operators reach Lagom nodes — instead of people. Anything not
-granted is denied, in both directions: operators get SSH, the API and
-Dagster's UI and nothing else (not even the kubelet), and the node can open no connection to anyone's
+granted is denied, in both directions: operators get SSH and the API and nothing
+else (not even the kubelet), and the node can open no connection to anyone's
 device, so a compromised node cannot reach the operator's machine. `tests` are
 assertions the console checks on every save; a policy that breaks them is
 rejected.
@@ -1366,97 +1371,137 @@ above. No Job at all means the CronJob is not scheduling or the node is down;
 three `heartbeat attempt … failed` lines means the run worked and the ping did
 not.
 
-### Dagster UI over the tailnet (M3)
+### Operator UIs behind Cloudflare Access (M3)
 
-Each environment's Dagster UI gets a URL that works from any of the
-operator's tailnet devices, with no command left running
-([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md)). Staging's is
-`http://<node-name>:8080`; prod's will be 8081, once its Dagster exists.
+Dagster's UI for each environment has an HTTPS address under `getlagom.app`,
+behind a login ([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md)):
+
+- `https://dagster-staging.getlagom.app` for staging;
+- `https://dagster.getlagom.app` for prod.
 
 **What each piece is:**
 
 | Piece | What it is |
 |---|---|
-| `tailscale serve` | A setting of the Tailscale daemon on the node. It answers on one port of the node's tailnet address and passes every request on to another address, like a receptionist forwarding calls. Devices the ACL does not admit cannot even reach the port |
-| Cluster IP | An address a Service answers on inside the cluster. Only the node and its Pods can reach it. The Service `dagster-ui-tailnet` asks for a fixed one, `10.43.0.30`, so serve's target never changes ([`tailnet-access/`](../platform/infra/tailnet-access/)) |
-| MagicDNS | Tailscale's name lookup. `<node-name>` resolves only on tailnet devices, and nothing is published in public DNS |
+| Tunnel, `cloudflared` | A Pod that dials out to Cloudflare and keeps the connections open. Requests for our hostnames come back down them. Nothing on the node listens for the internet, so no port opens: like a phone line we call out on, which then carries incoming calls |
+| Access application | Cloudflare's doorman for a set of hostnames. It shows a login page and lets through only the e-mail addresses in its policy |
+| One-time PIN | The login: Access e-mails a code to the address, and the code opens a session (24 h) |
+| JWT | A token Access signs and adds to every request after login. `cloudflared` checks it before forwarding, so a request that skipped the doorman is refused |
+| Proxied CNAME | The DNS record for each hostname. The world sees Cloudflare's addresses, never the node's |
 
-The path of a request:
+**Set it up**, once. The steps run in this order, so that no hostname ever
+answers before its login exists.
 
-```
-browser on the Mac -> tailnet (WireGuard) -> <node-name>:8080 (tailscaled)
-  -> 10.43.0.30:80 (Service, through kube-proxy's rules on the node) -> webserver Pod
-```
+**1. Zero Trust and the Access application**, in Cloudflare's dashboard:
 
-**Plain HTTP, on purpose.** WireGuard already encrypts and authenticates the
-connection end to end. An HTTPS certificate for the `ts.net` name would be
-written to the public Certificate Transparency logs, node name included. The
-browser shows "Not secure", and a few copy buttons may not work (ADR-0028).
+1. *Zero Trust*: create the organisation on the Free plan. The **team name**
+   becomes `<team-name>.cloudflareaccess.com` and shows on the login page, so
+   pick a neutral one, not a personal name.
+2. *Settings → Authentication*: check that *One-time PIN* is a login method.
+   It is on by default.
+3. *Access → Applications → Add an application → Self-hosted*:
+   - name: `Lagom operator UIs`;
+   - public hostnames: `dagster-staging.getlagom.app` and `dagster.getlagom.app`;
+   - session duration: 24 hours;
+   - one policy, action *Allow*, rule *Include → Emails* with
+     `<operator-email>`. Nothing else: never *Everyone*.
+4. From the application's *Overview*, give the architect the *Application
+   Audience (AUD) Tag* and the team name. They replace `<access-aud-tag>`
+   and `<team-name>` in
+   [`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml).
+   Neither is a secret: both appear in the login page's URL.
 
-**Set it up** once the `tailnet-access` Application is synced. Every command
-below is the operator's; none involves a credential.
-
-1. **The Service has an endpoint.** The second command must list the
-   webserver Pod's address:
-
-   ```bash
-   kubectl --context <node-name> -n staging get svc dagster-ui-tailnet
-   kubectl --context <node-name> -n staging get endpointslices -l kubernetes.io/service-name=dagster-ui-tailnet
-   ```
-
-2. **The ACL admits the port.** In the admin console (*Access controls*),
-   apply the policy in [Tailscale ACL](#tailscale-acl-and-zero-inbound-ports-m1):
-   it adds `tcp:8080` to the operators' grant and to the `tests`. The console
-   rejects a policy whose tests fail.
-
-3. **Serve, on the node:**
-
-   ```bash
-   ssh <admin-user>@<node-name>
-   tailscale version                                   # 1.92 or later
-   sudo ss -ltnp | grep -w 8080 || echo "8080 free"    # nothing else may hold the port
-   curl -sS -o /dev/null -w '%{http_code}\n' http://10.43.0.30/server_info   # 200: the node reaches the Service
-   ps -o rss= -C tailscaled                            # KiB, before
-   sudo tailscale serve --bg --http=8080 http://10.43.0.30:80
-   tailscale serve status
-   ps -o rss= -C tailscaled                            # KiB, after; record both in ADR-0028's notes
-   ```
-
-   `--bg` keeps the setting in `tailscaled`'s state, so it survives restarts
-   and reboots. Without it, serve stops when the command exits.
-
-**Verify**, from the Mac, on the tailnet:
+**2. The tunnel and its token**, on the operator's Mac, from the repository's
+root. The token goes straight from `cloudflared` into `kubeseal` and is never
+shown:
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' http://<node-name>:8080/server_info   # 200
-open http://<node-name>:8080
+brew install cloudflared
+cloudflared tunnel login                  # browser: authorise the zone getlagom.app; writes ~/.cloudflared/cert.pem
+cloudflared tunnel create lagom           # writes ~/.cloudflared/<tunnel-id>.json
+cloudflared tunnel route dns lagom dagster-staging.getlagom.app
+cloudflared tunnel route dns lagom dagster.getlagom.app
+cloudflared tunnel token lagom \
+  | kubectl create secret generic cloudflared-token -n cloudflared --from-file=token=/dev/stdin --dry-run=client -o yaml \
+  | kubeseal --context <node-name> --format yaml > platform/infra/cloudflared/token-sealed.yaml
+grep -c 'token:' platform/infra/cloudflared/token-sealed.yaml   # 1: one sealed key
+rm ~/.cloudflared/cert.pem ~/.cloudflared/*.json
 ```
 
-Then from off the tailnet. Disconnect Tailscale on the Mac (menu bar →
-*Disconnect*), then:
+Once `config.yaml` holds the team name and AUD tag, check that `cloudflared`
+reads it as intended. The rules sit inside a ConfigMap, so the first command
+extracts them to a file first:
 
 ```bash
-curl -sS -m 5 http://<node-name>:8080/server_info        # fails: the name does not resolve
-curl -sS -m 5 http://<node-tailnet-ip>:8080/server_info  # fails: no route
-nc -z -G 5 -w 5 <public-ipv4> 8080 && echo OPEN || echo closed   # closed
-nc -6 -z -G 5 -w 5 <public-ipv6> 8080 && echo OPEN || echo closed # closed
+sed -e '1,/config.yaml: |/d' -e 's/^    //' platform/infra/cloudflared/config.yaml > /tmp/cloudflared.yaml
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress validate          # OK
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://dagster.getlagom.app   # the prod rule
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://other.getlagom.app     # the 404 rule
+rm /tmp/cloudflared.yaml
 ```
 
-Reconnect afterwards.
+**Why it works:**
 
-**If the URL fails:**
+- `tunnel login` gives the Mac a certificate that may create tunnels and DNS
+  records in the zone. It is deleted at the end.
+- `tunnel create` registers the tunnel and its secret.
+- `route dns` writes a proxied CNAME that points the hostname at the tunnel.
+- `tunnel token` prints the ID and secret as one string, which `cloudflared`
+  in the cluster reads from a file (`--token-file`). The routing rules stay
+  in `config.yaml`, in Git.
 
-- **Connection refused or timeout on the tailnet:** serve is off or the ACL
-  lacks the port. Run `tailscale serve status` on the node, and check the
-  grant.
-- **502:** serve works, but nothing answers behind it. Either the Service
-  has no endpoint (step 1; the webserver Pod is down, or a chart upgrade
-  changed its labels), or the Service is missing.
-- **In the meantime,** the port-forward still works:
-  `kubectl --context <node-name> -n staging port-forward svc/dagster-dagster-webserver 3000:80`.
+**3. Merge** the pull request holding `token-sealed.yaml` and the filled-in
+`config.yaml`. Argo CD creates the namespace, the Secret and the Pod.
 
-**Turn it off:** `sudo tailscale serve --http=8080 off`, then remove the port
-from the ACL.
+**Verify:**
+
+```bash
+kubectl --context <node-name> -n cloudflared get pods                       # cloudflared 1/1 Running
+kubectl --context <node-name> -n cloudflared logs deploy/cloudflared | grep -c 'Registered tunnel connection'   # 4
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://dagster-staging.getlagom.app/server_info
+# 302 to https://<team-name>.cloudflareaccess.com/...: the login comes first
+curl -sS -o /dev/null -w '%{http_code}\n' https://nothing-here.getlagom.app/  # not 200: no DNS record, or the tunnel's 404
+```
+
+Then, in a private browser window, open each address: the Access login page,
+the code by e-mail, then Dagster. A second private window with another
+address (not in the policy) must get no code and no access.
+
+**Not verified end to end: the tunnel's own JWT check.** Seeing it refuse a
+request would mean turning Access off. What is checked instead: the rules
+parse, and the `access` block applies to every rule (`ingress validate` and
+`ingress rule` in step 2).
+
+**Memory.** After a week:
+
+```bash
+kubectl --context <node-name> -n cloudflared top pod --containers
+```
+
+Set the request in `deployment.yaml` from the figure, as for every
+component (§11).
+
+**Add a tool** (Airflow, for instance):
+
+1. Add a rule in `config.yaml`, before the final 404, and bump
+   `lagom.dev/config-revision` in `deployment.yaml`.
+2. Add the hostname to the Access application.
+3. `cloudflared tunnel route dns lagom <tool>.getlagom.app`, which needs
+   `tunnel login` again.
+4. If the tool runs in `prod`, add a NetworkPolicy like
+   `allow-cloudflared-to-dagster-webserver`.
+
+**If an address fails:**
+
+- **Cloudflare error 1033:** the tunnel has no connection. Check the Pod and
+  its logs.
+- **502:** the tunnel works, but the Service behind it does not answer. Check
+  the Dagster webserver Pod.
+- **403 from `cloudflared` after login:** the token's audience does not match
+  `audTag`. Re-check the AUD tag.
+- **In the meantime,** `kubectl --context <node-name> -n <namespace>
+  port-forward svc/dagster-dagster-webserver 3000:80` still opens the UI at
+  `http://localhost:3000`.
 
 ### Backup and restore (M3)
 
@@ -1630,12 +1675,13 @@ kubectl --context <node-name> -n argocd get application dagster-staging   # Sync
 kubectl --context <node-name> -n staging get pods | grep dagster           # three Running, plus finished runs
 ```
 
-**Open the UI.** Staging's is on the tailnet at `http://<node-name>:8080`
-([Dagster UI over the tailnet](#dagster-ui-over-the-tailnet-m3)). Prod's, and
-staging's when that address is down, is reached by `kubectl port-forward`,
-which needs the kubeconfig. The UI has no login: whoever reaches the port
-controls Dagster. Leave the command running, then browse
-http://localhost:3000; stop it with Ctrl+C:
+**Open the UI.** Staging's is `https://dagster-staging.getlagom.app` and
+prod's `https://dagster.getlagom.app`, behind the Access login
+([Operator UIs behind Cloudflare Access](#operator-uis-behind-cloudflare-access-m3)).
+When those are down, `kubectl port-forward` reaches it, with the kubeconfig.
+The UI has no login of its own: whoever reaches the port controls Dagster.
+Leave the command running, then browse http://localhost:3000; stop it with
+Ctrl+C:
 
 ```bash
 kubectl --context <node-name> -n staging port-forward svc/dagster-dagster-webserver 3000:80
@@ -1744,8 +1790,9 @@ next index:
    [the CronJob section](#staging-the-pipeline-cronjob)): `bronze >= silver >=
    gold`. dbt's `reconcile_*` tests already assert the relations between
    layers in step 8.
-10. [Put Dagster's UI back on the tailnet](#dagster-ui-over-the-tailnet-m3):
-    the `tailscale serve` setting lives on the old node, not in Git.
+10. Nothing to do for the [operator UIs](#operator-uis-behind-cloudflare-access-m3):
+    the tunnel's token is sealed in Git and Argo CD starts `cloudflared` in
+    step 7. Check that both addresses show the login page.
 
 **While two clusters run at once** (a move, or a drill with the old node up):
 

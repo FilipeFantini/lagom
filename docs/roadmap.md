@@ -29,7 +29,7 @@ dbt, Postgres, Dagster.
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | Evidence | M4 — the dashboard gallery on getlagom.app ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
-| Cloudflare Access (login) | the first content that must not be public and is read by someone outside the tailnet. The site and its showcases are public data. The operator's own UIs, Dagster's first, stay on the tailnet instead ([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md)) |
+| Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `getlagom.app` hostnames ([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
 | NATS | second consumer of the same stream, or a replay requirement |
 | Streamlit | an interactive app a static page cannot serve |
 | Infrastructure observability (metrics and logs), shown on getlagom.app | the USGS showcase is live on getlagom.app (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
@@ -248,11 +248,11 @@ The node that M3 needs, and the orchestration every showcase uses.
       ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): the code
       location first (image `lagom-orchestration`), then each environment's
       instance, staging before prod
-- [ ] Dagster's UI at a stable tailnet URL instead of `kubectl port-forward`,
-      reachable only from operators' devices
-      ([ADR-0028](adr/0028-dagster-ui-over-the-tailnet.md);
-      [runbook](architecture.md#dagster-ui-over-the-tailnet-m3)): staging
-      first, prod on port 8081 with its Dagster
+- [ ] Dagster's UI at `dagster-staging.getlagom.app` and
+      `dagster.getlagom.app` behind a Cloudflare Access login, instead of
+      `kubectl port-forward`
+      ([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md);
+      [runbook](architecture.md#operator-uis-behind-cloudflare-access-m3))
 - [ ] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
       prod; the CronJobs on Postgres stay until it has run a week in prod
 - [ ] Native failure alerting

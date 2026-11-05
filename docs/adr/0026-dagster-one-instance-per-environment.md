@@ -128,3 +128,7 @@ without rewriting it.
   [ADR-0028](0028-dagster-ui-over-the-tailnet.md): each environment's UI has
   a stable tailnet URL, served by `tailscale serve` on the node, reachable
   only from operators' devices. The port-forward stays as the fallback.
+- **2026-11-05 — the UI behind Cloudflare Access.** ADR-0028 was itself
+  superseded the same day by
+  [ADR-0029](0029-operator-uis-behind-cloudflare-access.md): each
+  environment's UI is at a `getlagom.app` hostname behind an Access login.
