@@ -178,6 +178,10 @@ for a payment method without charging it.
 
 **Reversal:**
 
-1. Delete the `cloudflared` Application. `prune` removes its objects.
-2. Delete the DNS records, the Access application and the tunnel in
+1. Remove `apps/cloudflared.yaml` from Git. `root` then deletes the
+   Application, but not its objects: no Application here carries Argo CD's
+   resources finalizer.
+2. The operator deletes them by hand: the namespace `cloudflared`, and the
+   NetworkPolicy `allow-cloudflared-to-dagster-webserver` in `prod`.
+3. Delete the DNS records, the Access application and the tunnel in
    Cloudflare.

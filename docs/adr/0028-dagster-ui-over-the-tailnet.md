@@ -246,4 +246,7 @@ without rewriting it.
   approach (a port in the URL, plain HTTP, tailnet only) for Cloudflare
   Tunnel + Access, [ADR-0029](0029-operator-uis-behind-cloudflare-access.md).
   Serve was turned off on the node the same day, the ACL was never changed,
-  and the Service `dagster-ui-tailnet` was removed with ADR-0029.
+  and ADR-0029 removed the `tailnet-access` Application from Git. Removing an
+  Application does not remove its objects (no Application here carries Argo
+  CD's resources finalizer), so the operator deletes the Service by hand:
+  `kubectl -n staging delete svc dagster-ui-tailnet`.

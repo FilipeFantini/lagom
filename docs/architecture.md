@@ -75,8 +75,7 @@ spike in M3, on its free tier ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.
 firewall, the Tailscale ACL, the Cloudflare Access application and its DNS
 records, and the Healthchecks.io checks are created by hand, following the
 runbook (§13); the domain's zone at Cloudflare was set up by
-hand in its console, and Cloudflare Access does not exist yet (it enters by
-trigger, with the first content that must not be public). Argo CD
+hand in its console. Argo CD
 reconciles only what runs inside the cluster. Terraform takes over these
 resources by trigger — see [`roadmap.md`](roadmap.md#trigger-table).
 
@@ -401,7 +400,7 @@ one of the three.
 |---|---|---|
 | **Public site** (getlagom.app) | anyone | static pages and dashboards of public data; no path to the cluster |
 | **Tailscale** | operators and admin | raw Postgres and the whole cluster |
-| **Cloudflare Access** | partners, cloud BI | report reading via browser, no install |
+| **Cloudflare Access** | operators (web UIs such as Dagster's); later partners, cloud BI | a tool or report in the browser behind a login, no install |
 | **Signed file URL** | partners, external pipelines | bytes with an expiry, access to nothing |
 
 ### Node shell (SSH)
