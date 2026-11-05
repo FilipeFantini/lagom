@@ -1483,12 +1483,13 @@ Each environment runs its own Dagster in its namespace
   loads the code location and answers the other two.
 
 A **run** is not one of them. For each run the daemon creates a Kubernetes
-Job named `dagster-run-<run id>`, whose Pod uses the code server's image,
-environment and memory. The Job and its Pod are deleted an hour after they
+Job named `dagster-run-<run id>`, whose Pod uses the code server's image and
+environment; its memory is in §11. The Job and its Pod are deleted an hour after they
 finish. The run's history stays in the database `dagster` of the same
 environment's Postgres.
 
-Exercised in staging on 2026-10-28. In prod, replace `staging` with `prod`.
+Exercised in staging on 2026-10-28. Prod has no Dagster yet; once it does,
+replace `staging` with `prod`.
 
 **The jobs** (code in [`platform/orchestration/`](../platform/orchestration/README.md)):
 
@@ -1503,7 +1504,7 @@ ends. In staging's first week (2026-10-28 to 11-05), 372 of 373 `usgs` runs
 succeeded, in 43 s at the median and 136 s at most; the one failure was the
 driver pitfall below. All 8 `lake_maintenance` runs succeeded, in 10 to 17 s.
 In the 21:30 run of 2026-10-28, the load took 7 s and dbt 23 s; the rest was
-Dagster starting each step as a subprocess of the run's Pod.
+Dagster's own start-up and per-step overhead.
 
 **Check it is healthy:**
 
@@ -1565,7 +1566,7 @@ server or the first runs fail:
   `postgresql.postgresqlScheme: postgresql+psycopg2` in the values selects
   psycopg2 for every Dagster Pod, without rebuilding the image.
 
-**The first pull is slow.** The image is 961 MiB. The first pull on the node
+**The first pull is slow.** The image is 961 MiB ([§9a](#9a-environments)). The first pull on the node
 took **4 min 25 s**. Until it ends, the Pod is `ContainerCreating` and
 `kubectl describe pod` shows `Pulling image`: that is not a failure. Runs use
 `imagePullPolicy: IfNotPresent` and the image is pinned by digest, so later
