@@ -131,8 +131,9 @@ separate agent session whose first instruction is to read and follow the role
 file. A reviewer is never the session that wrote the change. The operator
 decides macro questions.
 
-**Merging.** Any agent, on any harness, may merge a pull request once every
-required check is green and a reviewer returned APPROVE. A guardrail change —
+**Merging.** Any agent that can reach GitHub, on any harness, may merge a pull
+request once every required check is green and a reviewer returned APPROVE; a
+sandboxed agent (§10) cannot, so the session that pushed merges. A guardrail change —
 CI, agent definitions or instructions, permissions, RBAC, secrets — also
 needs the operator's explicit go-ahead for that pull request. Workflow detail: [`CONTRIBUTING.md`](CONTRIBUTING.md#workflow).
 
@@ -184,8 +185,10 @@ Only Claude Code reads the deny rules in
 [`.claude/settings.json`](.claude/settings.json); other harnesses do not. An
 agent on another harness runs inside that harness's own sandbox, with network
 access off for its commands — for Codex, `workspace-write` with
-`network_access` left off. It edits and commits in its checkout; a session
-with network access pushes and opens the pull request. A harness with no
+`network_access` left off. It edits files in its checkout and nothing else:
+Codex also keeps `.git` read-only in that mode, so it cannot commit. A session
+outside the sandbox — the operator's Claude Code session, or the operator —
+reads the diff, commits, pushes, opens the pull request, and merges under §6. A harness with no
 sandbox is not used here. Never turn the sandbox off or hand an agent a
 credential to get around it — ask the operator instead
 ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).

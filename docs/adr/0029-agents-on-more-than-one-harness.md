@@ -92,13 +92,17 @@ without network access for its commands.** For Codex that is the
 `workspace-write` sandbox mode with `network_access` left off: commands may
 read files and edit the checkout they were started in, and cannot open a
 connection. So they cannot reach the cluster, GitHub, or the tailnet, whatever
-credentials sit on the Mac. That agent commits locally; a session that may use
-the network — the operator's Claude Code session, or the operator — pushes and
-opens the pull request. A harness with no sandbox (Pi, today) is not used on
+credentials sit on the Mac. Codex also keeps `.git`, `.agents` and `.codex`
+read-only in that mode, so the agent cannot commit — nor rewrite its own
+instructions. A session outside the sandbox — the operator's Claude Code
+session, or the operator — reads the diff, commits, pushes, opens the pull
+request, and merges. A harness with no sandbox (Pi, today) is not used on
 this repository.
 
-**4. Merging.** Any agent, on any harness, may merge a pull request once every
-required check is green and a reviewer returned APPROVE. A guardrail change —
+**4. Merging.** Any agent that can reach GitHub, on any harness, may merge a
+pull request once every required check is green and a reviewer returned
+APPROVE; a sandboxed agent (Decision 3) cannot, so the session that pushed
+merges. A guardrail change —
 CI, agent definitions or instructions, permissions, RBAC, secrets — also needs
 the operator's explicit go-ahead for that pull request. This replaces ADR-0013
 rule 3: autonomy is no longer earned class by class; the reviewer and the
@@ -123,6 +127,9 @@ and 4 stand unchanged.
 - **The boundary is the harness's configuration.** If the sandbox is turned
   off or network access enabled, the boundary is gone; nothing in the
   repository can check how a harness on the operator's Mac is configured.
+- **A sandboxed agent's work needs a second session.** It cannot commit,
+  push, or open a pull request; the operator's Claude Code session or the
+  operator does, after reading the diff.
 - **A sandboxed agent cannot run every check.** Checks that download charts
   or packages (`helm template`, a first `uv sync`) need the network; the
   session that pushes runs them, and CI runs all of them.

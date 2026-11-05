@@ -36,8 +36,9 @@ messages.
 harness. Everything below about `.claude/settings.json` binds Claude Code only.
 An agent on any other harness runs inside its harness's own sandbox with
 network access off — for Codex, `workspace-write` — so its commands can edit
-the checkout but cannot reach the cluster, GitHub, or the tailnet; a session
-with network access pushes its commits ([`AGENTS.md`](AGENTS.md) §10).
+the checkout but cannot commit, reach the cluster, GitHub, or the tailnet; a
+session outside the sandbox commits and pushes its changes
+([`AGENTS.md`](AGENTS.md) §10).
 
 **Agents.** The main Claude session acts as architect. It can hand a scoped
 task to the `implementer` agent
@@ -138,8 +139,8 @@ What it does not enforce:
   second developer joins (M7).
 - **A gate approving a change to itself.** A pull request runs the workflow as
   it edits it, so a change under `.github/workflows/` can change what its own
-  required checks do. Changes to CI, agent definitions, permissions, RBAC,
-  and secrets therefore need the operator's explicit go-ahead before merge, by
+  required checks do. Changes to CI, agent definitions or instructions,
+  permissions, RBAC, and secrets therefore need the operator's explicit go-ahead before merge, by
   convention ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
 - **The reviewer's APPROVE.** Agents may merge after it
   ([`AGENTS.md`](AGENTS.md) §6), but GitHub does not see it: a token that can

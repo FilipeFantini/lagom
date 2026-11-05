@@ -129,3 +129,9 @@ without rewriting it.
   staging's manifests had not pinned in any commit before the change's base.
   It asserts "pinned on `main` first", not "ran successfully": CI never
   reaches the cluster (decision 4).
+- **2026-11-05 — who merges.** "All are merged by the operator today" in
+  decision 3 no longer holds: under
+  [ADR-0029](0029-agents-on-more-than-one-harness.md) an agent may merge each
+  of the three pull requests once the required checks are green and a reviewer
+  returned APPROVE. The promotion check still holds prod to digests staging
+  pinned first.

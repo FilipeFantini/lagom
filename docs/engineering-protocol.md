@@ -603,9 +603,9 @@ every change:
 2. **Every escape becomes a gate.** A defect that reached `main` is fixed
    together with the check that would have caught it, or a stated reason why
    none can.
-3. **A gate never approves a change to itself.** CI, agent definitions,
-   permissions, RBAC, and secrets need the operator's explicit go-ahead before
-   merge. This holds by
+3. **A gate never approves a change to itself.** CI, agent definitions or
+   instructions, permissions, RBAC, and secrets need the operator's explicit
+   go-ahead before merge. This holds by
    convention: branch protection requires the checks to pass, but a pull
    request runs the workflow as it edits it — see
    [CONTRIBUTING](../CONTRIBUTING.md#branch-protection).
