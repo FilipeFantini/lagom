@@ -5,7 +5,8 @@ and prod in a later one, by copying the digest staging ran. This check turns
 that order from a convention into a CI gate (roadmap Track G).
 
 For every image the prod manifests reference (a container's `image`, a
-CloudNativePG Cluster's `imageName`):
+CloudNativePG Cluster's `imageName`, or an `image: {repository, tag}` in the
+Helm values file of a chart Application):
 
 1. It is pinned by digest (`name[:tag]@sha256:<64 hex>`). A tag can be moved
    to other bytes after staging ran it, so a tag alone proves nothing.
@@ -15,21 +16,23 @@ CloudNativePG Cluster's `imageName`):
    change pins in staging and prod together therefore fails: staging never
    had it on main before prod did.
 
-Each environment's directories are the Git paths of the Argo CD Applications
-in platform/infra/apps/ whose destination is that environment's namespace.
+Each environment's paths are those of the Argo CD Applications in
+platform/infra/apps/ whose destination is that environment's namespace: the
+directory of a Git source, and the `$values/...` file of a chart source.
 
 What it does not check:
 - That staging's run of the image succeeded. CI never reaches the cluster
   (ADR-0015 decision 4), so "pinned on main" stands in for "ran"; the
   operator still confirms the staging run before the prod pull request.
-- Images that come from a Helm chart rather than a manifest in the
-  environment's own directory, or from a manifest in a subdirectory of it
-  (Argo CD, like this check, reads only the top level of a directory).
+- Images a chart sets by its own defaults, which no values file in this
+  repository names, or that come from a manifest in a subdirectory of an
+  environment's directory (Argo CD, like this check, reads only the top
+  level of a directory).
 - How long the digest ran in staging, or whether staging still pins it.
 - Where in a staging file the digest appeared: the search is textual, so a
   digest that staging only mentioned in a comment counts as pinned.
 
-A prod directory that does not exist, or prod manifests with no image at
+A prod path that does not exist, or prod manifests with no image at
 all, fail the check: a check that found nothing to inspect has not passed.
 
 Exits 1 on any violation, 2 if --base is not a commit. Run from anywhere:
@@ -60,8 +63,19 @@ def _load_yaml(text: str) -> list[Any]:
     return [doc for doc in yaml.safe_load_all(text) if doc]
 
 
+# A Helm source names its values files in this repository through the
+# `ref: values` source as `$values/<path>`; manifest_policy.py holds every Git
+# source to this repository.
+VALUES_REF = "$values/"
+
+
 def environment_paths(apps_dir: Path) -> dict[str, list[str]]:
-    """Map each destination namespace to the repository paths its Applications apply."""
+    """Map each destination namespace to the repository paths its Applications apply.
+
+    A path is a directory of manifests (a Git source's `path`) or a Helm values
+    file in this repository (a chart source's `$values/...` value file), since
+    a chart's image can be pinned in its values.
+    """
     paths: dict[str, list[str]] = {}
     for app_file in sorted(apps_dir.glob("*.y*ml")):
         for app in _load_yaml(app_file.read_text()):
@@ -69,9 +83,14 @@ def environment_paths(apps_dir: Path) -> dict[str, list[str]]:
                 continue
             spec = app["spec"]
             namespace = spec["destination"].get("namespace")
+            if not namespace:
+                continue
             for source in spec.get("sources") or [spec["source"]]:
-                if namespace and "path" in source:
+                if "path" in source:
                     paths.setdefault(namespace, []).append(source["path"])
+                for value_file in (source.get("helm") or {}).get("valueFiles") or []:
+                    if value_file.startswith(VALUES_REF):
+                        paths.setdefault(namespace, []).append(value_file[len(VALUES_REF) :])
     return paths
 
 
@@ -80,6 +99,10 @@ def _walk_images(node: Any) -> Iterator[str]:
         for key, value in node.items():
             if key in IMAGE_KEYS and isinstance(value, str):
                 yield value
+            elif key == "image" and isinstance(value, dict) and "repository" in value:
+                # The Helm values form, as the Dagster chart takes it: the tag
+                # carries the digest ("<sha>@sha256:...").
+                yield f"{value['repository']}:{value.get('tag', '')}"
             else:
                 yield from _walk_images(value)
     elif isinstance(node, list):
@@ -88,10 +111,12 @@ def _walk_images(node: Any) -> Iterator[str]:
 
 
 def image_refs(repo: Path, paths: list[str]) -> list[tuple[str, str]]:
-    """Every (file, image reference) in the manifests directly under `paths`."""
+    """Every (file, image reference) in `paths`: a file, or a directory's top-level manifests."""
     found: list[tuple[str, str]] = []
     for relative in paths:
-        for manifest in sorted((repo / relative).glob("*.y*ml")):
+        target = repo / relative
+        manifests = [target] if target.is_file() else sorted(target.glob("*.y*ml"))
+        for manifest in manifests:
             for doc in _load_yaml(manifest.read_text()):
                 for ref in _walk_images(doc):
                     found.append((str(manifest.relative_to(repo)), ref))
@@ -131,7 +156,7 @@ def violations(repo: Path, base: str) -> tuple[list[str], int]:
     problems = [
         f"{path}: {PROMOTED_NAMESPACE} Application path does not exist"
         for path in promoted_paths
-        if not (repo / path).is_dir()
+        if not (repo / path).exists()
     ]
     refs = image_refs(repo, promoted_paths)
     if not refs:
