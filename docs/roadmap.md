@@ -244,17 +244,23 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [x] Check backup retention on 2026-11-05: staging's 7-day retention must
       delete its first expired backup without error. Passed on 2026-11-05
       (ADR-0025 notes)
-- [ ] Dagster with Postgres metastore, one instance per environment
+- [x] Dagster with Postgres metastore, one instance per environment
       ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): the code
       location first (image `lagom-orchestration`), then each environment's
-      instance, staging before prod
+      instance, staging before prod. Staging since 2026-10-28, prod since
+      2026-11-05 ([runbook](architecture.md#dagster-m3))
 - [ ] Dagster's UI at `dagster-staging.getlagom.app` and
       `dagster.getlagom.app` behind a Cloudflare Access login, instead of
       `kubectl port-forward`
       ([ADR-0029](adr/0029-operator-uis-behind-cloudflare-access.md);
       [runbook](architecture.md#operator-uis-behind-cloudflare-access-m3))
-- [ ] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
-      prod; the CronJobs on Postgres stay until it has run a week in prod
+- [x] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
+      prod. Staging's first week: 372 of 373 runs succeeded; prod's first run,
+      2026-11-05 12:00 UTC, loaded 30 days (10,042 events), `PASS=33`
+- [ ] Retire the CronJobs on Postgres once Dagster has run a week in prod
+      (from 2026-11-12) and has taken over the alarm
+      ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md),
+      heartbeat)
 - [ ] Native failure alerting
 - [ ] `dbt test` in CI
 - [ ] Freshness threshold declared and asserted

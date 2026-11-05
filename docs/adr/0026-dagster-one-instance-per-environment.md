@@ -122,7 +122,10 @@ without rewriting it.
   instead of one process per step. The figures are in
   [architecture.md §11](../architecture.md#11-resource-budget); the
   operator chose this on 2026-11-05 over moving the runs' configuration into
-  the run launcher's values, which would have duplicated it.
+  the run launcher's values, which would have duplicated it. With steps in
+  one process, runs peaked at 623–640 MiB in staging and 550 MiB in prod's
+  30-day first load; the request stays 768 MiB. Prod's instance runs since
+  2026-11-05, so the week before the CronJobs may go ends on 2026-11-12.
 - **2026-11-05 — the UI over the tailnet.** "The UI is reached by `kubectl
   port-forward`" is superseded by
   [ADR-0028](0028-dagster-ui-over-the-tailnet.md): each environment's UI has
