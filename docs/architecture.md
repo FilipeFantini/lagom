@@ -666,7 +666,7 @@ the node allows, not a budget to fill (§1).
 ## 13. Runbook
 
 Operational procedures. **Kept current as part of any change that affects how
-the platform is run or recovered** — see [`CLAUDE.md`](../CLAUDE.md) §5.
+the platform is run or recovered** — see [`AGENTS.md`](../AGENTS.md) §5.
 
 **Placeholders.** The repository is public, so values that identify the
 operator or address the node are written in angle brackets and never filled
