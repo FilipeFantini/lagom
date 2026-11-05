@@ -1498,8 +1498,8 @@ environment; its memory is in §11. The Job and its Pod are deleted an hour afte
 finish. The run's history stays in the database `dagster` of the same
 environment's Postgres.
 
-Exercised in staging on 2026-10-28. Prod has no Dagster yet; once it does,
-replace `staging` with `prod`.
+Exercised in staging on 2026-10-28; prod runs the same since 2026-11-05.
+In prod, replace `staging` with `prod`.
 
 **The jobs** (code in [`platform/orchestration/`](../platform/orchestration/README.md)):
 
