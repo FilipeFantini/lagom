@@ -192,3 +192,12 @@ reads the diff, commits, pushes, opens the pull request, and merges under §6. A
 sandbox is not used here. Never turn the sandbox off or hand an agent a
 credential to get around it — ask the operator instead
 ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
+
+**Tucano** runs agents in a Docker container instead, with network but no
+credential. Each agent's computer is *Isolated Linux* or *None*, never *This
+computer*. The agent clones the public repository inside its container, no
+Mac folder is lent to it, no connector writes to GitHub or reaches
+infrastructure, and its work leaves as a patch file that a session outside
+Tucano reads, applies, and takes through §6. Its Tucano instructions only
+point it to this file
+([ADR-0032](docs/adr/0032-tucano-agents-in-credential-free-containers.md)).

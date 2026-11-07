@@ -616,5 +616,7 @@ every change:
    as more than it proves.
 6. **Deny rules bind only the harness that reads them.** An agent on a harness
    other than Claude Code runs inside that harness's sandbox with network
-   access off, so it cannot reach the cluster, GitHub, or the tailnet
-   ([`AGENTS.md`](../AGENTS.md) §10).
+   access off, so it cannot reach the cluster, GitHub, or the tailnet — or,
+   through Tucano, in a container that holds no credential, so it can reach
+   them but not authenticate ([`AGENTS.md`](../AGENTS.md) §10,
+   [ADR-0032](adr/0032-tucano-agents-in-credential-free-containers.md)).
