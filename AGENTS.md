@@ -131,7 +131,10 @@ writes briefs, and decides. Scoped implementation can go to an `implementer`,
 and **every pull request is reviewed by a `reviewer` before merge** — no need to
 be asked. GitHub enforces it: the `agent review` check runs the reviewer role
 in CI and is required on `main`
-([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)). A pull
+([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)); it blocks
+only blocker and major findings, and a change to Markdown only, outside the
+agents' instructions, passes unreviewed
+([ADR-0038](docs/adr/0038-leaner-agent-gates.md)). A pull
 request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS)
 carries a **For the operator** section — what changes, what it touches, what
 could go wrong, how to undo it, in plain words — since the operator approves

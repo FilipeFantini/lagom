@@ -17,6 +17,8 @@
 - **Amended by:** [ADR-0036](0036-the-reviewer-as-a-required-check.md) — the
   reviewer's verdict in Decision 5 becomes a required check, which also
   enforces the For the operator section.
+  [ADR-0038](0038-leaner-agent-gates.md) — Decision 3's list narrowed to the
+  security core; Decision 4 no longer re-runs on an edit.
 
 ## Context and problem
 

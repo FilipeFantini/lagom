@@ -54,6 +54,7 @@ decision, consequences, and how to reverse it.
 | [0032](0032-agents-in-credential-free-containers.md) | Agents run in containers that hold no credential, whatever runner starts them | Accepted; Decisions 2, 4 and 5 amended by 0035 |
 | [0033](0033-dagster-alerts-through-healthchecks.md) | Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io | Accepted |
 | [0034](0034-notion-as-the-one-documentation-space-outside-the-repo.md) | Notion is the one documentation space outside the repository | Proposed |
-| [0035](0035-agents-use-the-operators-scoped-token.md) | Agents use the operator's repository-scoped token; an environment approval guards what reaches the cluster | Accepted; Decision 5 amended by 0036 |
-| [0036](0036-the-reviewer-as-a-required-check.md) | The reviewer runs in CI as a required check | Accepted; Decision 6 amended by 0037 |
+| [0035](0035-agents-use-the-operators-scoped-token.md) | Agents use the operator's repository-scoped token; an environment approval guards what reaches the cluster | Accepted; Decision 5 amended by 0036; Decisions 3 and 4 by 0038 |
+| [0036](0036-the-reviewer-as-a-required-check.md) | The reviewer runs in CI as a required check | Accepted; Decision 6 amended by 0037; Decisions 1, 2 and 4 by 0038 |
 | [0037](0037-the-reviewer-runs-on-sonnet.md) | The reviewer runs on Sonnet, to spend less of the subscription | Accepted |
+| [0038](0038-leaner-agent-gates.md) | Leaner agent gates: the guarded list is the security core, and the reviewer runs less and blocks less | Accepted |
