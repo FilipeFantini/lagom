@@ -1,0 +1,22 @@
+---
+interface Props {
+  id: string;
+  display: string;
+  value: string;
+  label: string;
+  detail: string;
+  source: string;
+  href: string;
+}
+
+const { id, display, value, label, detail, source, href } = Astro.props;
+---
+
+<article class:list={["figure", display]} data-figure={id}>
+  <h3 class="figure-label">{label}</h3>
+  <p class="figure-value">{value}</p>
+  <p class="figure-detail">{detail}</p>
+  <p class="figure-source">
+    <a href={href}>{source}</a>
+  </p>
+</article>

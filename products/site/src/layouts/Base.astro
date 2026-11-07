@@ -1,0 +1,65 @@
+---
+import { ClientRouter } from "astro:transitions";
+import "@fontsource-variable/fraunces/wght.css";
+import "@fontsource-variable/fraunces/wght-italic.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+  canonical: string;
+  current?: "home" | "usgs";
+}
+
+const { title, description, canonical, current } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f3ead7" />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title}</title>
+    <ClientRouter />
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="mast">
+      <div class="wrap mast-row">
+        <a class="wordmark" href="/">
+          <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" fill="currentColor"></rect>
+            <rect x="5" y="7" width="9" height="18" fill="#f0b429"></rect>
+            <rect x="18" y="7" width="9" height="18" fill="#f3ead7"></rect>
+          </svg>
+          <span>ofantini</span>
+        </a>
+        <p class="mast-tag">a data platform, measured</p>
+        <nav class="nav" aria-label="Pages">
+          <a href="/" aria-current={current === "home" ? "page" : undefined}>Home</a>
+          <a href="/showcase/usgs" aria-current={current === "usgs" ? "page" : undefined}
+            >USGS earthquakes</a
+          >
+        </nav>
+      </div>
+    </header>
+    <main id="content">
+      <slot />
+    </main>
+    <footer class="colophon">
+      <div class="wrap">
+        <p>
+          Static files. No analytics, no cookies, no third-party script.
+          <a href="https://github.com/FilipeFantini/lagom">The repository is public.</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

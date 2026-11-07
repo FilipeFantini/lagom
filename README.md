@@ -27,7 +27,7 @@ flowchart TB
         ing["Ingest<br/>dlt"] --> store[("Store<br/>bronze · silver · gold")] --> dbt["Transform<br/>dbt"]
     end
 
-    site(["ofantini.com<br/>dashboards, refreshed each run"])
+    site(["ofantini.com<br/>static site"])
 
     src --> node
     node --> site
@@ -87,13 +87,19 @@ every change reaches the cluster through a pull request.
 ```
 platform/   the shared backbone: cluster manifests, Argo CD apps, the dbt project
 services/   one directory per data source: ingestion, its tests and image
-products/   what people see: the site and its dashboards
+products/   what people see: the site (products/site/) and, later, its dashboards
 tools/      CI checks and operational scripts
 docs/       architecture, roadmap, decisions (ADRs), runbook
 ```
 
 Adding a source or a dashboard is additive: a new directory and its Argo CD
 Application ([ADR-0006](docs/adr/0006-monorepo-layout.md)).
+
+The site is [`products/site/`](products/site/README.md): static pages for
+ofantini.com. Home says what the platform is. The USGS showcase states the
+problem, then the path the scheduled job runs, then the measured numbers. The
+dashboard gallery is not in it yet, and the pages are not published to
+Cloudflare Pages yet.
 
 ## License
 

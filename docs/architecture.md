@@ -210,8 +210,9 @@ enforced contract. `dbt build` runs the tests with the models: keys, ranges and
 accepted values; reconciliation of row counts between the layers
 (`tests/reconcile_*.sql`); and unit tests of the dedup, the region parsing and
 the class boundaries. Freshness of bronze (warn 2 h, error 6 h) is checked by
-`dbt source freshness`. CI lints and parses the project but runs no model: how
-to run it is in [`platform/warehouse/README.md`](../platform/warehouse/README.md).
+`dbt source freshness`. That check is separate from `dbt build`, and CI does
+not cover it. What CI runs is in the
+[warehouse README](../platform/warehouse/README.md#tests).
 
 ## 7. Orchestration — Dagster
 
@@ -307,6 +308,17 @@ The public face is static: nothing on the node serves it
 | **Evidence** | the dashboards: SQL + Markdown, charts built on Apache ECharts, built by a Dagster step in the cluster after each run | 0 resident (an ephemeral build job) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
+
+The site source is [`products/site/`](../products/site/README.md): an Astro
+project, static output, two pages. Home says what the platform is. The USGS
+showcase states the problem, then the path the scheduled job runs (dlt into
+DuckLake, dbt on the lake target, Dagster), then the numbers copied from this
+document and the roadmap. It also says what is not settled: ADR-0023 is still
+proposed, and the storage section above still keeps every layer in Postgres
+until that spike passes. Publishing to Cloudflare Pages is still open, so the
+domain does not serve this build yet. The pages load no analytics, no cookie
+and no third-party script. The exact Astro version is pinned in that
+directory's `package.json`, not repeated here.
 
 How a dashboard is published: a Dagster step after each run builds Evidence in
 the cluster and deploys the static pages to Cloudflare Pages, an outbound

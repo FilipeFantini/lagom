@@ -1,0 +1,146 @@
+---
+import Base from "../layouts/Base.astro";
+import Figure from "../components/Figure.astro";
+import inventory from "../figures.json";
+
+const home = inventory.figures.filter((figure) => figure.page === "home");
+const group = (name: string) => home.filter((figure) => figure.group === name);
+---
+
+<Base
+  title="ofantini.com — a data platform that stays small"
+  description="Lagom runs an open-source data stack on one modest server. Cheap to run, small enough to explain, and it grows by adding a pipeline."
+  canonical="https://ofantini.com/"
+  current="home"
+>
+  <section class="hero">
+    <div class="wrap">
+      <p class="kicker">Lagom</p>
+      <h1 transition:name="title">Data, on a small server.</h1>
+      <p class="lede">
+        Most data is not big data. Lagom runs an open-source stack on one modest server, measures
+        what that costs, and grows by adding a pipeline — not by adding a platform.
+      </p>
+    </div>
+  </section>
+
+  <section class="band enter" id="cheap">
+    <div class="wrap">
+      <p class="kicker">Cheap</p>
+      <h2>As much infrastructure as the data needs.</h2>
+      <div class="prose">
+        <p>
+          The previous machine has a price written down. The machine that runs the platform now is
+          described as roughly double that. Its exact price is whatever the provider's console
+          shows, and it is not copied onto this page.
+        </p>
+      </div>
+      <div class="figures">
+        {
+          group("cost").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-quiet enter" id="small">
+    <div class="wrap">
+      <p class="kicker">Small</p>
+      <h2>One node. Jobs that exit.</h2>
+      <div class="prose">
+        <p>
+          One machine hosts both environments. Work that can finish starts, runs, and leaves, so
+          the memory is held for the run and then given back. These pages are files built ahead of
+          time: a visitor never reaches the cluster. Git is the source of truth for what the
+          cluster runs, and Argo CD reconciles the cluster to it.
+        </p>
+      </div>
+      <div class="figures">
+        {
+          group("machine").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band enter" id="composition">
+    <div class="wrap">
+      <p class="kicker">Composition</p>
+      <h2>A new source is another pipeline.</h2>
+      <div class="prose">
+        <p>
+          Ingestion, storage, transformation and orchestration stay. Adding a source does not
+          reorganize them. The layout's test is one new service directory and one new place in the
+          transformation project, and nothing else.
+        </p>
+        <p>
+          The event path is deferred until a source needs it. It is not part of what runs for the
+          earthquake feed.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-quiet enter" id="recovery">
+    <div class="wrap">
+      <p class="kicker">Rebuilt</p>
+      <h2>Small is not a reason to skip a rehearsal.</h2>
+      <div class="prose">
+        <p>
+          The move to the current node was a rebuild from Git plus a re-load. The measured time is
+          below. The estimate beside it is the document's estimate, not a second measurement.
+        </p>
+      </div>
+      <div class="figures">
+        {
+          group("recovery").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-solution enter">
+    <div class="wrap">
+      <p class="kicker">First showcase</p>
+      <h2>USGS earthquakes</h2>
+      <div class="prose">
+        <p>
+          A public feed, then the path the scheduled job runs, then the rows, the time and the
+          memory the documents record. The warehouse decision that path exercises is still open.
+          The page says so.
+        </p>
+      </div>
+      <a class="button" href="/showcase/usgs">Read the showcase</a>
+    </div>
+  </section>
+</Base>

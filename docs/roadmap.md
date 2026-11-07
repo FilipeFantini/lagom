@@ -294,12 +294,19 @@ The platform's public face: a static site and a gallery of dashboards, with
 the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Public data, no login.
 
 - [ ] Astro site on Cloudflare Pages at ofantini.com — design inspired by
-      PostHog's; each page states the problem, then the solution
+      PostHog's; each page states the problem, then the solution.
+      The source is in [`products/site/`](../products/site/README.md): home,
+      and the USGS showcase. Publishing to Pages is still open, so the site
+      is not live on the domain yet
 - [ ] Evidence dashboards built in the cluster by a Dagster step after each
       run and published to Cloudflare Pages, shown as a gallery of cards on the
       site ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed)
-- [ ] **Showcase: the SME stack on USGS** — the pipeline, with its real numbers
-      (rows, run time, memory)
+- [ ] **Showcase: the SME stack on USGS** — the page in that site states the
+      problem, then the path the scheduled job runs (dlt, DuckLake on R2, dbt,
+      Dagster) and the rows, run time and memory recorded in this roadmap and
+      in [`architecture.md`](architecture.md). It says the spike below is still
+      open, so the page does not treat ADR-0023 as accepted. It is public on
+      the domain only once Pages publishes it
 - [ ] **Showcase: the platform itself**, after the USGS showcase is live —
       infrastructure observability (node and pod memory against the budget,
       job durations, logs), with the stack in the

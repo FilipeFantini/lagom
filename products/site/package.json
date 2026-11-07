@@ -1,0 +1,21 @@
+{
+  "name": "site",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Static site for ofantini.com. Home and the USGS showcase.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "node scripts/build.mjs",
+    "preview": "astro preview --host 127.0.0.1 --port 4321"
+  },
+  "dependencies": {
+    "@fontsource-variable/fraunces": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "astro": "7.4.7"
+  }
+}

@@ -1,0 +1,233 @@
+---
+import Base from "../../layouts/Base.astro";
+import Figure from "../../components/Figure.astro";
+import inventory from "../../figures.json";
+
+const page = inventory.figures.filter((figure) => figure.page === "usgs");
+const group = (name: string) => page.filter((figure) => figure.group === name);
+---
+
+<Base
+  title="USGS earthquakes — ofantini.com"
+  description="The problem a public earthquake feed poses, then the path the scheduled job runs, then the numbers the architecture and the roadmap record."
+  canonical="https://ofantini.com/showcase/usgs"
+  current="usgs"
+>
+  <section class="hero">
+    <div class="wrap">
+      <p class="kicker">Showcase</p>
+      <h1 transition:name="title">USGS earthquakes</h1>
+      <p class="lede">
+        The problem first. Then the path the scheduled job runs: dlt, then DuckLake on Cloudflare
+        R2, then dbt, then Dagster. Then the numbers, each one copied from the architecture or the
+        roadmap. The decision to adopt that path as the warehouse is still open.
+      </p>
+    </div>
+  </section>
+
+  <section class="band band-problem enter">
+    <div class="wrap">
+      <p class="kicker">The problem</p>
+      <h2>A small public feed, and a stack that is usually much larger.</h2>
+      <div class="prose">
+        <p>
+          The United States Geological Survey publishes recent earthquakes as a public feed. It is
+          the right first source because there is nothing to authenticate, the shape is stable, and
+          the volume is small. The work is the conveyor, not the feed.
+        </p>
+        <p>
+          The usual answer to a famous dataset is a platform built for data far bigger than this.
+          The problem here is the opposite: keep a copy that can be re-run and reconciled, on the
+          one small node, and publish the numbers the runs actually produced.
+        </p>
+      </div>
+      <div class="figures">
+        {
+          group("problem").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-solution enter">
+    <div class="wrap">
+      <p class="kicker">The solution</p>
+      <h2>What the scheduled job runs.</h2>
+      <div class="prose">
+        <p>
+          This is the path named by the orchestration section and by the roadmap item that is
+          already done. It is not, by itself, the acceptance of the warehouse decision. That
+          distinction is in the open section below.
+        </p>
+      </div>
+      <ol class="steps">
+        <li class="step">
+          <h3>dlt</h3>
+          <p>
+            A library, not a server. The run starts, pages the feed, keeps a cursor, writes, and
+            exits. Between runs it holds no memory. The asset asks for the DuckLake destination.
+          </p>
+        </li>
+        <li class="step">
+          <h3>DuckLake on R2</h3>
+          <p>
+            DuckDB is the engine. DuckLake is the table format: files plus a catalog, so a load can
+            merge. Postgres holds the catalog. The files are the R2 bucket the lake target names.
+            The node's disk does not keep the history.
+          </p>
+        </li>
+        <li class="step">
+          <h3>dbt</h3>
+          <p>
+            SQL models, run as a job, in layers. Bronze is what the load wrote. Silver is
+            <code>stg_usgs__events</code>: the latest revision of each event, typed, times in UTC.
+            Gold is <code>fct_earthquakes</code>, earthquakes only, with magnitude and depth
+            classes, and <code>agg_earthquakes_daily_region</code>. The build runs the tests with
+            the models, including reconciliation of row counts across the layers.
+          </p>
+        </li>
+        <li class="step">
+          <h3>Dagster</h3>
+          <p>
+            The scheduler. Rows do not pass through it. It starts the load, then the build, and it
+            releases the memory when the run ends. A second job merges small files and expires old
+            snapshots. One instance per environment, so staging does not touch prod.
+          </p>
+        </li>
+      </ol>
+      <div class="figures">
+        {
+          group("solution").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band enter">
+    <div class="wrap">
+      <p class="kicker">Measured</p>
+      <h2>Rows, time and memory on the lake path.</h2>
+      <div class="prose">
+        <p>
+          These are the figures the roadmap and the architecture record for the runs after Dagster
+          took the job.           A sample is not a peak when the document says the samples miss short
+          peaks. The CI row is a fixture, not a production load.
+        </p>
+      </div>
+      <div class="figures">
+        {
+          group("lake").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-problem enter">
+    <div class="wrap">
+      <p class="kicker">Still open</p>
+      <h2>What this page does not settle.</h2>
+      <div class="figures">
+        {
+          group("open").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-quiet enter">
+    <div class="wrap">
+      <p class="kicker">Earlier path</p>
+      <h2>While the layers lived in Postgres.</h2>
+      <div class="prose">
+        <p>
+          Before the scheduled job above, a CronJob ran the load and the build in Postgres. Those
+          measurements are kept here so the later numbers are not asked to stand for them. The
+          retirement date is on the staging card.
+        </p>
+      </div>
+      <div class="figures">
+        {
+          group("postgres").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="band enter">
+    <div class="wrap">
+      <p class="kicker">Rebuild</p>
+      <h2>The re-load during the move.</h2>
+      <div class="prose">
+        <p>
+          The move to the current node re-loaded this feed. The runbook records the two runs below
+          and does not name which store they wrote, so this page does not name it either.
+        </p>
+      </div>
+      <div class="figures">
+        {
+          group("drill").map((item) => (
+            <Figure
+              id={item.id}
+              display={item.display}
+              value={item.value}
+              label={item.label}
+              detail={item.detail}
+              source={item.source}
+              href={item.href}
+            />
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</Base>
