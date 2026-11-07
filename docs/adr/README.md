@@ -52,5 +52,5 @@ decision, consequences, and how to reverse it.
 | [0030](0030-operator-uis-behind-cloudflare-access.md) | ofantini.com as the domain; operator UIs at ops.ofantini.com behind Cloudflare Access | Accepted |
 | [0031](0031-repository-named-lagom.md) | The repository is named `lagom`; a rename to Robusta was tried and reverted | Accepted |
 | [0032](0032-agents-in-credential-free-containers.md) | Agents run in containers that hold no credential, whatever runner starts them | Accepted |
-| [0033](0033-dagster-alerts-through-healthchecks.md) | Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io | Proposed |
+| [0033](0033-dagster-alerts-through-healthchecks.md) | Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io | Accepted |
 | [0034](0034-notion-as-the-one-documentation-space-outside-the-repo.md) | Notion is the one documentation space outside the repository | Proposed |

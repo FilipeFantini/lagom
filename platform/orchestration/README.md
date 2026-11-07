@@ -50,8 +50,7 @@ because `urllib3`'s debug lines carry the URL's path.
 
 **Where it is set:** each environment's values give the code server
 `HEARTBEAT_URL` from the Secret `pipeline-heartbeat`, in the change that
-retires that environment's CronJob: staging on 2026-11-07, prod when it is
-promoted. An image with `alarm.py` is never pinned in an environment whose
+retired that environment's CronJob (both on 2026-11-07). An image with `alarm.py` is never pinned in an environment whose
 values do not set it.
 Run Pods import this same module, so they too refuse to load without the
 variable. They receive it with the rest of the code server's environment, as

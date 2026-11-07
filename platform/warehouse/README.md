@@ -53,9 +53,8 @@ What the tests do not cover: `dbt parse` in CI reads the project but never
 queries, so only a run against a database proves the SQL, the contract and the
 tests. Dagster runs `dbt build` on the `lake` target after every dlt load, in
 staging and prod ([`platform/orchestration/`](../orchestration/README.md)).
-Until prod's CronJob is retired, it also runs on Postgres there, as the
-`transform` init container of
-[`platform/infra/postgres-prod/cronjob-usgs.yaml`](../../platform/infra/postgres-prod/cronjob-usgs.yaml).
+The CronJobs that ran it on Postgres were retired on 2026-11-07
+([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)).
 
 ## Run it against dev
 

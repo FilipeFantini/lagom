@@ -25,7 +25,7 @@ dbt, Postgres, Dagster.
 | `staging` namespace | M2 — once there is something to promote |
 | Postgres backup | **entered 2026-10-28** ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). The trigger was: Postgres holds state no source can rebuild (Dagster's metastore in M3, a non-replayable source in M6), or someone other than the operator relies on the database itself — the site does not: it serves pages built after each run — [ADR-0019](adr/0019-postgres-backup-deferred.md); accepted as debt, [architecture.md §12](architecture.md#12-accepted-risks) |
 | Object storage (Cloudflare R2) | the SME-stack spike (M3), as the store of DuckLake's data files ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed) |
-| DuckDB and DuckLake (the SME stack) | the spike in M3; the warehouse moves from Postgres when it passes ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; until then [ADR-0008](adr/0008-postgres-for-all-layers.md)). USGS already runs on DuckLake under Dagster ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), and the Postgres CronJobs retire with Dagster's alarm, before the spike closes ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed); if the spike fails, ADR-0023's reversal applies |
+| DuckDB and DuckLake (the SME stack) | the spike in M3; the warehouse moves from Postgres when it passes ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; until then [ADR-0008](adr/0008-postgres-for-all-layers.md)). USGS already runs on DuckLake under Dagster ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), and the Postgres CronJobs were retired with Dagster's alarm on 2026-11-07, before the spike closes ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)); if the spike fails, ADR-0023's reversal applies |
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | Evidence | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
@@ -266,9 +266,15 @@ The node that M3 needs, and the orchestration every showcase uses.
       and a success heartbeat for runs that never start, on the CronJob's
       existing check and Secret; staging first. The operator decided on
       2026-11-07 not to wait for 2026-11-12. Code merged 2026-11-07 (PR #55);
-      staging switched over the same day, prod next
-      ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed;
+      staging switched over the same day (PR #57) and passed both a ping and a
+      deliberate `/fail`; prod switched next. Ticked once prod's first ping
+      is seen after its CronJob is deleted
+      ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md);
       [ADR-0026](adr/0026-dagster-one-instance-per-environment.md))
+- [ ] Retire the images `lagom-usgs` and `lagom-warehouse`: no manifest pins
+      them since the CronJobs went on 2026-11-07. Their rows in
+      `.github/workflows/images.yml` and their Dockerfiles go together; a CI
+      change, so the operator's go-ahead is needed
 - [ ] `dbt test` in CI
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
