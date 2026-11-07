@@ -1042,6 +1042,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyyaml" },
+    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -1065,6 +1066,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5,<2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pyyaml", specifier = ">=6" },
+    { name = "requests", specifier = ">=2.32" },
 ]
 
 [package.metadata.requires-dev]

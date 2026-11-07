@@ -2,7 +2,8 @@
 
 Every service's assets plus the dbt project, whose models become assets
 downstream of the sources they read. One job loads and builds, every 30
-minutes; another keeps DuckLake compact, daily.
+minutes; another keeps DuckLake compact, daily. Two sensors raise the alarm
+through Healthchecks.io (lagom_orchestration/alarm.py).
 
 Paths are relative to the repository layout, which the image keeps under /app.
 """
@@ -26,6 +27,7 @@ from dagster import (
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from services.usgs.assets import usgs_events
 
+from lagom_orchestration.alarm import build_alarm_sensors
 from lagom_orchestration.lake import attach_lake, run_maintenance
 
 REPO = Path(__file__).resolve().parents[3]
@@ -103,5 +105,8 @@ defs = Definitions(
             default_status=DefaultScheduleStatus.RUNNING,
         ),
     ],
+    # Reads HEARTBEAT_URL now: without it the code location does not load
+    # (ADR-0033).
+    sensors=build_alarm_sensors(usgs_job),
     resources={"dbt": DbtCliResource(project_dir=warehouse_project)},
 )

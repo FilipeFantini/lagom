@@ -234,9 +234,15 @@ read. Its first content is USGS on DuckLake:
 - the job `lake_maintenance` once a day: it merges small files, expires
   snapshots older than 7 days, and deletes the files nothing references.
 
-Until Dagster takes over the alarm, the CronJobs keep running and each run
-reports success to Healthchecks.io, which e-mails the operator when a report
-is missing ([ADR-0018](adr/0018-pipeline-heartbeat.md); runbook: *Pipeline
+Dagster raises its own alarm through the same Healthchecks.io check
+([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed): a
+sensor pings it after each successful `usgs` run, and another calls its
+`/fail` with the error when any run fails. The sensors are in the code
+location ([`alarm.py`](../platform/orchestration/lagom_orchestration/alarm.py)).
+They are not live yet: the variable they need and the removal of the CronJobs
+arrive with the staging change. Until then the CronJobs keep running and each
+run reports success to the check, which e-mails the operator when a report is
+missing ([ADR-0018](adr/0018-pipeline-heartbeat.md); runbook: *Pipeline
 heartbeat*).
 
 **The UI has no login**, so reaching it is the access control. Each
@@ -1821,6 +1827,16 @@ took **4 min 25 s**. Until it ends, the Pod is `ContainerCreating` and
 `kubectl describe pod` shows `Pulling image`: that is not a failure. Runs use
 `imagePullPolicy: IfNotPresent` and the image is pinned by digest, so later
 runs start from the node's copy. A new digest is pulled once.
+
+**The alarm sensors** ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md),
+proposed) are two entries under *Automation → Sensors* in the UI, both
+running: `usgs_success_heartbeat` and `run_failure_alarm`. They live in the
+code server, which reads the check's ping URL from `HEARTBEAT_URL` when it
+starts and **does not start without it**. A sensor whose call failed three
+times shows a failed tick in the UI, with the HTTP status or the error class,
+never the URL. Dagster does not retry the run that tick was for. Nothing sets
+`HEARTBEAT_URL` yet: the staging values do, in the change that also retires the
+CronJob, so an image with the sensors is not pinned before then.
 
 **Memory** of each Pod and of a run, measured, is in §11.
 

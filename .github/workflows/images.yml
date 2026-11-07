@@ -43,11 +43,15 @@ jobs:
           # The code location bundles services and the dbt project, so its
           # context is the repository root and its Dockerfile is named.
           # It has no entrypoint (the chart passes the whole command), so its
-          # smoke test loads the definitions, as the code server does.
+          # smoke test loads the definitions, as the code server does: first
+          # without HEARTBEAT_URL, which must fail (ADR-0033), then with a
+          # placeholder that is never called, which must load.
           - name: orchestration
             context: .
             file: platform/orchestration/Dockerfile
-            smoke: python -c 'import lagom_orchestration.definitions'
+            smoke: >-
+              ! python -c 'import lagom_orchestration.definitions' 2>/dev/null &&
+              HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -103,11 +107,15 @@ jobs:
           # The code location bundles services and the dbt project, so its
           # context is the repository root and its Dockerfile is named.
           # It has no entrypoint (the chart passes the whole command), so its
-          # smoke test loads the definitions, as the code server does.
+          # smoke test loads the definitions, as the code server does: first
+          # without HEARTBEAT_URL, which must fail (ADR-0033), then with a
+          # placeholder that is never called, which must load.
           - name: orchestration
             context: .
             file: platform/orchestration/Dockerfile
-            smoke: python -c 'import lagom_orchestration.definitions'
+            smoke: >-
+              ! python -c 'import lagom_orchestration.definitions' 2>/dev/null &&
+              HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

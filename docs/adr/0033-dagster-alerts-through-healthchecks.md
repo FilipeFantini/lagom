@@ -78,16 +78,29 @@ would e-mail a false "down" as soon as its pings stopped.
    USGS job. A missing ping is the alarm for "nothing runs", as in ADR-0018.
 3. **A run-failure sensor calls the check's `/fail` endpoint** for any failed
    run in the code location, with the job name, the run ID and the error in the
-   request body (truncated to stay under Healthchecks.io's limit). Healthchecks
-   e-mails at once. The next successful run clears it.
+   request body, cut to 10,000 bytes, keeping its start and its end.
+   Healthchecks.io stores the first 100 kB of a body; the smaller cap is for
+   the person reading the e-mail. Healthchecks e-mails at once. The next successful run clears it.
 4. **Both sensors run in the code location,** which already runs all the time.
    No new process, no new image.
 5. **The ping URL is a secret,** as in ADR-0018: whoever has it can silence the
-   alarm. It is exposed only to the code server as `HEARTBEAT_URL`. Run Pods
-   do not get it. The sensors never print the URL. A missing variable fails
-   the code location at load, loudly.
-6. **A ping that cannot be sent fails the sensor tick** after three attempts;
-   Dagster shows the failed tick, and the missing ping raises the alarm anyway.
+   alarm. It reaches the code server as `HEARTBEAT_URL`, and **run Pods get it
+   too.** The chart copies the code server's whole environment into every run
+   Pod (`includeConfigInLaunchedRuns`), with no way to leave one variable out;
+   and run Pods import the same module, which refuses to load without it.
+   Keeping it out would mean declaring every run's environment apart from the
+   code server's. That is not done: run Pods already hold the catalog owner's
+   password and the R2 write token, so a reader of the URL in a run Pod
+   already holds far more, and the URL's worst use, silencing the alarm, adds
+   nothing to that. The CronJob's Pod holds it today, beside dlt and dbt.
+   Decided by the operator on 2026-11-07. The sensors never print the URL. A
+   missing variable fails the code location at load, loudly.
+6. **A ping that cannot be sent fails the sensor tick** after three attempts,
+   and Dagster shows the failed tick. The sensor's cursor still moves past
+   that run, so the call is not retried later. For a failed success ping the
+   missing ping raises the alarm anyway; for a failed `/fail` the failed tick
+   is the only trace, and for a failed `lake_maintenance` run no missing ping
+   covers it.
 7. **The CronJob `usgs-pipeline` is deleted in the same change, per
    environment,** staging first. Prod's change lands only after staging has
    shown both a ping from the success sensor and a `/fail` from a run made to
@@ -121,7 +134,12 @@ are a few HTTP calls every 30 minutes.
 
 Risk: a sensor that is turned off sends nothing. The success sensor's silence
 is caught by the missing ping; the failure sensor's is not. Both are declared
-with `default_status=RUNNING` and a test asserts it.
+with `default_status=RUNNING` and a test asserts it. The same gap opens for one
+run when its `/fail` cannot be sent (decision 6).
+
+Risk: every Pod of a run holds the ping URL (decision 5). It is covered by the
+same defences as the database and R2 credentials beside it: images built by CI
+from reviewed code, pinned by digest, and no inbound port on the node.
 
 Reversal: restore the CronJob manifests from Git history and remove the two
 sensors; the check and the Secret are the CronJob's again.

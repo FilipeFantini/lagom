@@ -2,10 +2,11 @@
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
-from dagster import AssetKey
+from dagster import AssetKey, DefaultSensorStatus
 
 WAREHOUSE = Path(__file__).resolve().parents[2] / "warehouse"
 # `dbt parse` reads the profile but opens no connection: placeholders suffice.
@@ -39,7 +40,11 @@ def defs(tmp_path_factory: pytest.TempPathFactory):  # type: ignore[no-untyped-d
         check=True,
         env={**os.environ, **PARSE_ENV},
     )
-    from lagom_orchestration.definitions import defs
+    # The code location refuses to load without the alarm's ping URL (ADR-0033);
+    # the sensors capture it when the module is imported.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("HEARTBEAT_URL", "https://hc-ping.invalid/test")
+        from lagom_orchestration.definitions import defs
 
     return defs
 
@@ -54,6 +59,28 @@ def test_jobs_and_schedules(defs) -> None:  # type: ignore[no-untyped-def]
     assert {j.name for j in defs.resolve_all_job_defs()} >= {"usgs", "lake_maintenance"}
     crons = {s.job_name: s.cron_schedule for s in defs.schedules}  # type: ignore[union-attr]
     assert crons == {"usgs": "*/30 * * * *", "lake_maintenance": "15 4 * * *"}
+
+
+def test_the_alarm_sensors_are_registered_and_running(defs) -> None:  # type: ignore[no-untyped-def]
+    assert {s.name for s in defs.sensors} == {"usgs_success_heartbeat", "run_failure_alarm"}
+    assert all(s.default_status == DefaultSensorStatus.RUNNING for s in defs.sensors)
+
+
+def test_the_code_location_does_not_load_without_the_ping_url(defs) -> None:  # type: ignore[no-untyped-def]
+    """The real load path: a code server started without the variable stops.
+
+    `defs` is requested so the dbt manifest the module reads already exists.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "HEARTBEAT_URL"}
+    env["PYTHONPATH"] = os.pathsep.join(sys.path)
+    done = subprocess.run(
+        [sys.executable, "-c", "import lagom_orchestration.definitions"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode != 0
+    assert "HEARTBEAT_URL is not set or is empty" in done.stderr
 
 
 def test_steps_run_in_the_runs_process(defs) -> None:  # type: ignore[no-untyped-def]
@@ -86,7 +113,7 @@ def test_run_resources_override_the_code_servers(defs) -> None:  # type: ignore[
         assert run.run_k8s_config.container_config["resources"] == RUN_RESOURCES, job.name
 
 
-def test_budget_declares_the_runs_request() -> None:
+def test_budget_declares_the_runs_request(defs) -> None:  # type: ignore[no-untyped-def]
     """The budget check counts a run by its Application's annotation.
 
     Each environment's Application pins an image, and the request is in the
