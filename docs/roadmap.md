@@ -259,14 +259,13 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [x] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
       prod. Staging's first week: 372 of 373 runs succeeded; prod's first run,
       2026-11-05 12:00 UTC, loaded 30 days (10,042 events), `PASS=33`
-- [ ] Retire the CronJobs on Postgres once Dagster has run a week in prod
-      (from 2026-11-12) and has taken over the alarm
-      ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md),
-      heartbeat)
-- [ ] Native failure alerting — a failure sensor that pings the check's
-      `/fail` at once, and a success heartbeat for runs that never start; one
-      new check per environment, staging first
-      ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed)
+- [ ] Native failure alerting, and the CronJobs on Postgres retired in the
+      same change — a failure sensor that pings the check's `/fail` at once,
+      and a success heartbeat for runs that never start, on the CronJob's
+      existing check and Secret; staging first. The operator decided on
+      2026-11-07 not to wait for 2026-11-12
+      ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed;
+      [ADR-0026](adr/0026-dagster-one-instance-per-environment.md))
 - [ ] `dbt test` in CI
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
