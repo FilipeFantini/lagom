@@ -52,7 +52,7 @@ decision, consequences, and how to reverse it.
 | [0030](0030-operator-uis-behind-cloudflare-access.md) | ofantini.com as the domain; operator UIs at ops.ofantini.com behind Cloudflare Access | Accepted |
 | [0031](0031-repository-named-lagom.md) | The repository is named `lagom`; a rename to Robusta was tried and reverted | Accepted |
 | [0032](0032-agents-in-credential-free-containers.md) | Agents run in containers that hold no credential, whatever runner starts them | Accepted; Decisions 2, 4 and 5 amended by 0035 |
-| [0033](0033-dagster-alerts-through-healthchecks.md) | Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io | Proposed |
+| [0033](0033-dagster-alerts-through-healthchecks.md) | Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io | Accepted |
 | [0034](0034-notion-as-the-one-documentation-space-outside-the-repo.md) | Notion is the one documentation space outside the repository | Proposed |
 | [0035](0035-agents-use-the-operators-scoped-token.md) | Agents use the operator's repository-scoped token; an environment approval guards what reaches the cluster | Accepted; Decision 5 amended by 0036 |
 | [0036](0036-the-reviewer-as-a-required-check.md) | The reviewer runs in CI as a required check | Accepted; Decision 6 amended by 0037 |

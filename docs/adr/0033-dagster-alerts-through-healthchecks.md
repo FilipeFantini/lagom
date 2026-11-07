@@ -1,7 +1,9 @@
 # ADR-0033 — Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-07
+- **Decided by:** the operator, on 2026-11-07: retire the CronJobs now, with
+  the alarm, and accept the ping URL in run Pods (decision 5).
 - **Amends:** in [ADR-0026](0026-dagster-one-instance-per-environment.md),
   *Heartbeat*: "native failure alerting or a ping after each successful run"
   becomes both, through one check; and *DuckLake*: the CronJobs on Postgres

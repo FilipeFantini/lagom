@@ -4,9 +4,9 @@
 - **Date:** 2026-10-28
 - **Decided by:** the operator, on 2026-10-28, choosing one instance per
   environment over a single instance for both.
-- **Amended by:** [ADR-0033](0033-dagster-alerts-through-healthchecks.md)
-  (proposed): Dagster takes over the alarm, and the CronJobs retire with it,
-  without the week in prod or ADR-0023's acceptance.
+- **Amended by:** [ADR-0033](0033-dagster-alerts-through-healthchecks.md):
+  Dagster takes over the alarm, and the CronJobs retire with it, without the
+  week in prod or ADR-0023's acceptance.
 - **Supersedes:** in [ADR-0007](0007-three-environments.md), "staging runs no
   Dagster". The reason given there was memory on the 4 GB node, and it no
   longer holds ([ADR-0024](0024-ci-ceiling-on-the-8-gb-node.md)).
