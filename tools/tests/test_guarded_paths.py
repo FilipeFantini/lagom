@@ -42,6 +42,7 @@ def test_matching(path: str, expected: bool) -> None:
     "line",
     [
         "/docs/adr/",  # no owner: would remove ownership
+        "/docs/adr/ # todo",  # a trailing comment is not an owner
         "*.yaml @owner",
         "/docs/**/x.md @owner",
         "!/AGENTS.md @owner",

@@ -65,7 +65,12 @@ def parse_line(line: str, number: int) -> Pattern | None:
     if not stripped or stripped.startswith("#"):
         return None
     fields = stripped.split()
-    text, owners = fields[0], fields[1:]
+    text = fields[0]
+    owners = []
+    for field in fields[1:]:
+        if field.startswith("#"):  # a trailing comment is not an owner
+            break
+        owners.append(field)
     where = f"CODEOWNERS line {number} ({text!r})"
     if not owners:
         raise CodeownersError(f"{where}: no owner; it would remove ownership")

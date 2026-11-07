@@ -147,8 +147,10 @@ the [`guardrail approval`](.github/workflows/guardrail-approval.yml) workflow
 wait on the `guardrail` environment until the operator approves it (the pull
 request's checks → *Review deployments* → *Approve*). Approving needs the
 Deployments permission, which no agent's token holds. The workflow runs from
-`main` (`pull_request_target`), so a pull request cannot remove its own gate,
-and each new push needs a new approval. The operator approves on the pull
+`main` (`pull_request_target`, for pull requests into `main` only), so a pull
+request cannot remove its own gate, and each new push or edit needs a new
+approval. A pull request stacked on another branch has no `guardrail
+approval` check until its base becomes `main`; the change of base re-runs it. The operator approves on the pull
 request's **For the operator** section — what changes in behaviour, what it
 touches, what could go wrong, how to undo it, in plain words; for a pin under
 `platform/infra/`, every change merged since the previous pin — not by
