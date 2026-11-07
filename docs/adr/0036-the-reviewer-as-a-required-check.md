@@ -10,6 +10,8 @@
 - **Amends:** [ADR-0029](0029-agents-on-more-than-one-harness.md)
   Decision 4 and [ADR-0035](0035-agents-use-the-operators-scoped-token.md)
   Decision 5 — the reviewer's APPROVE stops being an instruction.
+- **Amended by:** [ADR-0037](0037-the-reviewer-runs-on-sonnet.md) — Decision 6:
+  the reviewer runs on Sonnet, not Opus.
 
 ## Context and problem
 

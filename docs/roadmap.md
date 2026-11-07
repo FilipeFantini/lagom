@@ -404,18 +404,21 @@ by its own trigger, like any other piece.
       work handed over as a patch. Any runner that passes the ADR's checks;
       Tucano first. Decided 2026-11-07
       ([ADR-0032](adr/0032-agents-in-credential-free-containers.md))
-- [ ] **Agents merge their own work** — a runner holds the operator's
+- [x] **Agents merge their own work** — a runner holds the operator's
       fine-grained token for `lagom` alone, without Administration,
       Deployments or Workflows; a guarded change waits for the operator's
       approval of the `guardrail` environment, which that token cannot give.
-      Decided 2026-11-07; done when the setup test in
-      [CONTRIBUTING](../CONTRIBUTING.md#branch-protection) passes
+      Decided 2026-11-07; set up and tested the same day: a guarded test pull
+      request (#59) waited on the environment, an unguarded one (#60) passed,
+      and approving with the runner's token was refused (403)
       ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md))
-- [ ] **The reviewer as a required check** — `agent review` runs the
+- [x] **The reviewer as a required check** — `agent review` runs the
       reviewer role in CI from `main` on every pull request, fails unless it
       approves, and requires a For the operator section on guarded changes.
-      Decided 2026-11-07; done when the check is in the `main` ruleset
-      ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md))
+      Decided 2026-11-07; required on `main` the same day, after it posted a
+      verdict on test pull request #60; runs on Sonnet
+      ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md),
+      [ADR-0037](adr/0037-the-reviewer-runs-on-sonnet.md))
 - [ ] **Notion as the one documentation space outside the repository** —
       status, briefs, pending decisions, and site drafts; it links to the
       repository and never restates it. The Obsidian vault leaves the project

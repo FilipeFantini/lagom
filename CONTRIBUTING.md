@@ -137,10 +137,11 @@ enforces, with no bypass — the operator follows the same rules:
 - the CI checks above must pass, named exactly as their jobs report:
   `tools (lint, types, tests)`, `services (lint, types, tests)`,
   `warehouse (lint, parse)`, `secret scan`, `resource budget`,
-  `promotion (prod pins only staging's digests)`, and `manifest policy` — a
-  renamed job must be renamed in the ruleset too, or every pull request waits
-  for a check that never reports (`manifest policy` joined the ruleset on
-  2026-10-27);
+  `promotion (prod pins only staging's digests)`, `manifest policy`,
+  `guardrail approval` and `agent review` — a renamed job must be renamed in
+  the ruleset too, or every pull request waits for a check that never reports
+  (`manifest policy` joined the ruleset on 2026-10-27; `guardrail approval`
+  and `agent review` on 2026-11-07, after the setup tests below);
 - `main` cannot be force-pushed or deleted.
 
 **The guardrail approval.** Every agent acts as the operator on GitHub, so
@@ -165,7 +166,7 @@ Inspect what applies with
 `gh api repos/FilipeFantini/lagom/rules/branches/main` and
 `gh api repos/FilipeFantini/lagom/environments/guardrail`.
 
-**Setting up the gate,** in this order — each step depends on the one before:
+**Setting up the gate** (done on 2026-11-07), in this order — each step depends on the one before:
 
 1. The operator creates the `guardrail` environment with themselves as the
    required reviewer, *Prevent self-review* off (agents act as the operator),
@@ -196,12 +197,12 @@ What it does not enforce:
   CI, agent definitions or instructions, permissions, RBAC, and secrets also
   holds by convention
   ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
-- **The reviewer's APPROVE, until `agent review` is required.** Agents may
-  merge after it ([`AGENTS.md`](AGENTS.md) §6). Once the check is in the
-  ruleset GitHub enforces it; until then a token that can merge an unguarded
-  pull request can merge it without it.
+- **That the reviewer is right.** `agent review` is required since
+  2026-11-07, so no pull request merges without its APPROVE; whether the
+  verdict is correct rests on a model
+  ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)).
 
-**Making `agent review` required,** in this order
+**Making `agent review` required** (done on 2026-11-07), in this order
 ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md) Decision 7):
 
 1. [`agent-review.yml`](.github/workflows/agent-review.yml) is on `main`
