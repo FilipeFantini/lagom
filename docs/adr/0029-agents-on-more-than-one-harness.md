@@ -8,6 +8,9 @@
 - **Supersedes:** [ADR-0013](0013-agent-driven-development-guardrails.md)
   rule 3 (autonomy earned per class of change), and amends its rule 2 (see
   Decision 4).
+- **Amended by:** [ADR-0032](0032-agents-in-credential-free-containers.md)
+  — agent runners (Tucano, rejected below, first) are adopted with a second
+  boundary for Decision 3: a container that holds no credential.
 
 ## Context and problem
 

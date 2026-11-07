@@ -192,3 +192,15 @@ reads the diff, commits, pushes, opens the pull request, and merges under §6. A
 sandbox is not used here. Never turn the sandbox off or hand an agent a
 credential to get around it — ask the operator instead
 ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
+
+**An agent runner** — a program that runs several agents at once — puts each
+agent's commands in a container with network but no credential, or nowhere;
+never on the Mac itself. The agent clones the public repository inside its
+container, no Mac folder is lent to it, no connector writes to GitHub or
+reaches infrastructure, and its work leaves as a patch file. A session
+outside the runner treats the patch as untrusted input: it follows the ADR's
+steps (list the paths, the operator's go-ahead before applying one that
+touches a guardrail, a fresh worktree, nothing run until it is read), then
+takes it through §6. The agent's instructions in the runner only point it to
+this file. Any runner that passes the ADR's checks may be used
+([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)).

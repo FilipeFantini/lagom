@@ -40,9 +40,9 @@ dbt, Postgres, Dagster.
 | 8 GB node | **decided 2026-10-27** for M3 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)); obtained 2026-10-28 as a new node in another location, `lagom-shared-02`, and the platform moved to it the same day |
 | Big-data stack (Apache Iceberg, Spark or Trino, Airflow) | later, as the comparison that shows where the SME stack stops; infrastructure sized for it and its own ADR ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed) |
 | In-cluster policy engine (Kyverno, Gatekeeper) | a second writer to the cluster besides Argo CD — [ADR-0013](adr/0013-agent-driven-development-guardrails.md) |
-| Automated staging digest bump (bot commit after a build) | manual staging bumps become routine; its pull requests pass the required checks and a reviewer like any agent's ([ADR-0030](adr/0029-agents-on-more-than-one-harness.md)) — [ADR-0015](adr/0015-images-on-ghcr.md) |
+| Automated staging digest bump (bot commit after a build) | manual staging bumps become routine; its pull requests pass the required checks and a reviewer like any agent's ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md)) — [ADR-0015](adr/0015-images-on-ghcr.md) |
 | Run jobs without an own image (official `uv` image, clone at run time) | GitHub announces billing for Container registry storage or bandwidth — [ADR-0015](adr/0015-images-on-ghcr.md) |
-| A GitHub account of its own for agents | a second developer (M7), or an agent action that must be attributed apart from the operator — [ADR-0030](adr/0029-agents-on-more-than-one-harness.md) |
+| A GitHub account of its own for agents | a second developer (M7), or an agent action that must be attributed apart from the operator — [ADR-0029](adr/0029-agents-on-more-than-one-harness.md) |
 
 Re-introducing a practice excluded in
 [`engineering-protocol.md`](engineering-protocol.md) §17 requires an ADR.
@@ -384,14 +384,19 @@ by its own trigger, like any other piece.
       reviewer returned APPROVE; a guardrail change also needs the operator's
       explicit go-ahead. Decided 2026-11-05, replacing the class-by-class
       promotion of ADR-0013 rule 3
-      ([ADR-0030](adr/0029-agents-on-more-than-one-harness.md))
+      ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md))
 - [x] **Agents beyond Claude Code** — [`AGENTS.md`](../AGENTS.md) as the one
       rulebook; an agent on another harness runs in that harness's sandbox
       with network access off
-      ([ADR-0030](adr/0029-agents-on-more-than-one-harness.md)). An
+      ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md)). An
       orchestration layer (Paseo, in a sealed container) was built and removed
       the same day; the ADR keeps its design for when several agents at once,
       or work from the phone, become a need
+- [x] **Agents through an agent runner** — several agents at once, each
+      in a container with network but no credential, on its own clone, with
+      work handed over as a patch. Any runner that passes the ADR's checks;
+      Tucano first. Decided 2026-11-07
+      ([ADR-0032](adr/0032-agents-in-credential-free-containers.md))
 
 ## Repository layout
 

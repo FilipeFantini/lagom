@@ -38,7 +38,11 @@ An agent on any other harness runs inside its harness's own sandbox with
 network access off — for Codex, `workspace-write` — so its commands can edit
 the checkout but cannot commit, reach the cluster, GitHub, or the tailnet; a
 session outside the sandbox commits and pushes its changes
-([`AGENTS.md`](AGENTS.md) §10).
+([`AGENTS.md`](AGENTS.md) §10). An agent started by an agent runner works in a
+container that has network but no credential, on its own clone, and hands its
+work over as a patch file; that session treats the patch as untrusted input,
+applies it in a fresh worktree, and opens the pull request
+([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)).
 
 **Agents.** The main Claude session acts as architect. It can hand a scoped
 task to the `implementer` agent
