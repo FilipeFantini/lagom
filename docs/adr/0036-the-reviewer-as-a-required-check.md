@@ -8,7 +8,7 @@
   with a clear explanation of what it changes and touches. The mechanism is
   the architect's proposal, accepted with this ADR.
 - **Amends:** [ADR-0029](0029-agents-on-more-than-one-harness.md)
-  Decision 4 and [ADR-0035](0035-agents-push-as-their-own-github-identity.md)
+  Decision 4 and [ADR-0035](0035-agents-use-the-operators-scoped-token.md)
   Decision 5 — the reviewer's APPROVE stops being an instruction.
 
 ## Context and problem
@@ -17,7 +17,7 @@ Since [ADR-0029](0029-agents-on-more-than-one-harness.md) any agent may
 merge once the required checks are green and a reviewer returned APPROVE. The
 APPROVE is an instruction: GitHub does not see it, so an agent that skips the
 review can still merge. Under
-[ADR-0035](0035-agents-push-as-their-own-github-identity.md) agents merge
+[ADR-0035](0035-agents-use-the-operators-scoped-token.md) agents merge
 their own unguarded pull requests, and the operator — who does not read
 code — approves guarded ones on a plain-language section. Both rest on a
 review that nothing enforces, and on a section that nothing checks.

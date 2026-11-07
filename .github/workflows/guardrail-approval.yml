@@ -1,0 +1,89 @@
+# The operator's approval for a guarded change
+# (docs/adr/0035-agents-use-the-operators-scoped-token.md).
+#
+# A pull request that touches a path in .github/CODEOWNERS waits here until
+# the operator approves the `guardrail` environment in GitHub. Approving
+# needs the Deployments permission, which no agent's token holds, so an
+# agent cannot approve for the operator even though it acts as them. The
+# `guardrail approval` job is a required check on main.
+#
+# pull_request_target, not pull_request: the workflow and the list of guarded
+# paths come from main, so a pull request cannot remove its own gate. Nothing
+# from the pull request is checked out or run; only its file names are read.
+name: guardrail approval
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guardrail-approval-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    name: guarded paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      guarded: ${{ steps.match.outputs.guarded }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Every path the pull request touches, both names of a rename: moving a
+      # guarded file out of its folder is a guarded change too.
+      - name: List the changed paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' > changed.txt
+          wc -l < changed.txt
+
+      - id: match
+        name: Match them against CODEOWNERS
+        run: python3 tools/guarded_paths.py < changed.txt >> "$GITHUB_OUTPUT"
+
+  approve:
+    name: operator approval
+    needs: classify
+    if: needs.classify.outputs.guarded == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Required reviewer: the operator. Admin bypass is off.
+    environment: guardrail
+    steps:
+      - run: echo "Approved by the operator."
+
+  # The required check. It reports only after the approval, and fails unless
+  # the classification ran: a skipped job would otherwise count as passed.
+  gate:
+    name: guardrail approval
+    needs: [classify, approve]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Pass only if classified, and approved when guarded
+        env:
+          CLASSIFY: ${{ needs.classify.result }}
+          GUARDED: ${{ needs.classify.outputs.guarded }}
+          APPROVE: ${{ needs.approve.result }}
+        run: |
+          echo "classify=$CLASSIFY guarded=${GUARDED:-unknown} approve=$APPROVE"
+          [ "$CLASSIFY" = "success" ] || exit 1
+          case "$GUARDED" in
+            false) exit 0 ;;
+            true) [ "$APPROVE" = "success" ] ;;
+            *) exit 1 ;;
+          esac

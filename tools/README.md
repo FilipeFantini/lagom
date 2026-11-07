@@ -13,6 +13,7 @@ action without an explicit flag.
 | [`resource_budget.py`](resource_budget.py) | Renders every Argo CD Application and fails on missing resources or a total over the ceiling — [architecture.md §11](../docs/architecture.md#11-resource-budget) | `uv run --project tools python tools/resource_budget.py` |
 | [`promotion_check.py`](promotion_check.py) | Fails if prod pins an image without a digest, or a digest staging had not pinned on `main` first — [ADR-0015](../docs/adr/0015-images-on-ghcr.md) | `uv run --project tools python tools/promotion_check.py --base origin/main` |
 | [`manifest_policy.py`](manifest_policy.py) | Fails an Application that leaves `prune` implicit, a chart not pinned to an exact version, a Git source outside this repository, or a rendered image without a tag or digest — [engineering-protocol §18](../docs/engineering-protocol.md#18-agent-driven-development) | `uv run --project tools python tools/manifest_policy.py` |
+| [`guarded_paths.py`](guarded_paths.py) | Reads changed paths on stdin and prints `guarded=true` if one matches `.github/CODEOWNERS`; fails on CODEOWNERS syntax it cannot read. Used by the `guardrail approval` workflow — [ADR-0035](../docs/adr/0035-agents-use-the-operators-scoped-token.md) | `git diff --name-only origin/main... \| python3 tools/guarded_paths.py` |
 
 `tools/` is a small `uv` project: `pyproject.toml` declares dependencies and the
 ruff, mypy, and pytest settings, and `uv.lock` pins them. CI runs

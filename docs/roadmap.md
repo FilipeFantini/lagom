@@ -42,9 +42,9 @@ dbt, Postgres, Dagster.
 | In-cluster policy engine (Kyverno, Gatekeeper) | a second writer to the cluster besides Argo CD — [ADR-0013](adr/0013-agent-driven-development-guardrails.md) |
 | Automated staging digest bump (bot commit after a build) | manual staging bumps become routine; its pull requests pass the required checks and a reviewer like any agent's ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md)) — [ADR-0015](adr/0015-images-on-ghcr.md) |
 | Run jobs without an own image (official `uv` image, clone at run time) | GitHub announces billing for Container registry storage or bandwidth — [ADR-0015](adr/0015-images-on-ghcr.md) |
-| A GitHub account of its own for agents | **decided 2026-11-07**: agents in the runner work autonomously ([ADR-0035](adr/0035-agents-push-as-their-own-github-identity.md)) |
-| Staging folders without a code owner (autonomous staging deploys) | an Argo CD AppProject confines staging's Applications to their namespace and no cluster-scoped kind — [ADR-0035](adr/0035-agents-push-as-their-own-github-identity.md) |
-| A GitHub App instead of the agents' classic token | the agents' account gains access to a second repository — [ADR-0035](adr/0035-agents-push-as-their-own-github-identity.md) |
+| A GitHub account of its own for agents | a second developer (M7), or an agent action that must be attributed apart from the operator; one created on 2026-11-07 was suspended by GitHub, and [ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md) works without it — [ADR-0029](adr/0029-agents-on-more-than-one-harness.md) |
+| Staging folders out of the guarded list (autonomous staging deploys) | an Argo CD AppProject confines staging's Applications to their namespace and no cluster-scoped kind — [ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md) |
+| A GitHub App instead of the operator's token in the runner | the runner's connector accepts a GitHub App, or agents need an identity apart from the operator's — [ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md) |
 
 Re-introducing a practice excluded in
 [`engineering-protocol.md`](engineering-protocol.md) §17 requires an ADR.
@@ -402,12 +402,13 @@ by its own trigger, like any other piece.
       work handed over as a patch. Any runner that passes the ADR's checks;
       Tucano first. Decided 2026-11-07
       ([ADR-0032](adr/0032-agents-in-credential-free-containers.md))
-- [ ] **Agents push as their own GitHub identity** — a machine account with
-      Write on `lagom` and a `public_repo` token; `CODEOWNERS` and a
-      `code owners` ruleset require the operator's approval for what reaches
-      the cluster, CI, or the rules. Decided 2026-11-07; done when the
-      setup test in [CONTRIBUTING](../CONTRIBUTING.md#branch-protection)
-      passes ([ADR-0035](adr/0035-agents-push-as-their-own-github-identity.md))
+- [ ] **Agents merge their own work** — a runner holds the operator's
+      fine-grained token for `lagom` alone, without Administration,
+      Deployments or Workflows; a guarded change waits for the operator's
+      approval of the `guardrail` environment, which that token cannot give.
+      Decided 2026-11-07; done when the setup test in
+      [CONTRIBUTING](../CONTRIBUTING.md#branch-protection) passes
+      ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md))
 - [ ] **The reviewer as a required check** — `agent review` runs the
       reviewer role in CI from `main` on every pull request, fails unless it
       approves, and requires a For the operator section on guarded changes.
