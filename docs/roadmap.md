@@ -10,7 +10,7 @@ work with the minimum, then thicken each piece.
 as its catalog, data on R2 — and, later, a big-data stack for comparison.
 **The platform is a portfolio of data architectures** ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)): each
 *showcase* is one architecture end to end on the shared backbone, published as
-static pages and dashboards on getlagom.app. A component enters because a
+static pages and dashboards on ofantini.com. A component enters because a
 showcase needs it.
 
 **Principle 7 — defer with a trigger.** The full design in
@@ -28,11 +28,11 @@ dbt, Postgres, Dagster.
 | DuckDB and DuckLake (the SME stack) | the spike in M3; the warehouse moves from Postgres when it passes ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; until then [ADR-0008](adr/0008-postgres-for-all-layers.md)) |
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
-| Evidence | M4 — the dashboard gallery on getlagom.app ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
-| Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `getlagom.app` hostnames ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
+| Evidence | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
+| Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `ops.ofantini.com/<tool>` ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
 | NATS | second consumer of the same stream, or a replay requirement |
 | Streamlit | an interactive app a static page cannot serve |
-| Infrastructure observability (metrics and logs), shown on getlagom.app | the USGS showcase is live on getlagom.app (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
+| Infrastructure observability (metrics and logs), shown on ofantini.com | the USGS showcase is live on ofantini.com (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
 | PgBouncer (CloudNativePG `Pooler`) | first external BI consumer |
 | Row Level Security | second consumer with segregated data |
 | PostgREST | first API requirement |
@@ -57,7 +57,8 @@ Re-introducing a practice excluded in
       [runbook](architecture.md#provision-the-node-m0)
 - [x] Point the domain at Cloudflare — `getlagom.app`, registered with
       Cloudflare Registrar, so registrar and DNS are the same account and there
-      was nothing to repoint
+      was nothing to repoint. Replaced on 2026-11-07 by `ofantini.com`, also
+      registered at Cloudflare ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md))
 - [x] Create the GitHub repository — private at first. It is meant to become
       public as a portfolio, where readable infrastructure is worth more than a
       CV bullet; going public is a deliberate step taken by the operator, since
@@ -249,8 +250,8 @@ The node that M3 needs, and the orchestration every showcase uses.
       location first (image `lagom-orchestration`), then each environment's
       instance, staging before prod. Staging since 2026-10-28, prod since
       2026-11-05 ([runbook](architecture.md#dagster-m3))
-- [ ] Dagster's UI at `dagster-staging.getlagom.app` and
-      `dagster.getlagom.app` behind a Cloudflare Access login, instead of
+- [ ] Dagster's UI at `ops.ofantini.com/dagster` and
+      `ops.ofantini.com/dagster-staging` behind a Cloudflare Access login, instead of
       `kubectl port-forward`
       ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md);
       [runbook](architecture.md#operator-uis-behind-cloudflare-access-m3))
@@ -269,12 +270,12 @@ The node that M3 needs, and the orchestration every showcase uses.
 End of M3 = the backbone on its final node, orchestrated. **Natural checkpoint
 to stop and reassess before adding anything.**
 
-## M4 — getlagom.app
+## M4 — ofantini.com
 
 The platform's public face: a static site and a gallery of dashboards, with
 the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Public data, no login.
 
-- [ ] Astro site on Cloudflare Pages at getlagom.app — design inspired by
+- [ ] Astro site on Cloudflare Pages at ofantini.com — design inspired by
       PostHog's; each page states the problem, then the solution
 - [ ] Evidence dashboards built in the cluster by a Dagster step after each
       run and published to Cloudflare Pages, shown as a gallery of cards on the

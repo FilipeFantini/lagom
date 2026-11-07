@@ -63,7 +63,7 @@ through it.
 | Hetzner CAX21 (4 ARM vCPU, 8 GB), `lagom-shared-02` in `fsn1` | control plane and main node; hosts the prod and staging namespaces since 2026-10-28 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)) |
 | Hetzner CAX11 (2 ARM vCPU, 4 GB), `lagom-shared-01` in `nbg1` | the previous node, retired by the checklist in the runbook (*Disaster recovery*) |
 | Raspberry Pi 3B (1 GB) | edge agent node, streaming collector |
-| `getlagom.app` domain, registered and served by Cloudflare | public entry via Cloudflare (M4) |
+| `ofantini.com` domain, registered and served by Cloudflare | public entry: the site at the apex (M4), the operator's tools at `ops.ofantini.com`. It replaced `getlagom.app` on 2026-11-07 ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)) |
 
 Cost: the CAX11 was EUR 7.37/month, as shown in the Hetzner Console on
 2026-10-12 ([ADR-0002](adr/0002-single-node-k3s-hetzner.md)); the CAX21 is
@@ -240,7 +240,7 @@ is missing ([ADR-0018](adr/0018-pipeline-heartbeat.md); runbook: *Pipeline
 heartbeat*).
 
 **The UI has no login**, so reaching it is the access control. Each
-environment's UI is at a `getlagom.app` hostname behind a Cloudflare Access
+environment's UI is at a path of `ops.ofantini.com` behind a Cloudflare Access
 login, served through an outbound-only tunnel
 ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md); runbook:
 *Operator UIs behind Cloudflare Access*).
@@ -297,7 +297,7 @@ The public face is static: nothing on the node serves it
 
 | Tool | Role | RAM on the node | Enters when |
 |---|---|---|---|
-| **Astro** | the site at getlagom.app: pages, copy, the gallery of showcases | 0 (static, Cloudflare Pages) | M4 |
+| **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases | 0 (static, Cloudflare Pages) | M4 |
 | **Evidence** | the dashboards: SQL + Markdown, charts built on Apache ECharts, built by a Dagster step in the cluster after each run | 0 resident (an ephemeral build job) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
@@ -398,7 +398,7 @@ one of the three.
 
 | Channel | Who | What it grants |
 |---|---|---|
-| **Public site** (getlagom.app) | anyone | static pages and dashboards of public data; no path to the cluster |
+| **Public site** (ofantini.com) | anyone | static pages and dashboards of public data; no path to the cluster |
 | **Tailscale** | operators and admin | raw Postgres and the whole cluster |
 | **Cloudflare Access** | operators (web UIs such as Dagster's); later partners, cloud BI | a tool or report in the browser behind a login, no install |
 | **Signed file URL** | partners, external pipelines | bytes with an expiry, access to nothing |
@@ -437,9 +437,12 @@ and sees the tool — no install, with WAF and rate limiting included. The same
 path will serve partners' reports, each with its own Access application and
 policy.
 
-What the tunnel serves is the list of rules in
+The operator's tools share one hostname, `ops.ofantini.com`, one path per
+tool (`/dagster`, `/dagster-staging`), so a new tool needs no DNS or Access
+change; each tool serves itself under its path. What the tunnel serves is the
+list of rules in
 [`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml); any
-other hostname gets a 404. `cloudflared` also checks the token Access signs
+other hostname or path gets a 404. `cloudflared` also checks the token Access signs
 after login, so a request that did not pass the login is refused even if the
 Access application is misconfigured.
 
@@ -1372,104 +1375,157 @@ not.
 
 ### Operator UIs behind Cloudflare Access (M3)
 
-Dagster's UI for each environment has an HTTPS address under `getlagom.app`,
-behind a login ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)):
+The operator's tools share one HTTPS address, one path per tool, behind a
+login ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)):
 
-- `https://dagster-staging.getlagom.app` for staging;
-- `https://dagster.getlagom.app` for prod.
+- `https://ops.ofantini.com/dagster` is prod's Dagster;
+- `https://ops.ofantini.com/dagster-staging` is staging's.
 
 **What each piece is:**
 
 | Piece | What it is |
 |---|---|
-| Tunnel, `cloudflared` | A Pod that dials out to Cloudflare and keeps the connections open. Requests for our hostnames come back down them. Nothing on the node listens for the internet, so no port opens: like a phone line we call out on, which then carries incoming calls |
-| Access application | Cloudflare's doorman for a set of hostnames. It shows a login page and lets through only the e-mail addresses in its policy |
-| One-time PIN | The login: Access e-mails a code to the address, and the code opens a session (24 h) |
+| Tunnel, `cloudflared` | A Pod that dials out to Cloudflare and keeps the connections open; requests for `ops.ofantini.com` come back down them. Nothing on the node listens for the internet, so no port opens. Think of a phone line we call out on, which then carries incoming calls |
+| Ingress rule | One line in [`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml): a hostname plus a pattern on the path, mapped to a Service in the cluster. The first rule that matches wins; anything unmatched gets a 404 |
+| Path prefix | The part of the address that names the tool (`/dagster`). The tunnel passes it on unchanged, so each tool must serve its pages under it. Dagster's is `dagsterWebserver.pathPrefix` in its `values.yaml` |
+| Access application | Cloudflare's doorman for `ops.ofantini.com`, every path included. It shows a login page and lets through only the e-mail addresses in its policy |
+| One-time PIN | The login: Access e-mails a code to the address, and the code opens a session of 24 hours |
 | JWT | A token Access signs and adds to every request after login. `cloudflared` checks it before forwarding, so a request that skipped the doorman is refused |
-| Proxied CNAME | The DNS record for each hostname. The world sees Cloudflare's addresses, never the node's |
+| Proxied CNAME | The DNS record for `ops.ofantini.com`. The world sees Cloudflare's addresses, never the node's |
 
-**Set it up**, once. The steps run in this order, so that no hostname ever
-answers before its login exists.
+**Set it up**, once, in this order, so that the hostname never answers
+before its login exists. Most of Cloudflare's labels below were checked against its
+documentation on 2026-11-07; the dashboard can rename them.
 
-**1. Zero Trust and the Access application**, in Cloudflare's dashboard:
+**1. Secure the Cloudflare account first.** Whoever holds the account holds
+the domain, the DNS, the login policy and the tunnel.
 
-1. *Zero Trust*: create the organisation on the Free plan. The **team name**
-   becomes `<team-name>.cloudflareaccess.com` and shows on the login page, so
-   pick a neutral one, not a personal name.
-2. *Settings → Authentication*: check that *One-time PIN* is a login method.
-   It is on by default.
-3. *Access → Applications → Add an application → Self-hosted*:
-   - name: `Lagom operator UIs`;
-   - public hostnames: `dagster-staging.getlagom.app` and `dagster.getlagom.app`;
-   - session duration: 24 hours;
-   - one policy, action *Allow*, rule *Include → Emails* with
-     `<operator-email>`. Nothing else: never *Everyone*.
-4. From the application's *Overview*, give the architect the *Application
-   Audience (AUD) Tag* and the team name. They replace `<access-aud-tag>`
-   and `<team-name>` in
-   [`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml).
-   Neither is a secret: both appear in the login page's URL.
+- *My Profile → Authentication → Two-Factor Authentication*: turn it on, with
+  a security key or an authenticator app, and store the backup codes in
+  1Password.
+- Keep two-factor on the e-mail account that receives the one-time PINs too:
+  that inbox is the login to every tool.
 
-**2. The tunnel and its token**, on the operator's Mac, from the repository's
+**2. Zero Trust organisation**, in the Cloudflare dashboard:
+
+1. Open **Zero Trust**. On the onboarding screen, choose the **team name**.
+   It becomes `<team-name>.cloudflareaccess.com` and shows on the login page,
+   so pick a neutral one, not a personal name.
+2. Choose the **Zero Trust Free** plan. It asks for payment details and does
+   not charge them.
+3. **Zero Trust → Integrations → Identity providers**: if **One-time PIN** is
+   not already under *Your identity providers*, select **Add new identity
+   provider → One-time PIN**.
+
+**3. The Access application:**
+
+1. **Zero Trust → Access controls → Applications → Create new application →
+   Self-hosted and private**.
+2. Name: `Robusta operator tools`.
+3. **Add public hostname**: subdomain `ops`, **Domain** `ofantini.com`, path
+   empty, so that every path is covered.
+4. **Access policies**: create a new one.
+   - Policy name: `Operator only`.
+   - Action: **Allow**.
+   - Include, selector **Emails**: `<operator-email>`.
+   - Never add *Everyone*, and never a *Bypass* policy.
+5. **Login methods**: only **One-time PIN**. Turn on **Apply instant
+   authentication**, which skips the choice of method.
+6. **Session Duration**: `24 hours`.
+7. **Additional settings → Cookie settings**: turn on **Binding Cookie**,
+   which ties the session cookie to the browser that logged in.
+8. **Create**.
+9. Give the architect two values:
+   - the **Application Audience (AUD) Tag**, from *Applications → Edit →
+     Additional settings*;
+   - the team name, from **Zero Trust → Settings**.
+
+   Neither is a secret: both appear in the login page's URL. They replace
+   `<access-aud-tag>` and `<team-name>` in `cloudflared/config.yaml`.
+
+**4. The zone's settings**, under *ofantini.com* in the dashboard:
+
+- **SSL/TLS → Overview**: encryption mode **Full (strict)**.
+- **SSL/TLS → Edge Certificates**:
+  - **Always Use HTTPS**: on.
+  - **Minimum TLS Version**: 1.2.
+- **DNS → Settings**: **DNSSEC** on. With Cloudflare as the registrar, this
+  is one click.
+- **Domain Registration → Manage**: **Registrar lock** stays on.
+- **DNS → Records**: every record for a tool is a proxied CNAME to the
+  tunnel (orange cloud). Never add a record with the node's public address.
+
+**5. The tunnel and its token**, on the operator's Mac, from the repository's
 root. The token goes straight from `cloudflared` into `kubeseal` and is never
 shown:
 
 ```bash
 brew install cloudflared
-cloudflared tunnel login                  # browser: authorise the zone getlagom.app; writes ~/.cloudflared/cert.pem
-cloudflared tunnel create lagom           # writes ~/.cloudflared/<tunnel-id>.json
-cloudflared tunnel route dns lagom dagster-staging.getlagom.app
-cloudflared tunnel route dns lagom dagster.getlagom.app
-cloudflared tunnel token lagom \
+cloudflared tunnel login                  # browser: authorise the zone ofantini.com; writes ~/.cloudflared/cert.pem
+cloudflared tunnel create robusta         # writes ~/.cloudflared/<tunnel-id>.json
+cloudflared tunnel route dns robusta ops.ofantini.com
+cloudflared tunnel token robusta \
   | kubectl create secret generic cloudflared-token -n cloudflared --from-file=token=/dev/stdin --dry-run=client -o yaml \
   | kubeseal --context <node-name> --format yaml > platform/infra/cloudflared/token-sealed.yaml
 grep -c 'token:' platform/infra/cloudflared/token-sealed.yaml   # 1: one sealed key
 rm ~/.cloudflared/cert.pem ~/.cloudflared/*.json
 ```
 
+**Why it works:**
+
+- `tunnel login` gives the Mac a certificate that can create tunnels and DNS
+  records in the zone. It is deleted at the end.
+- `tunnel create` registers the tunnel and its secret.
+- `route dns` writes the proxied CNAME that points `ops.ofantini.com` at the
+  tunnel.
+- `tunnel token` prints the ID and secret as one string. `cloudflared` in the
+  cluster reads it from a file (`--token-file`), while the routing rules stay
+  in `config.yaml`, in Git.
+
 Once `config.yaml` holds the team name and AUD tag, check that `cloudflared`
-reads it as intended. The rules sit inside a ConfigMap, so the first command
-extracts them to a file first:
+reads its rules as intended. The rules sit inside a ConfigMap, so the first
+command extracts them:
 
 ```bash
 sed -e '1,/config.yaml: |/d' -e 's/^    //' platform/infra/cloudflared/config.yaml > /tmp/cloudflared.yaml
-cloudflared tunnel --config /tmp/cloudflared.yaml ingress validate          # OK
-cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://dagster.getlagom.app   # the prod rule
-cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://other.getlagom.app     # the 404 rule
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress validate                                   # OK
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster/runs   # prod's rule
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster-staging  # staging's rule
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/               # the 404 rule
 rm /tmp/cloudflared.yaml
 ```
 
-**Why it works:**
-
-- `tunnel login` gives the Mac a certificate that may create tunnels and DNS
-  records in the zone. It is deleted at the end.
-- `tunnel create` registers the tunnel and its secret.
-- `route dns` writes a proxied CNAME that points the hostname at the tunnel.
-- `tunnel token` prints the ID and secret as one string, which `cloudflared`
-  in the cluster reads from a file (`--token-file`). The routing rules stay
-  in `config.yaml`, in Git.
-
-**3. Merge** the pull request holding `token-sealed.yaml` and the filled-in
-`config.yaml`. Argo CD creates the namespace, the Secret and the Pod.
+**6. Merge** the pull request holding `token-sealed.yaml`, the filled-in
+`config.yaml` and the Dagster path prefixes. Argo CD creates the namespace,
+the Secret and the Pod, and rolls each Dagster webserver.
 
 **Verify:**
 
 ```bash
 kubectl --context <node-name> -n cloudflared get pods                       # cloudflared 1/1 Running
 kubectl --context <node-name> -n cloudflared logs deploy/cloudflared | grep -c 'Registered tunnel connection'   # 4
-curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://dagster-staging.getlagom.app/server_info
+kubectl --context <node-name> -n prod get pods -l component=dagster-webserver      # 1/1 Running: the probe follows the prefix
+kubectl --context <node-name> -n staging get pods -l component=dagster-webserver   # same
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://ops.ofantini.com/dagster/server_info
 # 302 to https://<team-name>.cloudflareaccess.com/...: the login comes first
-curl -sS -o /dev/null -w '%{http_code}\n' https://nothing-here.getlagom.app/  # not 200: no DNS record, or the tunnel's 404
 ```
 
-Then, in a private browser window, open each address: the Access login page,
-the code by e-mail, then Dagster. A second private window with another
-address (not in the policy) must get no code and no access.
+Then, in a private browser window, open both addresses. Each must show the
+Access login page, then take the code by e-mail, then show Dagster. Then, on
+each:
+
+- **Click through:** *Runs*, one run, *Assets*, *Jobs*. Every page and link
+  stays under its prefix. A broken prefix shows as a 404 or as a jump to
+  `ops.ofantini.com/` without it.
+- **Watch it update:** the run list updates by itself while a run is in
+  progress, which means the WebSocket goes through the tunnel.
+
+A second private window with an address outside the policy must get no code.
 
 **Not verified end to end: the tunnel's own JWT check.** Seeing it refuse a
 request would mean turning Access off. What is checked instead: the rules
 parse, and the `access` block applies to every rule (`ingress validate` and
-`ingress rule` in step 2).
+`ingress rule` in step 5).
 
 **Memory.** After a week:
 
@@ -1477,30 +1533,41 @@ parse, and the `access` block applies to every rule (`ingress validate` and
 kubectl --context <node-name> -n cloudflared top pod --containers
 ```
 
-Set the request in `deployment.yaml` from the figure, as for every
-component (§11).
+Set the request in `deployment.yaml` from the figure, as for every component
+(§11).
 
 **Add a tool** (Airflow, for instance):
 
-1. Add a rule in `config.yaml`, before the final 404, and bump
-   `lagom.dev/config-revision` in `deployment.yaml`.
-2. Add the hostname to the Access application.
-3. `cloudflared tunnel route dns lagom <tool>.getlagom.app`, which needs
-   `tunnel login` again.
-4. If the tool runs in `prod`, add a NetworkPolicy like
+1. Configure the tool to serve under its path (Airflow: `base_url`
+   `https://ops.ofantini.com/airflow`). Point any HTTP probe it has at the
+   prefixed path.
+2. Add a rule in `config.yaml`, before the final 404:
+   - `hostname: ops.ofantini.com`;
+   - `path: ^/airflow(/.*)?$`;
+   - the tool's Service.
+
+   Then bump `lagom.dev/config-revision` in `deployment.yaml`.
+3. If the tool runs in `prod`, add a NetworkPolicy like
    `allow-cloudflared-to-dagster-webserver`.
+
+The hostname, DNS and Access need nothing new.
 
 **If an address fails:**
 
 - **Cloudflare error 1033:** the tunnel has no connection. Check the Pod and
   its logs.
-- **502:** the tunnel works, but the Service behind it does not answer. Check
-  the Dagster webserver Pod.
+- **404 from the tunnel:** no rule matches the path. Check the path against
+  `config.yaml`.
+- **502:** the rule matched, but the Service behind it does not answer. Check
+  the tool's Pod.
+- **A page that loads without its styles, or links that drop the prefix:**
+  the tool's path prefix is not set, or not set to the same path as the rule.
 - **403 from `cloudflared` after login:** the token's audience does not match
   `audTag`. Re-check the AUD tag.
-- **In the meantime,** `kubectl --context <node-name> -n <namespace>
-  port-forward svc/dagster-dagster-webserver 3000:80` still opens the UI at
-  `http://localhost:3000`.
+- **In the meantime,** the port-forward still works. Run `kubectl --context
+  <node-name> -n <namespace> port-forward svc/dagster-dagster-webserver
+  3000:80`, then browse `http://localhost:3000/dagster` (prod) or
+  `http://localhost:3000/dagster-staging` (staging).
 
 ### Backup and restore (M3)
 
@@ -1674,13 +1741,13 @@ kubectl --context <node-name> -n argocd get application dagster-staging   # Sync
 kubectl --context <node-name> -n staging get pods | grep dagster           # three Running, plus finished runs
 ```
 
-**Open the UI.** Staging's is `https://dagster-staging.getlagom.app` and
-prod's `https://dagster.getlagom.app`, behind the Access login
+**Open the UI.** Prod's is `https://ops.ofantini.com/dagster` and
+staging's `https://ops.ofantini.com/dagster-staging`, behind the Access login
 ([Operator UIs behind Cloudflare Access](#operator-uis-behind-cloudflare-access-m3)).
 When those are down, `kubectl port-forward` reaches it, with the kubeconfig.
 The UI has no login of its own: whoever reaches the port controls Dagster.
-Leave the command running, then browse http://localhost:3000; stop it with
-Ctrl+C:
+Leave the command running, then browse http://localhost:3000/dagster-staging
+(the webserver serves under its path prefix); stop it with Ctrl+C:
 
 ```bash
 kubectl --context <node-name> -n staging port-forward svc/dagster-dagster-webserver 3000:80

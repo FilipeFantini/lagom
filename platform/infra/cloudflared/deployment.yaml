@@ -16,7 +16,7 @@ spec:
       annotations:
         # Bump with every change to config.yaml: cloudflared reads it at start
         # only, and a new value here rolls the Pod.
-        lagom.dev/config-revision: "1"
+        lagom.dev/config-revision: "2"
     spec:
       automountServiceAccountToken: false
       securityContext:

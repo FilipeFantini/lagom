@@ -29,10 +29,16 @@ data:
         teamName: <team-name>
         audTag:
           - <access-aud-tag>
+    # One hostname, one path per tool. `path` is a regular expression on the
+    # request's path; the path is passed on unchanged, so each tool serves
+    # itself under its prefix (Dagster's pathPrefix in its values.yaml).
+    # Rules are tried in order and the first match wins.
     ingress:
-      - hostname: dagster-staging.getlagom.app
+      - hostname: ops.ofantini.com
+        path: ^/dagster-staging(/.*)?$
         service: http://dagster-dagster-webserver.staging.svc.cluster.local:80
-      - hostname: dagster.getlagom.app
+      - hostname: ops.ofantini.com
+        path: ^/dagster(/.*)?$
         service: http://dagster-dagster-webserver.prod.svc.cluster.local:80
-      # Anything else: refused by the tunnel.
+      # Anything else, ops.ofantini.com/ included: refused by the tunnel.
       - service: http_status:404

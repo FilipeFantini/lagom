@@ -1,6 +1,6 @@
 # cloudflared: the outbound-only tunnel that serves the operator's web UIs at
-# getlagom.app hostnames behind a Cloudflare Access login (ADR-0030). Which
-# hostname reaches which Service is config.yaml in this directory, reviewed
+# ops.ofantini.com behind a Cloudflare Access login (ADR-0030). Which path
+# reaches which Service is config.yaml in this directory, reviewed
 # like any change; the login policy lives in Cloudflare's dashboard (runbook).
 apiVersion: argoproj.io/v1alpha1
 kind: Application

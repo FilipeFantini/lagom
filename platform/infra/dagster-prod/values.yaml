@@ -37,6 +37,16 @@ telemetry:
   enabled: false
 
 dagsterWebserver:
+  # Served at https://ops.ofantini.com/dagster, behind Cloudflare Access
+  # (ADR-0030). The webserver mounts every route under this prefix, the UI's
+  # links and WebSocket included, and answers only a redirect at "/".
+  pathPrefix: /dagster
+  # The chart's probe asks for /server_info at the root, which the prefix
+  # leaves unanswered: the Pod would never be ready. Helm merges this path
+  # into the chart's probe, keeping its timings.
+  readinessProbe:
+    httpGet:
+      path: /dagster/server_info
   # Measured 127-141 MiB.
   resources:
     requests: {cpu: 25m, memory: 160Mi}

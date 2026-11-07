@@ -27,7 +27,7 @@ flowchart TB
         ing["Ingest<br/>dlt"] --> store[("Store<br/>bronze · silver · gold")] --> dbt["Transform<br/>dbt"]
     end
 
-    site(["getlagom.app<br/>dashboards, refreshed each run"])
+    site(["ofantini.com<br/>dashboards, refreshed each run"])
 
     src --> node
     node --> site
@@ -59,7 +59,7 @@ with this repository, so changes arrive through Git, not by hand.
 | Storage | Postgres today; DuckLake on Cloudflare R2, with Postgres as its catalog, being tested ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
 | Transformation | dbt, on Postgres or DuckDB |
 | Orchestration | Dagster |
-| Dashboards | Evidence, rebuilt after each run and published on getlagom.app ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
+| Dashboards | Evidence, rebuilt after each run and published on ofantini.com ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
 | Platform | k3s on a single ARM node, Argo CD, Sealed Secrets, CloudNativePG, Tailscale, Cloudflare Tunnel + Access |
 
 Each choice is written down with the alternatives it beat and the trade-offs it

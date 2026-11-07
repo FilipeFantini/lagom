@@ -56,8 +56,8 @@ which pieces are deliberately not here yet.
 - **Minimal public exposure.** The repository is public. Keep anything that
   identifies the operator or addresses the infrastructure out of it — e-mail,
   user names, keys, tailnet names, IP addresses — and use the runbook's
-  placeholders (`<admin-user>`, `<tailnet>`). The GitHub account name and the
-  LICENSE holder are the accepted exceptions. Commit with the GitHub noreply
+  placeholders (`<admin-user>`, `<tailnet>`). The GitHub account name, the
+  LICENSE holder and the domain `ofantini.com` are the accepted exceptions. Commit with the GitHub noreply
   address, never a personal one.
 - **Never weaken a check to get a green result.** Do not delete an assertion,
   skip a test, lower a lint rule, or suppress an alert without investigating the
