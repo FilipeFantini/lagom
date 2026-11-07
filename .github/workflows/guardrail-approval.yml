@@ -58,6 +58,7 @@ jobs:
         run: |
           gh api --paginate "repos/$REPO/pulls/$PR/files" \
             --jq '.[] | [.filename, (.previous_filename // "")] | @tsv' > files.tsv
+          [ -n "$EXPECTED" ] || { echo "::error::The event carries no changed_files count."; exit 1; }
           listed="$(wc -l < files.tsv | tr -d ' ')"
           echo "listed $listed of $EXPECTED changed files"
           if [ "$listed" -lt "$EXPECTED" ]; then
