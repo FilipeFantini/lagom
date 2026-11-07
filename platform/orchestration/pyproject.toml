@@ -1,5 +1,5 @@
 [project]
-name = "lagom-orchestration"
+name = "robusta-orchestration"
 version = "0.1.0"
 description = "Dagster code location: every service's assets and the dbt project (ADR-0026)"
 requires-python = ">=3.13,<3.14"

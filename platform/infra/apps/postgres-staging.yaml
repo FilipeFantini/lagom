@@ -9,7 +9,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/FilipeFantini/lagom-data-solutions.git
+    repoURL: https://github.com/FilipeFantini/robusta.git
     targetRevision: main
     path: platform/infra/postgres-staging
   destination:

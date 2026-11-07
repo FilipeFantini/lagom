@@ -1,5 +1,5 @@
 [project]
-name = "lagom-usgs"
+name = "robusta-usgs"
 version = "0.1.0"
 description = "USGS earthquake ingestion into bronze with dlt"
 requires-python = ">=3.13,<3.14"

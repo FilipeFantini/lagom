@@ -248,7 +248,7 @@ def test_declared_ephemeral_reads_the_annotation() -> None:
     app = {
         "metadata": {
             "name": "dagster-staging",
-            "annotations": {"lagom.dev/ephemeral-memory-request": "384Mi"},
+            "annotations": {"robusta.ofantini.com/ephemeral-memory-request": "384Mi"},
         }
     }
     workload = declared_ephemeral(app)

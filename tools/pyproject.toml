@@ -1,7 +1,7 @@
 [project]
-name = "lagom-tools"
+name = "robusta-tools"
 version = "0.1.0"
-description = "Development and operational scripts for the Lagom data platform"
+description = "Development and operational scripts for the Robusta data platform"
 requires-python = ">=3.12"
 dependencies = ["pyyaml>=6"]
 

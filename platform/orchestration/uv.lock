@@ -1028,55 +1028,6 @@ wheels = [
 ]
 
 [[package]]
-name = "lagom-orchestration"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "dagster" },
-    { name = "dagster-dbt" },
-    { name = "dagster-k8s" },
-    { name = "dagster-postgres" },
-    { name = "dbt-core" },
-    { name = "dbt-duckdb" },
-    { name = "dlt", extra = ["ducklake", "postgres", "s3"] },
-    { name = "duckdb" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pyyaml" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "requests-mock" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "dagster", specifier = "==1.13.27" },
-    { name = "dagster-dbt", specifier = "==0.29.27" },
-    { name = "dagster-k8s", specifier = "==0.29.27" },
-    { name = "dagster-postgres", specifier = "==0.29.27" },
-    { name = "dbt-core", specifier = "==1.12.6" },
-    { name = "dbt-duckdb", specifier = "==1.11.1" },
-    { name = "dlt", extras = ["ducklake", "s3", "postgres"], specifier = "==1.31.0" },
-    { name = "duckdb", specifier = ">=1.5.5,<2" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
-    { name = "pyyaml", specifier = ">=6" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.10" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "requests-mock", specifier = ">=1.12" },
-    { name = "ruff", specifier = ">=0.6" },
-    { name = "types-pyyaml", specifier = ">=6" },
-]
-
-[[package]]
 name = "leather"
 version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1862,6 +1813,55 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6a/e5/1064c43203a357d668cd42435f7a15fe6af51512d85b2104fecb937aa861/rich_argparse-1.8.0.tar.gz", hash = "sha256:679df3d832fa94ad6e4bdb07ded088cd7ea2dddc58ae9b2b46346a40b06cbc0c", size = 38940, upload-time = "2026-05-01T15:18:43.604Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/35/1cceccc5fcb50fa2ed53e2aa278cd032f3902682a73e763fb1ac3be8e6fa/rich_argparse-1.8.0-py3-none-any.whl", hash = "sha256:d2a3ce7854654e2253c578763ab0a32f05016f23a55fadba7b9a91b6c0e92142", size = 25616, upload-time = "2026-05-01T15:18:42.395Z" },
+]
+
+[[package]]
+name = "robusta-orchestration"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "dagster" },
+    { name = "dagster-dbt" },
+    { name = "dagster-k8s" },
+    { name = "dagster-postgres" },
+    { name = "dbt-core" },
+    { name = "dbt-duckdb" },
+    { name = "dlt", extra = ["ducklake", "postgres", "s3"] },
+    { name = "duckdb" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pyyaml" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "requests-mock" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dagster", specifier = "==1.13.27" },
+    { name = "dagster-dbt", specifier = "==0.29.27" },
+    { name = "dagster-k8s", specifier = "==0.29.27" },
+    { name = "dagster-postgres", specifier = "==0.29.27" },
+    { name = "dbt-core", specifier = "==1.12.6" },
+    { name = "dbt-duckdb", specifier = "==1.11.1" },
+    { name = "dlt", extras = ["ducklake", "s3", "postgres"], specifier = "==1.31.0" },
+    { name = "duckdb", specifier = ">=1.5.5,<2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pyyaml", specifier = ">=6" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "requests-mock", specifier = ">=1.12" },
+    { name = "ruff", specifier = ">=0.6" },
+    { name = "types-pyyaml", specifier = ">=6" },
 ]
 
 [[package]]

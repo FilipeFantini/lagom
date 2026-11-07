@@ -63,7 +63,7 @@ jobs:
           # can run it.
           load: true
           push: false
-          tags: lagom-${{ matrix.name }}:ci
+          tags: robusta-${{ matrix.name }}:ci
       # What this proves: the image starts, runs as the numeric UID, and
       # starts on a read-only root filesystem with only /tmp writable, the way
       # the cluster runs it. By default it runs the entrypoint's own `--help`,
@@ -72,7 +72,7 @@ jobs:
       # build: that needs a database.
       - name: Smoke test and size
         env:
-          IMAGE: lagom-${{ matrix.name }}:ci
+          IMAGE: robusta-${{ matrix.name }}:ci
           SMOKE: ${{ matrix.smoke }}
         run: |
           set -euo pipefail
@@ -132,10 +132,10 @@ jobs:
           platforms: linux/arm64
           push: true
           provenance: false
-          tags: ghcr.io/filipefantini/lagom-${{ matrix.name }}:${{ github.sha }}
+          tags: ghcr.io/filipefantini/robusta-${{ matrix.name }}:${{ github.sha }}
       - name: Print the pushed digest
         env:
-          IMAGE: ghcr.io/filipefantini/lagom-${{ matrix.name }}:${{ github.sha }}
+          IMAGE: ghcr.io/filipefantini/robusta-${{ matrix.name }}:${{ github.sha }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail

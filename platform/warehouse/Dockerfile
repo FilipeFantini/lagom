@@ -33,7 +33,7 @@ RUN uv sync --locked --no-dev
 FROM base AS runtime
 # A numeric UID so Kubernetes can verify runAsNonRoot. A passwd entry exists
 # because some libraries look the user up by name.
-RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin lagom
+RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin robusta
 COPY --from=build /opt/venv /opt/venv
 WORKDIR /app
 # The project: dbt's `tests/` (reconciliation and generic tests) are part of
@@ -51,7 +51,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     HOME=/tmp \
     DO_NOT_TRACK=1
-LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom-data-solutions"
+LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/robusta"
 USER 10001:10001
 # dbt writes compiled SQL, the manifest, and logs; they go under /tmp so the
 # job can run with a read-only root filesystem and an emptyDir at /tmp.

@@ -143,7 +143,7 @@ set. The tests set it; set it wherever the job runs.
 
 ## Image
 
-`Dockerfile` builds `ghcr.io/filipefantini/lagom-usgs`, whose entrypoint is
+`Dockerfile` builds `ghcr.io/filipefantini/robusta-usgs`, whose entrypoint is
 `python ingestion/pipeline.py`: arguments given to the container (`--since`,
 `--until`) are passed on. CI builds it and publishes it from `main`
 ([`images.yml`](../../.github/workflows/images.yml),

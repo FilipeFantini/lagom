@@ -15,7 +15,7 @@ from manifest_policy import (
 from resource_budget import REPO_URL, load_applications
 
 DIGEST = "sha256:" + "a" * 64
-OWN_IMAGE = f"{OWN_REGISTRY_PREFIX}lagom-usgs:abc123@{DIGEST}"
+OWN_IMAGE = f"{OWN_REGISTRY_PREFIX}robusta-usgs:abc123@{DIGEST}"
 
 
 def application(
@@ -165,7 +165,7 @@ def test_both_source_rules_report_together() -> None:
         f"registry.example.com/team/app@{DIGEST}",
         "localhost:5000/app:1.0",
         OWN_IMAGE,
-        f"{OWN_REGISTRY_PREFIX}lagom-usgs@{DIGEST}",
+        f"{OWN_REGISTRY_PREFIX}robusta-usgs@{DIGEST}",
     ],
 )
 def test_pinned_image_passes(image: str) -> None:
@@ -183,9 +183,9 @@ def test_pinned_image_passes(image: str) -> None:
         ("nginx:1.0@sha256:abc", "malformed digest"),
         ("nginx:1.0@md5:" + "a" * 32, "malformed digest"),
         ("nginx:1.0@sha256:" + "A" * 64, "malformed digest"),
-        (f"{OWN_REGISTRY_PREFIX}lagom-usgs:abc123", "no digest (ADR-0015)"),
-        (f"{OWN_REGISTRY_PREFIX}lagom-usgs", "no digest (ADR-0015)"),
-        ("GHCR.IO/FilipeFantini/lagom-usgs:abc123", "no digest (ADR-0015)"),
+        (f"{OWN_REGISTRY_PREFIX}robusta-usgs:abc123", "no digest (ADR-0015)"),
+        (f"{OWN_REGISTRY_PREFIX}robusta-usgs", "no digest (ADR-0015)"),
+        ("GHCR.IO/FilipeFantini/robusta-usgs:abc123", "no digest (ADR-0015)"),
         ("", "empty or not a string"),
         (None, "empty or not a string"),
     ],

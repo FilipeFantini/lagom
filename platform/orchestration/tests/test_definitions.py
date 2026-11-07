@@ -101,5 +101,5 @@ def test_budget_declares_the_runs_request() -> None:
     assert apps
     for app in apps:
         annotations = yaml.safe_load(app.read_text())["metadata"]["annotations"]
-        declared = annotations["lagom.dev/ephemeral-memory-request"]
+        declared = annotations["robusta.ofantini.com/ephemeral-memory-request"]
         assert declared == RUN_RESOURCES["requests"]["memory"], app.name

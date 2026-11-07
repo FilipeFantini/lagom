@@ -265,6 +265,9 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [ ] `dbt test` in CI
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
+- [ ] Images under their Robusta names: pin `robusta-*` in staging, then in
+      prod, then delete the `lagom-*` packages after a week
+      ([ADR-0031](adr/0031-rename-to-robusta.md), decision 5, steps 6–9)
 
 End of M3 = the backbone on its final node, orchestrated. **Natural checkpoint
 to stop and reassess before adding anything.**

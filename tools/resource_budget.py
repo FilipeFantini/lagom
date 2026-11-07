@@ -23,7 +23,7 @@ ObjectStore must be rendered by the same Application as the Cluster.
 
 Pods a controller creates at run time from no rendered spec, such as Dagster's
 runs, are declared on their Application with the annotation
-`lagom.dev/ephemeral-memory-request` and counted as one ephemeral job each.
+`robusta.ofantini.com/ephemeral-memory-request` and counted as one ephemeral job each.
 
 Exits 1 on any violation. Run from anywhere:
 
@@ -43,7 +43,7 @@ from typing import Any
 
 import yaml
 
-REPO_URL = "https://github.com/FilipeFantini/lagom-data-solutions.git"
+REPO_URL = "https://github.com/FilipeFantini/robusta.git"
 CEILING_PATTERN = re.compile(r"Ceiling enforced in CI: ([0-9.]+) GB of declared requests")
 
 # Requests counted per Pod replica. A DaemonSet counts once: one node today.
@@ -52,7 +52,7 @@ EPHEMERAL_KINDS = {"Job", "CronJob"}
 CNPG_API_VERSION = "postgresql.cnpg.io/v1"
 OBJECT_STORE_API_VERSION = "barmancloud.cnpg.io/v1"
 BARMAN_PLUGIN = "barman-cloud.cloudnative-pg.io"
-EPHEMERAL_ANNOTATION = "lagom.dev/ephemeral-memory-request"
+EPHEMERAL_ANNOTATION = "robusta.ofantini.com/ephemeral-memory-request"
 
 _BINARY = {"Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40}
 _DECIMAL = {"k": 10**3, "M": 10**6, "G": 10**9, "T": 10**12}

@@ -12,7 +12,7 @@ metadata:
     # code location (RUN_RESOURCES in platform/orchestration/lagom_orchestration/
     # definitions.py), so they travel with the image; its tests fail if this
     # figure differs.
-    lagom.dev/ephemeral-memory-request: 768Mi
+    robusta.ofantini.com/ephemeral-memory-request: 768Mi
 spec:
   project: default
   sources:
@@ -23,7 +23,7 @@ spec:
         releaseName: dagster
         valueFiles:
           - $values/platform/infra/dagster-prod/values.yaml
-    - repoURL: https://github.com/FilipeFantini/lagom-data-solutions.git
+    - repoURL: https://github.com/FilipeFantini/robusta.git
       targetRevision: main
       ref: values
   destination:

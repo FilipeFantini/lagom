@@ -111,7 +111,7 @@ settings are listed in `profiles.yml` and in the code location's
 
 ## Image
 
-`Dockerfile` builds `ghcr.io/filipefantini/lagom-warehouse`, whose entrypoint is
+`Dockerfile` builds `ghcr.io/filipefantini/robusta-warehouse`, whose entrypoint is
 `dbt build` with the project and profiles directories set; extra arguments
 (`--select`) are appended. CI builds it and publishes it from `main`
 ([`images.yml`](../../.github/workflows/images.yml),

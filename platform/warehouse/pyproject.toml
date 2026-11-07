@@ -1,5 +1,5 @@
 [project]
-name = "lagom-warehouse"
+name = "robusta-warehouse"
 version = "0.1.0"
 description = "dbt project: silver and gold models on Postgres"
 requires-python = ">=3.13,<3.14"

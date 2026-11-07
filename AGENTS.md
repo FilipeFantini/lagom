@@ -1,4 +1,4 @@
-# AGENTS.md — Lagom Data Solutions
+# AGENTS.md — Robusta
 
 Operating rules for AI agents and humans working in this repository, whatever
 the agent runs on: Claude Code, Codex, or any harness that reads `AGENTS.md`.

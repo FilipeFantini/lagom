@@ -7,7 +7,7 @@
 #
 # `dev` is the developer's database in staging's Postgres (ADR-0014), reached
 # through `kubectl port-forward`; see README.md in this directory.
-lagom:
+robusta:
   target: dev
   outputs:
     dev:

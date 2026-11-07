@@ -1,7 +1,7 @@
 # platform/orchestration/
 
 The platform's Dagster code location ([ADR-0026](../../docs/adr/0026-dagster-one-instance-per-environment.md)).
-One image, `lagom-orchestration`, runs both the code server and every run Pod.
+One image, `robusta-orchestration`, runs both the code server and every run Pod.
 
 | Path | What it is |
 |---|---|

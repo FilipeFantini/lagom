@@ -1,6 +1,6 @@
-# Lagom Data Solutions
+# Robusta
 
-Open-source data stacks doing real analytics on one small server.
+A lab of open-source data tools, doing real analytics on one small server.
 
 Most data is not big data. Sales records, sensor readings, a public API: it
 usually fits on a single machine. Yet the default answer is a stack built for
@@ -12,9 +12,15 @@ far that gets.
 Small does not have to mean fragile. GitOps, tests, data reconciliation and a
 rehearsed disaster recovery come with it.
 
-> **Why "Lagom"?** It is a Swedish word for "not too little, not too much,
-> just enough". That is the idea here: as much infrastructure as the data
-> needs, and no more.
+This repository is where those tools are tried side by side, to see how each
+one works and what it costs to run. The point it keeps testing: not every data
+problem needs an expensive big-data solution.
+
+> **Why "Robusta"?** Robusta is the coffee that grows where more delicate
+> beans do not, and Brazil is one of its largest growers. Hardy and modest is
+> the idea here: as much infrastructure as the data needs, and no more. The
+> project was called Lagom until 2026-11-07
+> ([ADR-0031](docs/adr/0031-rename-to-robusta.md)).
 
 ## How it fits together
 

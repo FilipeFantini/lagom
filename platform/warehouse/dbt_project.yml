@@ -1,14 +1,14 @@
-name: lagom
+name: robusta
 version: "0.1.0"
 config-version: 2
 
-profile: lagom
+profile: robusta
 
 # Models, tests and macros are found by dbt's default paths.
 # Schemas are fixed by macros/generate_schema_name.sql: a model's `+schema`
 # is the schema name, with no target prefix.
 models:
-  lagom:
+  robusta:
     staging:
       +materialized: table
       +schema: silver
@@ -29,7 +29,7 @@ models:
       +post-hook: "{{ 'grant usage on schema ' ~ this.schema ~ ' to gold_reader' if target.type == 'postgres' else '' }}"
 
 data_tests:
-  lagom:
+  robusta:
     # Postgres only: DuckLake has no per-table grants (ADR-0023).
     gold_reader_privileges:
       +enabled: "{{ target.type == 'postgres' }}"

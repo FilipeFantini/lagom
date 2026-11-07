@@ -4,6 +4,13 @@ Source of truth for how this platform is built. Read before touching any
 component. Decisions with lasting consequence are recorded as ADRs in
 [`adr/`](adr/); this document describes the resulting system.
 
+The project is Robusta, called Lagom until 2026-11-07. Names held in state or
+shared between an image and its manifests — the node, the Tailscale tag, the
+R2 buckets, the databases and roles, the DuckLake catalog, Dagster's code
+location, the `LAGOM_*` variables, the module `lagom_orchestration` — keep
+`lagom` on purpose; [ADR-0031](adr/0031-rename-to-robusta.md) lists them and
+why.
+
 ---
 
 ## 1. Design principles
@@ -224,7 +231,7 @@ in the environment's namespace, with its metadata in a database `dagster` in
 that environment's Postgres, backed up with it. Runs are Kubernetes Jobs in
 the same namespace, so staging never reaches prod.
 
-**One code location for the platform**, the image `lagom-orchestration`
+**One code location for the platform**, the image `robusta-orchestration`
 ([`platform/orchestration/`](../platform/orchestration/README.md)). It holds
 each service's assets (`services/<service>/assets/`) and the dbt project,
 whose models dagster-dbt turns into assets downstream of the sources they
@@ -350,13 +357,19 @@ repository's own images need a digest); what it does not check is in
 **Images.** Three, built by [`images.yml`](../.github/workflows/images.yml) on a
 native arm64 runner:
 
-- `ghcr.io/filipefantini/lagom-usgs`: the dlt pipeline,
+- `ghcr.io/filipefantini/robusta-usgs`: the dlt pipeline,
   [`services/usgs/Dockerfile`](../services/usgs/Dockerfile).
-- `ghcr.io/filipefantini/lagom-warehouse`: `dbt build`,
+- `ghcr.io/filipefantini/robusta-warehouse`: `dbt build`,
   [`platform/warehouse/Dockerfile`](../platform/warehouse/Dockerfile).
-- `ghcr.io/filipefantini/lagom-orchestration`: the Dagster code location,
+- `ghcr.io/filipefantini/robusta-orchestration`: the Dagster code location,
   [`platform/orchestration/Dockerfile`](../platform/orchestration/Dockerfile).
   It is built from the repository root.
+
+Until 2026-11-07 they were published as `lagom-usgs`, `lagom-warehouse` and
+`lagom-orchestration`. Staging and prod keep pinning those digests until the
+renamed images are promoted like any new image, staging first
+([ADR-0031](adr/0031-rename-to-robusta.md), decision 5); the old packages stay
+in GHCR until then, as the rollback.
 
 A pull request builds and smoke-tests them without pushing. A push to `main`
 publishes them tagged with the commit SHA, and the digest is printed in the
@@ -367,16 +380,18 @@ run summary. Each image:
 - runs as UID 10001 on a read-only root filesystem;
 - writes only under `/tmp`, so mount an `emptyDir` there.
 
-Sizes, measured on the first builds: `lagom-usgs` 206 MiB and
-`lagom-warehouse` 397 MiB (archive PR #27, 2026-10-17, built in 40 and 52 s),
-and `lagom-orchestration` 961 MiB (PR #31, 2026-10-28). The orchestration image
+Sizes, measured on the first builds, under the former names: `lagom-usgs`
+206 MiB and `lagom-warehouse` 397 MiB (archive PR #27, 2026-10-17, built in
+40 and 52 s), and `lagom-orchestration` 961 MiB (PR #31, 2026-10-28). The
+renamed images come from the same Dockerfiles; their sizes are expected to
+match and are not yet measured. The orchestration image
 bundles Dagster, dbt, dlt, DuckDB and pyarrow.
 
 The first two packages are private: an anonymous manifest request to ghcr.io
 returns HTTP 403 (checked 2026-10-17; the same request against a public image
-succeeds). `lagom-orchestration` is checked the same way once it is
-published. Staging's and prod's CronJob `usgs-pipeline` runs them
-every 30 minutes, dbt starting only if the load exited 0: both are init
+succeeds). The orchestration image, and each `robusta-*` package after its
+first publish, is checked the same way. Staging's and prod's CronJob
+`usgs-pipeline` runs them every 30 minutes, dbt starting only if the load exited 0: both are init
 containers, and a `heartbeat` container pings Healthchecks.io only if both
 exited 0 ([ADR-0018](adr/0018-pipeline-heartbeat.md)). It pulls from GHCR with
 the sealed `ghcr-pull` Secret, which the operator adds to the same directory.
@@ -563,9 +578,8 @@ lacks a memory request, a memory limit, or a CPU request (for a CloudNativePG
 `spec.instances` stand in for the Pod spec, plus the Barman Cloud sidecar
 declared on the `ObjectStore` it names; Pods a controller creates at run
 time, such as Dagster's runs, are declared on their Application with the
-annotation `lagom.dev/ephemeral-memory-request` and counted as ephemeral
-jobs), or if the total
-exceeds the ceiling above, which it reads from this file. The total is resident
+annotation `robusta.ofantini.com/ephemeral-memory-request` and counted as
+ephemeral jobs), or if the total exceeds the ceiling above, which it reads from this file. The total is resident
 requests, plus **every ephemeral job at once**, plus an **allowance for
 components k3s installs outside Git**.
 
@@ -917,7 +931,7 @@ below, applied in the admin console (*Access controls*), replaces it:
 Then *Machines →* `<node-name>` *→ Edit ACL tags →* `tag:lagom-node`.
 
 **Why it works.** A tagged machine belongs to its tag, not to a person, so rules
-name roles — operators reach Lagom nodes — instead of people. Anything not
+name roles — operators reach the platform's nodes — instead of people. Anything not
 granted is denied, in both directions: operators get SSH, the API and
 Dagster's UI and nothing else (not even the kubelet), and the node can open no connection to anyone's
 device, so a compromised node cannot reach the operator's machine. `tests` are

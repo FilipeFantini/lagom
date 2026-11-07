@@ -22,7 +22,7 @@ COPY platform/orchestration/pyproject.toml platform/orchestration/uv.lock ./
 RUN uv sync --locked --no-dev
 
 FROM base AS runtime
-RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin lagom
+RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin robusta
 COPY --from=build /opt/venv /opt/venv
 # The repository layout, kept under /app: definitions.py finds the dbt project
 # and the services by their paths relative to it.
@@ -55,7 +55,7 @@ RUN LAGOM_LAKE_CATALOG=ducklake:parse.ducklake LAGOM_LAKE_DATA_PATH=parse/ \
     dbt parse --project-dir platform/warehouse --profiles-dir platform/warehouse \
       --target lake --log-path /tmp/dbt-logs --quiet \
     && rm -rf /tmp/dbt-logs
-LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom-data-solutions"
+LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/robusta"
 USER 10001:10001
 # No ENTRYPOINT: the Helm chart starts the code server, and the run launcher
 # each run, with a full command that begins with `dagster`. An entrypoint of

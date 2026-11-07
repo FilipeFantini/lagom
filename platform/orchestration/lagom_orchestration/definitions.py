@@ -51,7 +51,7 @@ PIPELINE_TAG = {"lagom/pipeline": "usgs"}
 # resources, and a run needs more than twice what the code server does
 # (architecture.md section 11). Dagster applies a run's tags over the code
 # location's configuration, so this wins. The request is also declared on
-# each environment's Application (lagom.dev/ephemeral-memory-request) for the
+# each environment's Application (robusta.ofantini.com/ephemeral-memory-request) for the
 # budget check; tests/test_definitions.py fails if they differ.
 RUN_RESOURCES = {"requests": {"cpu": "50m", "memory": "768Mi"}, "limits": {"memory": "1Gi"}}
 RUN_TAGS = {

@@ -8,6 +8,6 @@ metadata:
 data:
   index.html: |
     <!doctype html>
-    <title>lagom</title>
-    <p>Hello from the Lagom node, deployed by Argo CD.</p>
+    <title>robusta</title>
+    <p>Hello from the Robusta node, deployed by Argo CD.</p>
     <p>This line arrived by a merged commit. Nobody ran a command.</p>
