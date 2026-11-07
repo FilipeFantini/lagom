@@ -57,9 +57,11 @@ commit to v1.0.262 (two weeks old when adopted). Its job, `agent review`,
 fails unless the verdict is APPROVE, and is added to the `main` ruleset's
 required checks.
 
-**2. It runs on `pull_request_target`,** so the workflow, the prompt and the
-role come from `main`: a pull request cannot weaken the review that judges it
-before it merges. Because that job holds a secret, nothing from the pull
+**2. It runs on `pull_request_target`, for pull requests into `main`
+only,** so the workflow, the prompt and the role come from `main`: a pull
+request cannot weaken the review that judges it before it merges. On another
+base they would come from that branch, which the agents' token can push; a
+change of base to `main` re-runs the review (`edited`). Because that job holds a secret, nothing from the pull
 request runs there: its files are checked out into `pr-head/` as data, its
 diff and description are fetched into files by a step before the reviewer
 starts, and the reviewer's tools are `Read` scoped to the workspace

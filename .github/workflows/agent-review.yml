@@ -10,10 +10,15 @@
 # that judges it. The price is that this job sees a secret (the Claude token),
 # so nothing from the pull request is ever executed here: its files are
 # checked out into a subfolder as data, and the reviewer gets read-only tools.
+#
+# Only pull requests into main: on another base the workflow, prompt and role
+# would be that branch's, which anyone who can push could edit. `edited`
+# re-runs the review when a pull request's base is changed to main.
 name: agent review
 
 on:
   pull_request_target:
+    branches: [main]
     types: [opened, synchronize, reopened, edited, ready_for_review]
 
 permissions:
