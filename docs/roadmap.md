@@ -392,10 +392,11 @@ by its own trigger, like any other piece.
       orchestration layer (Paseo, in a sealed container) was built and removed
       the same day; the ADR keeps its design for when several agents at once,
       or work from the phone, become a need
-- [x] **Agents through Tucano** — several agents in chat channels, each on
-      Tucano's isolated Linux computer: a container with network but no
-      credential, its own clone, and work handed over as a patch. Decided
-      2026-11-07 ([ADR-0032](adr/0032-tucano-agents-in-credential-free-containers.md))
+- [x] **Agents through an agent runner** — several agents at once, each
+      in a container with network but no credential, on its own clone, with
+      work handed over as a patch. Any runner that passes the ADR's checks;
+      Tucano first. Decided 2026-11-07
+      ([ADR-0032](adr/0032-agents-in-credential-free-containers.md))
 
 ## Repository layout
 
