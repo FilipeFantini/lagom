@@ -14,7 +14,7 @@
 # redirect to its login page.
 #
 # cloudflared reads this file at start only. A change here must also change
-# `lagom.dev/config-revision` in deployment.yaml, which restarts it.
+# `robusta.ofantini.com/config-revision` in deployment.yaml, which restarts it.
 apiVersion: v1
 kind: ConfigMap
 metadata:

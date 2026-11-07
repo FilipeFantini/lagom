@@ -1546,7 +1546,7 @@ Set the request in `deployment.yaml` from the figure, as for every component
    - `path: ^/airflow(/.*)?$`;
    - the tool's Service.
 
-   Then bump `lagom.dev/config-revision` in `deployment.yaml`.
+   Then bump `robusta.ofantini.com/config-revision` in `deployment.yaml`.
 3. If the tool runs in `prod`, add a NetworkPolicy like
    `allow-cloudflared-to-dagster-webserver`.
 
