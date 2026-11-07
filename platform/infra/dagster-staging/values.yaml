@@ -105,9 +105,10 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at d6716cc (PR #38,
-        # runs set their own resources and run their steps in one process).
-        tag: "d6716cc89dec747823dc4260e8b42196da2800db@sha256:ce87e595dcdb1d61e12608ed4fb57db13d4da8a4f41b59814d915d1cf99b6c1b"
+        # Pinned by digest (ADR-0015): built from main at d958046 (PR #55,
+        # the alarm sensors of ADR-0033; the code location needs HEARTBEAT_URL,
+        # set below).
+        tag: "d958046ad9a8d329da2926751dd18d3521378a66@sha256:50e93f4d67e881a02a8272f332f10ee19d762f7e27267bc33cec3075903c880b"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
@@ -181,3 +182,9 @@ dagster-user-deployments:
           value: s3://lagom-staging-lake/
         - name: LAGOM_LAKE_METADATA_SCHEMA
           value: ducklake
+        # The alarm's ping URL (ADR-0033): staging's Healthchecks.io check,
+        # sealed in postgres-staging/pipeline-heartbeat-sealed.yaml, the
+        # CronJob's until it was retired. The code location does not load
+        # without it. Run Pods inherit it with the rest (decision 5).
+        - name: HEARTBEAT_URL
+          valueFrom: {secretKeyRef: {name: pipeline-heartbeat, key: url}}

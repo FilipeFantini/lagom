@@ -48,10 +48,11 @@ does not load without it**. Nothing prints it: a failed call reports only the
 error's class or the HTTP status. The Pod's log level stays at INFO or above,
 because `urllib3`'s debug lines carry the URL's path.
 
-**The variable is not set anywhere yet.** The staging values that give
-`HEARTBEAT_URL` to the code server, and the deletion of the CronJob that the
-alarm replaces, arrive in a later change that pins the image built from this
-one. Until then an image with `alarm.py` must not be pinned in any environment.
+**Where it is set:** each environment's values give the code server
+`HEARTBEAT_URL` from the Secret `pipeline-heartbeat`, in the change that
+retires that environment's CronJob: staging on 2026-11-07, prod when it is
+promoted. An image with `alarm.py` is never pinned in an environment whose
+values do not set it.
 Run Pods import this same module, so they too refuse to load without the
 variable. They receive it with the rest of the code server's environment, as
 ADR-0033 decision 5 records.
