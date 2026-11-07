@@ -1,11 +1,13 @@
-# ADR-0031 — The project is renamed Robusta; internal identifiers keep `lagom`
+# ADR-0031 — The project is renamed Robusta, everywhere, in stages
 
 - **Status:** Accepted
 - **Date:** 2026-11-07
 - **Decided by:** the operator, on 2026-11-07: "robusta is a resilient coffee
   with a reference to Brazil; the repo is a lab of open-source tools for
   testing how different tools work, showing that not everything needs
-  expensive big-data solutions."
+  expensive big-data solutions." And, on reviewing a first version that kept
+  internal names: rename as much as possible, so that no one wonders where
+  "lagom" came from, and leave no leftovers.
 - **Number:** 0030 is held by the open pull request for ADR-0030 (operator UIs
   behind Cloudflare Access); numbers are never reused, so this one is 0031.
 
@@ -13,189 +15,215 @@
 
 The project was named Lagom Data Solutions, after the Swedish word for "just
 enough". The operator renamed it Robusta: a coffee that survives where others
-do not, grown widely in Brazil, and a fit for a lab of light, open-source
-tools. The name `lagom` is not only in prose. It is in the GitHub repository
-name, which every Argo CD Application reads; in three container image names
-that promotion by digest pins ([ADR-0015](0015-images-on-ghcr.md)); in a
-Kubernetes annotation that the resource budget reads; and in names that live
-outside Git — the node, the Tailscale tag, the R2 buckets, the Postgres
-databases and roles, the DuckLake catalog, Dagster's code location.
+do not, and one Brazil grows widely. That fits a lab of light, open-source
+tools.
 
-A rename that changed every occurrence at once would move state for no gain:
-renaming a bucket or a database is a data migration, and a Dagster code
-location's name is stored with every run and schedule. A rename that changed
-only the README would leave the repository name and the images behind. Each
-occurrence needs a group and, where the change has a runtime effect, an order.
+`lagom` is in more places than the prose, and each kind of place changes in a
+different way:
+
+- **The repository name.** Every Argo CD Application reads it.
+- **Three container image names**, which promotion by digest pins
+  ([ADR-0015](0015-images-on-ghcr.md)).
+- **Names shared by an image and the manifests that run it**: environment
+  variables, the Python module that Dagster loads, a run tag that the
+  daemon's queue limits, the code location, and the DuckLake alias.
+- **Names held in state outside Git**: Postgres databases, roles and Secrets,
+  R2 buckets, the Tailscale tag, Hetzner labels, Healthchecks.io checks, and
+  the node.
+
+A first version of this ADR left the last two kinds alone, to avoid
+migrations. The operator chose uniformity instead. This version renames
+everything that can be renamed. The cost goes into an order of stages, each
+safe to stop after, and none moves state before staging has shown the way.
 
 ## Requirements and constraints
 
-- Argo CD keeps reconciling throughout: no window in which an Application
-  points at a URL that does not exist.
-- Promotion by digest is not bypassed: a renamed image reaches staging in one
-  pull request and prod in a later one, as any new image does.
-- No state is migrated (no bucket, database, role, Secret or node renamed).
-- History is not rewritten: superseded and historical ADR text keeps its
-  words, including the index titles.
-- The domain is out of scope: every `getlagom.app` reference is left to the
-  domain decision of ADR-0030, which handles the move to the operator's new
-  domain.
-- Agents cannot rename the repository, change GHCR packages or write to the
-  cluster; those steps are the operator's, given as exact commands.
+- Argo CD keeps reconciling throughout. No Application may point at a URL
+  that does not exist.
+- Promotion by digest is not bypassed. A renamed image reaches staging in one
+  pull request and prod in a later one, like any new image.
+- A contract name changes on both sides together, per environment. The
+  manifests that name it change in the same pull request that pins an image
+  which expects the new name.
+- Data that a source cannot give back is not put at risk. Every dataset here
+  can be reloaded from USGS. Dagster's metadata lives in the database
+  `dagster`, which has no `lagom` in it and does not move.
+- History is not rewritten. Superseded and historical ADR text keeps its
+  words, and so do the index titles.
+- The domain is ADR-0030's: every `getlagom.app` reference is handled there.
+- Agents cannot write to the cluster or reach Cloudflare, Tailscale or
+  Hetzner, and they do not hold secret values. Steps that need any of these
+  are the operator's, written as exact commands.
 
 ## Alternatives considered
 
-**Rename everything, state included.** Rename the R2 buckets, the databases
-`lagom` and `lagom_dev`, the role `lagom`, the Secrets, the node and its
-Tailscale tag. Each is a migration with its own failure mode — a bucket is
-copied, not renamed; a database rename breaks every connection string and
-the DuckLake catalog's stored data paths; a new node name means a new
-Tailscale identity. Rejected: the names are invisible to a reader of the
-project, and the cost is real.
+**Keep internal names as `lagom`.** This was the first version of this ADR.
+It was cheaper, but it left a second name a reader meets in every manifest.
+Rejected by the operator.
 
-**Rename only the prose.** Keep the repository and the images as they are.
-Rejected: the repository name is the project's public name, and an image
-called `lagom-*` built from a repository called `robusta` is a mismatch every
-reader meets.
+**Rename everything in one change.** One pull request would change the
+manifests, the images and the state together. Rejected. The images do not
+exist until `main` builds them. A database rename cannot ride in a commit.
+And one failure would leave every environment broken at once.
 
-**Keep the old name.** Rejected by the operator.
+**Rename state by migrating it in place**, for example copying buckets
+object by object and renaming roles with SQL. This is considered per item in
+stage 4. Where the data can be rebuilt from the source, a fresh resource plus
+a reload is the simpler and better-tested path.
 
 ## Decision
 
-1. **The project is Robusta.** The GitHub repository is
-   `FilipeFantini/robusta`. Every occurrence of `lagom` falls into one of
-   three groups.
+1. **The project is Robusta**, and the GitHub repository is
+   `FilipeFantini/robusta`. The rename runs in four stages. Each one leaves
+   the platform consistent.
 
-2. **Group (a) — changes now, in one pull request.** Nothing at runtime
-   depends on these beyond the repository URL, whose order is in decision 5.
-   - The repository URL, `https://github.com/FilipeFantini/robusta.git`: the
-     `repoURL` of every Application under `platform/infra/apps/`; `REPO_URL`
-     in `tools/resource_budget.py`, which `manifest_policy.py` holds every
-     Git source to; the image label `org.opencontainers.image.source` in the
-     three Dockerfiles; the `gh api` path in `CONTRIBUTING.md`.
-   - Project prose: the README, `AGENTS.md`'s title, the agent role files,
-     `architecture.md`, `roadmap.md`, the component READMEs, the Argo CD
-     values comment, the `hello` page.
-   - Names that never leave the image or the repository: the Python
-     distribution names (`robusta-tools`, `robusta-usgs`, `robusta-warehouse`,
-     `robusta-orchestration`, with their `uv.lock` entries), the dbt project
-     and profile name (`robusta`), and the image's Unix user (`robusta`,
-     still UID 10001). dbt's project name is not part of a model's relation
-     name nor of the asset keys Dagster derives from it, so nothing stored
-     changes; the new name reaches an environment with the next image it
-     pins.
+2. **Stage 1 — the repository and the code** (pull request #49). Nothing
+   running changes when it merges:
+   - the repository URL: every Application's `repoURL`; `REPO_URL` in
+     `tools/resource_budget.py`, against which `manifest_policy.py` checks
+     every Git source; each image's `org.opencontainers.image.source` label;
+     `CONTRIBUTING.md`;
+   - the prose: the README, `AGENTS.md`, the agent role files, the docs, the
+     `hello` page;
+   - names inside the images and the repository: the Python distribution
+     names, the dbt project and profile (`robusta`), and the images' Unix
+     user (`robusta`, still UID 10001);
+   - the images are published as
+     `ghcr.io/filipefantini/robusta-{usgs,warehouse,orchestration}`;
+   - the code side of each contract: the module `robusta_orchestration`, the
+     variables `ROBUSTA_PG_*`, `ROBUSTA_LAKE_*` and `ROBUSTA_R2_*`, and the
+     run tag `robusta/pipeline`;
+   - the annotation `robusta.ofantini.com/ephemeral-memory-request`. By
+     Kubernetes convention a prefix is a DNS name, so that it cannot collide
+     with anyone else's. `lagom.dev` was never the project's, and
+     `robusta.dev` belongs to an unrelated Kubernetes project, so the prefix
+     is under the operator's domain. Only repository code reads it, so every
+     reader changes in this same commit.
 
-3. **Group (b) — changes in a planned order.**
-   - **Image names.** `ghcr.io/filipefantini/lagom-{usgs,warehouse,orchestration}`
-     become `ghcr.io/filipefantini/robusta-{usgs,warehouse,orchestration}`.
-     The workflow change is in the same pull request as group (a); the pins
-     follow ADR-0015's order (decision 5, steps 6–8). The old packages stay
-     until prod has run on the new ones, because they are the rollback.
-   - **The annotation prefix.** `lagom.dev/ephemeral-memory-request` becomes
-     `robusta.ofantini.com/ephemeral-memory-request`. A prefix is a DNS name by
-     Kubernetes convention, so that it cannot collide with someone else's:
-     `lagom.dev` was never the project's, and `robusta.dev` belongs to an
-     unrelated Kubernetes project, so the prefix sits under `ofantini.com`,
-     the domain the operator owns. Only repository code reads it — the
-     budget tool and the code location's test; Argo CD and Kubernetes store
-     it without acting on it — so its order is one commit that changes every
-     writer and reader together.
+   Until stage 3, `main`'s manifests still pin the `lagom-*` digests and
+   pass them the old names. Those images expect the old names, so the
+   running pairs match. This is the normal gap between a code change and the
+   pull request that pins it.
 
-4. **Group (c) — stays `lagom`.** Each is an identifier held in state outside
-   Git, or a contract between an image and the manifests that pin it:
-   - **State:** the node names `lagom-shared-01`, `lagom-shared-02` (and the
-     reserved `lagom-prod-01`), the Hetzner label `project=lagom`, the
-     Tailscale tag `tag:lagom-node`, the R2 buckets `lagom-{staging,prod}-lake`
-     and `lagom-{staging,prod}-backups`, the Postgres databases and roles
-     `lagom` and `lagom_dev`, the Secret `lagom-dev-credentials` and the
-     `Database` `lagom-dev`, the DuckLake name `lagom`, the Dagster code
-     location `lagom` (stored with every run and schedule; the code server's
-     Deployment name derives from it), the Healthchecks.io checks
-     `lagom-usgs-{staging,prod}`, and the private archive repository
-     `lagom-data-solutions-archive` ([ADR-0017](0017-public-repository-from-a-snapshot.md)).
-   - **Image–manifest contracts:** the environment variables `LAGOM_PG_*`,
-     `LAGOM_LAKE_*`, `LAGOM_R2_*`, the module `lagom_orchestration` (named in
-     each Dagster values file as `-m lagom_orchestration.definitions`), and
-     the run tag `lagom/pipeline`, which the daemon's queue limits. Renaming
-     one means the manifests and the image change in the same pull request,
-     so a prod promotion would stop being a copy of staging's digest and
-     become a contract change. Each may be renamed later, in its own change,
-     when that contract changes for another reason.
-   - **History:** superseded and historical ADR text, and the ADR index's
-     titles.
+3. **Stage 2 — the GitHub rename**, after stage 1 is approved and before it
+   merges. GitHub then redirects the old URL for the web and for Git: clone
+   and fetch of `lagom-data-solutions` keep working against `robusta`.
 
-5. **Order.**
-   1. This pull request is reviewed and approved, with CI green, but not
-      merged.
-   2. The operator renames the repository on GitHub. GitHub then redirects
-      the old URL, for the web and for Git: clone and fetch of
-      `lagom-data-solutions` keep working against `robusta`.
-   3. Argo CD keeps syncing through the redirect. Its repo-server reads the
-      repository anonymously over HTTPS: it resolves `main` to a commit with
-      a GET of the repository's `info/refs`, which Go's HTTP client follows
-      through a redirect, and fetches with the `git` binary, which follows a
-      redirect on its first request and then talks to the new address. This
-      is expected from how both clients behave, not yet observed here; step
-      4 checks it.
-   4. The operator confirms every Application is still `Synced` and
-      `Healthy` from the old URL.
-   5. This pull request is merged. The root Application manages itself, so
-      Argo CD reads the new `root.yaml` through the redirect, then every
-      Application's new `repoURL` from the repository's real address. The
-      operator confirms each Application shows the new URL and is `Synced`.
-      From here the redirect is no longer used.
-   6. The merge publishes `robusta-*` images from `main` (the workflow runs on
-      a change to itself). Staging and prod still pin the `lagom-*` digests,
-      which stay in GHCR.
-   7. A pull request pins the three `robusta-*` digests in staging; the
-      operator confirms staging's runs succeed.
-   8. A later pull request copies those digests to prod;
-      `promotion_check.py` enforces that staging had them first.
-   9. After prod has run on the new images for a week, the operator deletes
-      the `lagom-*` packages.
+   Argo CD should keep syncing through the redirect. Its repo-server reads
+   the repository anonymously over HTTPS in two ways. It resolves `main` to
+   a commit with a GET of `info/refs`, and Go's HTTP client follows a
+   redirect on a GET. It fetches with the `git` binary, which follows a
+   redirect on its first request and then talks to the new address. This is
+   what both clients are expected to do; it has not been observed here yet.
+   The Applications are checked after the rename, and the merge of stage 1
+   then points them at the real address, so the redirect is needed only for
+   minutes.
 
-   Merging before the rename is the wrong order: every Application would
-   point at a repository that does not exist yet, and Argo CD would stop
-   reconciling until the rename. Workloads keep running in that state — Argo
-   CD does not delete on a failed fetch — but nothing new arrives.
+   Merging stage 1 before the rename is the wrong order. Every Application
+   would point at a repository that does not exist yet. Workloads would keep
+   running, because Argo CD does not delete anything when a fetch fails, but
+   nothing new would arrive.
+
+4. **Stage 3 — the images and the contracts, per environment.** One pull
+   request for staging and, after staging has run, one for prod. Each pins
+   the three `robusta-*` digests that `main` built, and in the same commit
+   switches that environment's manifest side of every contract:
+   - the variables, from `LAGOM_*` to `ROBUSTA_*`;
+   - `-m robusta_orchestration.definitions`;
+   - the queue limit's key, `robusta/pipeline`;
+   - the code location, `robusta`. Its Deployment and Service get new names,
+     the old ones are pruned, and the schedules, whose default status is
+     running, start under the new location. Past runs keep the name they
+     ran under;
+   - dlt's DuckLake alias, `robusta`. It names the attached catalog for the
+     session only, and is not stored in the catalog.
+
+   `promotion_check.py` holds prod to digests that staging pinned first.
+   Prod's pull request also renames its contracts, so it is a digest copy
+   plus a rename. This is the one exception, and it is only a rename. The
+   `lagom-*` packages stay in GHCR as the rollback. They are deleted a week
+   after prod runs on the new ones.
+
+5. **Stage 4 — state, staging first.** Each item is done in staging, checked,
+   and then done in prod. Its exact commands go into the runbook when staging
+   has proved them. The agent prepares the Git side; the operator does what
+   needs consoles or secret values.
+   - **Postgres:** the database and owner `lagom` become `robusta`, and the
+     developer's `lagom_dev` role, database, `Database` object and Secret
+     `lagom-dev-credentials` become `robusta_dev`, `robusta-dev` and
+     `robusta-dev-credentials`. A SealedSecret is bound to its name, and the
+     username is inside it, so the developer's credential is sealed again
+     under the new name. The path is whichever staging shows to be safe
+     with CloudNativePG's generated `postgres-app` Secret: a rename in SQL,
+     or a new database with the data reloaded from the source. The
+     restore-test bootstrap names the new database.
+   - **R2:** buckets cannot be renamed. The new buckets
+     `robusta-{staging,prod}-{lake,backups}` are created with tokens scoped
+     to them, and those tokens are sealed. The lake is reloaded from the
+     source. Backups start a new archive in the new bucket. The old buckets
+     are deleted after one full retention period of the new ones (7 days in
+     staging, 14 in prod), so a restore point exists throughout.
+   - **Tailscale:** `tag:robusta-node` is added beside `tag:lagom-node` in
+     the policy, the node is retagged, and the old tag is removed only after
+     SSH, the API and the Dagster UI work through the new one.
+   - **Hetzner** label `project=robusta`; **Healthchecks.io** checks
+     `robusta-usgs-{staging,prod}`. The ping URLs are unchanged, so both
+     renames are only labels.
+   - **The private archive repository** becomes `robusta-archive`. GitHub
+     redirects it too. ADR-0017's text keeps the name it had.
+
+6. **What keeps `lagom`:**
+   - **The node, `lagom-shared-02`, until it is replaced.** A Kubernetes node's
+     name is its hostname, and the local-path volumes — Postgres's data — are
+     bound to that name. A renamed node would be a new node with unreachable
+     volumes. The next node is `robusta-shared-03`, by the runbook's
+     convention.
+   - **History:** superseded and historical ADR text, the ADR index titles,
+     past runs and measurements quoted with the names they had, and the
+     operator's local clone folder, which is outside the repository.
 
 ## Consequences
 
-- The project's public name, its repository and its images say Robusta.
-- Names a reader will still meet as `lagom`: the environment variables, the
-  orchestration module's directory, the code location, the run tag, and every
-  name in group (c). This ADR is where they are explained.
+- When stage 4 ends, `lagom` remains only in history and in the node's name.
+- Stage 3 makes prod's promotion carry a rename. Staging runs that same
+  rename first, so it is tested before it reaches prod.
+- Stage 4 reloads the lake and starts new backup archives. For the length of
+  one retention period, the old buckets hold the only restore points from
+  before the move. They are kept for that long for this reason.
 - New packages on GHCR are private by default, as the old ones were. The
   `ghcr-pull` tokens are classic tokens with `read:packages`, which covers
-  every package of the account, so no pull credential changes.
-- Applications added by a pull request that was branched before this one —
-  ADR-0030's `cloudflared` Application — carry the old URL;
-  `manifest_policy.py` fails that pull request until it is updated, so the
-  old URL cannot return to `main` unnoticed. The same pull request uses the
-  annotation `lagom.dev/config-revision`, which no tool reads; it is renamed
-  to the new prefix there or right after it merges.
+  every package in the account, so no pull credential changes.
+- ADR-0030's pull request was branched before this one. It adds the
+  `cloudflared` Application with the old URL, and `manifest_policy.py` fails
+  it until that URL is updated, so the old URL cannot return to `main`
+  unnoticed.
 - "Robusta" is also the name of an unrelated open-source Kubernetes
-  troubleshooting project (`robusta.dev`). Searches for the name will mix
-  the two; the repository and images are under the operator's account, so
-  nothing collides technically, and the annotation prefix avoids their
-  domain.
+  troubleshooting project (`robusta.dev`), so searches for the name will
+  mix the two. Nothing collides technically: the repository and the images
+  are under the operator's account, and the annotation prefix stays off
+  their domain.
 
 ## What it does not check
 
-Nothing enforces that `lagom` does not reappear in prose. The checks that do
-hold are `manifest_policy.py` for the repository URL, and
-`test_resource_budget.py` and the code location's tests for the annotation.
+Nothing stops `lagom` from coming back into prose. The checks that do hold
+are `manifest_policy.py` for the repository URL, and the budget's and the
+code location's tests for the annotation. Nothing checks that both sides of
+a contract match before an environment runs them. Staging is where a mismatch
+shows up, as a failed code server or run.
 
 ## Risks, cost, and reversal
 
-- **The redirect does not carry Argo CD.** If step 4 shows an Application
-  failing to fetch, merging this pull request (step 5) fixes it, because it
-  points the Applications at the real address. Nothing is lost in between:
-  Argo CD keeps the last applied state.
-- **The redirect breaks if a new repository takes the old name.** None will;
-  after step 5 nothing depends on it.
-- **A missed `lagom-*` image pin.** Staging and prod keep pulling the old
-  packages until steps 7 and 8; deleting them earlier (step 9) would break
-  the next pull. Step 9 waits for that reason.
-- **Reversal:** rename the repository back on GitHub (the redirect works the
-  other way too), revert this pull request, and pin the `lagom-*` digests
-  again. Group (c) needs no reversal because it never moved.
+- **The redirect does not carry Argo CD.** Merging stage 1 points the
+  Applications at the real address. Until then Argo CD keeps the last state
+  it applied.
+- **A contract mismatch in stage 3** fails staging's code server or runs.
+  Reverting staging's pull request restores the `lagom-*` pins and names.
+- **Stage 4 loses restore points** if an old bucket is deleted early. Each
+  deletion waits one full retention period for that reason.
+- **The Tailscale retag locks the operator out** if the policy is wrong. The
+  old tag stays until the new one is proven, and Hetzner's console reaches
+  the node without the tailnet.
+- **Reversal:** each stage reverts on its own. Rename the repository back
+  (GitHub redirects the other way too), revert the pull requests, and pin the
+  `lagom-*` digests again. State that stage 4 created next to the old state
+  is dropped; the old state is still there until its deletion step.

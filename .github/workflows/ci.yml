@@ -53,7 +53,7 @@ jobs:
           uv run --project $p --locked ruff format --check $p services/*/assets
           uv run --project $p --locked ruff check $p services/*/assets
           # From inside the project, so the assets resolve once, as imported.
-          (cd $p && uv run --locked mypy lagom_orchestration ../../services/*/assets)
+          (cd $p && uv run --locked mypy robusta_orchestration ../../services/*/assets)
           uv run --project $p --locked pytest $p
 
   secrets:
@@ -149,9 +149,9 @@ jobs:
           uv run --project platform/warehouse --locked dbt parse
           --project-dir platform/warehouse --profiles-dir platform/warehouse
         env:
-          LAGOM_PG_HOST: localhost
-          LAGOM_PG_PORT: "5432"
-          LAGOM_PG_USER: ci-placeholder
-          LAGOM_PG_PASSWORD: ci-placeholder
-          LAGOM_PG_DBNAME: ci-placeholder
-          LAGOM_PG_SSLMODE: disable
+          ROBUSTA_PG_HOST: localhost
+          ROBUSTA_PG_PORT: "5432"
+          ROBUSTA_PG_USER: ci-placeholder
+          ROBUSTA_PG_PASSWORD: ci-placeholder
+          ROBUSTA_PG_DBNAME: ci-placeholder
+          ROBUSTA_PG_SSLMODE: disable

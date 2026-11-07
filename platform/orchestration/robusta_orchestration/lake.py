@@ -54,16 +54,16 @@ def attach_lake(alias: str = "lake") -> duckdb.DuckDBPyConnection:
     connection = duckdb.connect()
     for extension in ("ducklake", "httpfs", "postgres"):
         connection.execute(f"INSTALL {extension}; LOAD {extension}")
-    key_id = _literal(_require("LAGOM_R2_ACCESS_KEY_ID"))
-    secret = _literal(_require("LAGOM_R2_SECRET_ACCESS_KEY"))
-    endpoint = _literal(_require("LAGOM_R2_ENDPOINT").removeprefix("https://"))
+    key_id = _literal(_require("ROBUSTA_R2_ACCESS_KEY_ID"))
+    secret = _literal(_require("ROBUSTA_R2_SECRET_ACCESS_KEY"))
+    endpoint = _literal(_require("ROBUSTA_R2_ENDPOINT").removeprefix("https://"))
     connection.execute(
         f"CREATE SECRET r2 (TYPE s3, KEY_ID {key_id}, SECRET {secret}, "
         f"ENDPOINT {endpoint}, REGION 'auto', URL_STYLE 'path')"
     )
-    catalog = _literal(_require("LAGOM_LAKE_CATALOG"))
-    data_path = _literal(_require("LAGOM_LAKE_DATA_PATH"))
-    metadata_schema = _literal(_require("LAGOM_LAKE_METADATA_SCHEMA"))
+    catalog = _literal(_require("ROBUSTA_LAKE_CATALOG"))
+    data_path = _literal(_require("ROBUSTA_LAKE_DATA_PATH"))
+    metadata_schema = _literal(_require("ROBUSTA_LAKE_METADATA_SCHEMA"))
     connection.execute(
         f"ATTACH {catalog} AS {alias} (DATA_PATH {data_path}, METADATA_SCHEMA {metadata_schema})"
     )

@@ -2,7 +2,7 @@
 *
 !platform/orchestration/pyproject.toml
 !platform/orchestration/uv.lock
-!platform/orchestration/lagom_orchestration/
+!platform/orchestration/robusta_orchestration/
 !services/usgs/ingestion/
 !services/usgs/assets/
 !platform/warehouse/dbt_project.yml

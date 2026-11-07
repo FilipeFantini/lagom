@@ -64,9 +64,9 @@ password into the shell and forward the port as the runbook describes
 holds the password in `PGPASSWORD`. Then, from the repository root:
 
 ```sh
-export LAGOM_PG_HOST=127.0.0.1 LAGOM_PG_PORT=15432 LAGOM_PG_USER=lagom_dev \
-       LAGOM_PG_DBNAME=lagom_dev LAGOM_PG_SSLMODE=disable
-export LAGOM_PG_PASSWORD="$PGPASSWORD"
+export ROBUSTA_PG_HOST=127.0.0.1 ROBUSTA_PG_PORT=15432 ROBUSTA_PG_USER=lagom_dev \
+       ROBUSTA_PG_DBNAME=lagom_dev ROBUSTA_PG_SSLMODE=disable
+export ROBUSTA_PG_PASSWORD="$PGPASSWORD"
 
 dbt() { uv run --project platform/warehouse --locked dbt "$@" \
           --project-dir platform/warehouse --profiles-dir platform/warehouse; }
@@ -75,9 +75,9 @@ dbt source freshness
 ```
 
 `profiles.yml` is committed because it holds no value: every setting is read
-from `LAGOM_PG_*` and none has a default. A missing variable stops dbt naming
+from `ROBUSTA_PG_*` and none has a default. A missing variable stops dbt naming
 it, with one dbt quirk: for `password` dbt falls back to the literal template
-text, so a missing `LAGOM_PG_PASSWORD` shows up as Postgres refusing the login,
+text, so a missing `ROBUSTA_PG_PASSWORD` shows up as Postgres refusing the login,
 not as a message naming the variable.
 
 **`sslmode=disable` is deliberate here.** `kubectl port-forward` closed the
@@ -118,7 +118,7 @@ settings are listed in `profiles.yml` and in the code location's
 [ADR-0015](../../docs/adr/0015-images-on-ghcr.md)). The image carries `tests/`
 because `dbt build` runs them. It runs as UID 10001 on a read-only root
 filesystem; dbt writes only under `/tmp`, so mount a writable volume there. The
-`LAGOM_PG_*` variables are supplied by the job.
+`ROBUSTA_PG_*` variables are supplied by the job.
 
 ## Known limits
 

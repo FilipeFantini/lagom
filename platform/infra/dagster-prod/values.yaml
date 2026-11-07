@@ -109,7 +109,7 @@ dagster-user-deployments:
       # security context, in this namespace. The container security context
       # is set for runs in runLauncher above. Their resources are not these:
       # a tag on each job in the code location sets them (RUN_RESOURCES in
-      # lagom_orchestration/definitions.py), and wins.
+      # robusta_orchestration/definitions.py), and wins.
       includeConfigInLaunchedRuns:
         enabled: true
       # The code server alone: measured 203-291 MiB. The limit stays at 1Gi

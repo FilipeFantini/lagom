@@ -26,7 +26,7 @@ from dagster import (
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from services.usgs.assets import usgs_events
 
-from lagom_orchestration.lake import attach_lake, run_maintenance
+from robusta_orchestration.lake import attach_lake, run_maintenance
 
 REPO = Path(__file__).resolve().parents[3]
 WAREHOUSE = REPO / "platform" / "warehouse"
@@ -45,7 +45,7 @@ def warehouse(context: AssetExecutionContext, dbt: DbtCliResource) -> Iterator[A
 # Two runs of this job must never overlap: both would read dlt's cursor and
 # write it back. The tag is limited to one run at a time in the instance's
 # run queue (platform/infra/dagster-<env>/values.yaml).
-PIPELINE_TAG = {"lagom/pipeline": "usgs"}
+PIPELINE_TAG = {"robusta/pipeline": "usgs"}
 
 # The memory of each run's Pod. Without this, a run inherits the code server's
 # resources, and a run needs more than twice what the code server does

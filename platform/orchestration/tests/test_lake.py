@@ -1,4 +1,4 @@
-from lagom_orchestration.lake import _literal, maintenance_statements
+from robusta_orchestration.lake import _literal, maintenance_statements
 
 
 def test_maintenance_runs_merge_then_expiry_then_cleanup() -> None:
@@ -20,16 +20,16 @@ def test_maintenance_runs_on_a_real_ducklake(tmp_path, monkeypatch) -> None:  # 
 
     The R2 secret is created but unused: the data path is local.
     """
-    from lagom_orchestration.lake import attach_lake, run_maintenance
+    from robusta_orchestration.lake import attach_lake, run_maintenance
 
     for name, value in {
         "HOME": str(tmp_path),  # DuckDB installs its extensions under HOME
-        "LAGOM_LAKE_CATALOG": f"ducklake:{tmp_path / 'catalog.ducklake'}",
-        "LAGOM_LAKE_DATA_PATH": f"{tmp_path / 'data'}/",
-        "LAGOM_LAKE_METADATA_SCHEMA": "main",
-        "LAGOM_R2_ACCESS_KEY_ID": "test",
-        "LAGOM_R2_SECRET_ACCESS_KEY": "test",
-        "LAGOM_R2_ENDPOINT": "https://test.invalid",
+        "ROBUSTA_LAKE_CATALOG": f"ducklake:{tmp_path / 'catalog.ducklake'}",
+        "ROBUSTA_LAKE_DATA_PATH": f"{tmp_path / 'data'}/",
+        "ROBUSTA_LAKE_METADATA_SCHEMA": "main",
+        "ROBUSTA_R2_ACCESS_KEY_ID": "test",
+        "ROBUSTA_R2_SECRET_ACCESS_KEY": "test",
+        "ROBUSTA_R2_ENDPOINT": "https://test.invalid",
     }.items():
         monkeypatch.setenv(name, value)
     connection = attach_lake()

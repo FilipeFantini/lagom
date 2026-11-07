@@ -4,12 +4,11 @@ Source of truth for how this platform is built. Read before touching any
 component. Decisions with lasting consequence are recorded as ADRs in
 [`adr/`](adr/); this document describes the resulting system.
 
-The project is Robusta, called Lagom until 2026-11-07. Names held in state or
-shared between an image and its manifests — the node, the Tailscale tag, the
-R2 buckets, the databases and roles, the DuckLake catalog, Dagster's code
-location, the `LAGOM_*` variables, the module `lagom_orchestration` — keep
-`lagom` on purpose; [ADR-0031](adr/0031-rename-to-robusta.md) lists them and
-why.
+The project is Robusta, called Lagom until 2026-11-07. The rename moves in
+stages ([ADR-0031](adr/0031-rename-to-robusta.md)): names still spelled
+`lagom` in this document — the node, the Tailscale tag, the R2 buckets, the
+databases, roles and Secrets — are the ones whose stage has not run yet, and
+the ADR says when each one does.
 
 ---
 
@@ -599,7 +598,7 @@ adds that 70 MiB request as its allowance for components outside Git.
 | CloudNativePG operator | 64 MB | measured 24 MiB with no Cluster, 31 MiB reconciling one (request 64, limit 192, `GOMEMLIMIT` 150MiB) ([ADR-0012](adr/0012-cloudnative-pg.md)) |
 | Backup: Barman Cloud plugin and cert-manager | 192 MB | plugin 32, cert-manager controller 64, cainjector 64, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
 | Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
-| Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
+| Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/robusta_orchestration/definitions.py)) |
 | **Core requests** | **~2.24 GB** | |
 | **Left within the ceiling for ephemeral jobs** | **~3.3 GB** | |
 
@@ -1338,7 +1337,7 @@ models; correct this command on the first run if one differs. Memory use of a
 run, to replace the starting 256 MiB request, is read with `kubectl top pod`
 while it runs.
 
-Pod to Service connections keep TLS (`LAGOM_PG_SSLMODE=require`); only the
+Pod to Service connections keep TLS (`ROBUSTA_PG_SSLMODE=require`); only the
 port-forward path above uses `sslmode=disable`.
 
 #### Pipeline heartbeat
@@ -1629,7 +1628,7 @@ In prod, replace `staging` with `prod`.
 | `usgs` | every 30 minutes, at :00 and :30 | dlt loads the events USGS updated since the last cursor into DuckLake (`bronze.usgs_events`), then `dbt build` builds silver and gold on the `lake` target and runs their 33 tests |
 | `lake_maintenance` | daily at 04:15 | merges small Parquet files, expires snapshots older than 7 days, deletes files nothing references |
 
-Both carry the tag `lagom/pipeline=usgs`, and the daemon's queue starts one
+Both carry the tag `robusta/pipeline=usgs`, and the daemon's queue starts one
 run with that tag at a time. A second run waits as *Queued* until the first
 ends. In staging's first week (2026-10-28 to 11-05), 372 of 373 `usgs` runs
 succeeded, in 43 s at the median and 136 s at most; the one failure was the

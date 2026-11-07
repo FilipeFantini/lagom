@@ -27,7 +27,7 @@ COPY --from=build /opt/venv /opt/venv
 # The repository layout, kept under /app: definitions.py finds the dbt project
 # and the services by their paths relative to it.
 WORKDIR /app
-COPY platform/orchestration/lagom_orchestration/ platform/orchestration/lagom_orchestration/
+COPY platform/orchestration/robusta_orchestration/ platform/orchestration/robusta_orchestration/
 COPY services/usgs/ingestion/ services/usgs/ingestion/
 COPY services/usgs/assets/ services/usgs/assets/
 COPY platform/warehouse/dbt_project.yml platform/warehouse/profiles.yml platform/warehouse/
@@ -49,9 +49,9 @@ ENV PATH=/opt/venv/bin:$PATH \
 # dagster-dbt reads the manifest when the code location loads, so it is built
 # here. `dbt parse` reads the profile but opens no connection: the values below
 # exist only for this step and are not in the image's environment.
-RUN LAGOM_LAKE_CATALOG=ducklake:parse.ducklake LAGOM_LAKE_DATA_PATH=parse/ \
-    LAGOM_LAKE_METADATA_SCHEMA=main LAGOM_R2_ACCESS_KEY_ID=parse \
-    LAGOM_R2_SECRET_ACCESS_KEY=parse LAGOM_R2_ENDPOINT=https://parse.invalid \
+RUN ROBUSTA_LAKE_CATALOG=ducklake:parse.ducklake ROBUSTA_LAKE_DATA_PATH=parse/ \
+    ROBUSTA_LAKE_METADATA_SCHEMA=main ROBUSTA_R2_ACCESS_KEY_ID=parse \
+    ROBUSTA_R2_SECRET_ACCESS_KEY=parse ROBUSTA_R2_ENDPOINT=https://parse.invalid \
     dbt parse --project-dir platform/warehouse --profiles-dir platform/warehouse \
       --target lake --log-path /tmp/dbt-logs --quiet \
     && rm -rf /tmp/dbt-logs

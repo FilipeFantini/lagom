@@ -10,12 +10,12 @@ from dagster import AssetKey
 WAREHOUSE = Path(__file__).resolve().parents[2] / "warehouse"
 # `dbt parse` reads the profile but opens no connection: placeholders suffice.
 PARSE_ENV = {
-    "LAGOM_LAKE_CATALOG": "ducklake:parse.ducklake",
-    "LAGOM_LAKE_DATA_PATH": "parse/",
-    "LAGOM_LAKE_METADATA_SCHEMA": "main",
-    "LAGOM_R2_ACCESS_KEY_ID": "parse",
-    "LAGOM_R2_SECRET_ACCESS_KEY": "parse",
-    "LAGOM_R2_ENDPOINT": "https://parse.invalid",
+    "ROBUSTA_LAKE_CATALOG": "ducklake:parse.ducklake",
+    "ROBUSTA_LAKE_DATA_PATH": "parse/",
+    "ROBUSTA_LAKE_METADATA_SCHEMA": "main",
+    "ROBUSTA_R2_ACCESS_KEY_ID": "parse",
+    "ROBUSTA_R2_SECRET_ACCESS_KEY": "parse",
+    "ROBUSTA_R2_ENDPOINT": "https://parse.invalid",
 }
 
 
@@ -39,7 +39,7 @@ def defs(tmp_path_factory: pytest.TempPathFactory):  # type: ignore[no-untyped-d
         check=True,
         env={**os.environ, **PARSE_ENV},
     )
-    from lagom_orchestration.definitions import defs
+    from robusta_orchestration.definitions import defs
 
     return defs
 
@@ -71,7 +71,7 @@ def test_run_resources_override_the_code_servers(defs) -> None:  # type: ignore[
     from dagster_k8s.container_context import K8sContainerContext
     from dagster_k8s.job import get_user_defined_k8s_config
 
-    from lagom_orchestration.definitions import RUN_RESOURCES
+    from robusta_orchestration.definitions import RUN_RESOURCES
 
     code_location = K8sContainerContext(
         resources={"requests": {"cpu": "50m", "memory": "320Mi"}, "limits": {"memory": "512Mi"}}
@@ -79,7 +79,7 @@ def test_run_resources_override_the_code_servers(defs) -> None:  # type: ignore[
     for job in defs.resolve_all_job_defs():
         if job.name not in {"usgs", "lake_maintenance"}:
             continue
-        assert job.tags["lagom/pipeline"] == "usgs"
+        assert job.tags["robusta/pipeline"] == "usgs"
         run = code_location.merge(
             K8sContainerContext(run_k8s_config=get_user_defined_k8s_config(job.tags))
         )
@@ -95,7 +95,7 @@ def test_budget_declares_the_runs_request() -> None:
     """
     import yaml
 
-    from lagom_orchestration.definitions import RUN_RESOURCES
+    from robusta_orchestration.definitions import RUN_RESOURCES
 
     apps = sorted((Path(__file__).resolve().parents[2] / "infra" / "apps").glob("dagster-*.yaml"))
     assert apps

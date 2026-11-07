@@ -44,7 +44,7 @@ COPY macros/ ./macros/
 COPY models/ ./models/
 COPY tests/ ./tests/
 # dbt's tracking is off, and HOME is under /tmp so nothing tries to create
-# ~/.dbt on a read-only root filesystem. profiles.yml reads LAGOM_PG_* from the
+# ~/.dbt on a read-only root filesystem. profiles.yml reads ROBUSTA_PG_* from the
 # environment; the job supplies them and nothing is baked in.
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \

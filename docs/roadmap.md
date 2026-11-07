@@ -83,7 +83,7 @@ Re-introducing a practice excluded in
 | Backups | no | VM rollback is not needed: the machine is reproducible from Git. Postgres is backed up on its own, to R2, since 2026-10-28 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)) |
 | Placement group | no | only spreads multiple servers across physical hosts |
 | Labels | `project=lagom`, `env=shared`, `role=k3s-server` | free, and saves effort in the CLI and the invoice |
-| Name | `lagom-shared-01`, then `lagom-shared-02` | `<project>-<environment>-<index>`. The node hosts both the prod and the staging namespace ([ADR-0007](adr/0007-three-environments.md)), so it is `shared`; `lagom-prod-01` is left for a dedicated prod node |
+| Name | `lagom-shared-01`, then `lagom-shared-02`; the next node is `robusta-shared-03` | `<project>-<environment>-<index>`. The node hosts both the prod and the staging namespace ([ADR-0007](adr/0007-three-environments.md)), so it is `shared`; `robusta-prod-01` is left for a dedicated prod node. The project was Lagom when the first two were created; a node keeps its name until it is replaced ([ADR-0031](adr/0031-rename-to-robusta.md)) |
 
 **Cloud-init hardens SSH only — it does not install k3s.** Installing the
 cluster from user-data would hide the mechanism this milestone exists to teach.
@@ -265,9 +265,11 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [ ] `dbt test` in CI
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
-- [ ] Images under their Robusta names: pin `robusta-*` in staging, then in
-      prod, then delete the `lagom-*` packages after a week
-      ([ADR-0031](adr/0031-rename-to-robusta.md), decision 5, steps 6–9)
+- [ ] The rename to Robusta ([ADR-0031](adr/0031-rename-to-robusta.md)):
+      images and contract names pinned in staging, then prod (stage 3); the
+      databases, buckets, Secrets and Tailscale tag renamed, staging first
+      (stage 4); the `lagom-*` packages deleted a week after prod runs on the
+      new ones
 
 End of M3 = the backbone on its final node, orchestrated. **Natural checkpoint
 to stop and reassess before adding anything.**
