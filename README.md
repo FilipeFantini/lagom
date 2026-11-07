@@ -98,3 +98,4 @@ Application ([ADR-0006](docs/adr/0006-monorepo-layout.md)).
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
+
