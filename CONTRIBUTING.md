@@ -87,7 +87,9 @@ on purpose: an agent never handles a secret's value, so sealing stays the
 operator's step. Argo CD is the cluster's writer, and a
 change reaches it through a merge. What stays allowed is what the runbook
 needs an agent for: reading (`get`, `describe`, `logs`, `top`), `kubectl
-create job --from=cronjob/…` to run a pipeline on demand, `port-forward`, and
+create job --from=cronjob/…` (a Job from a CronJob's template; no CronJob
+runs since 2026-11-07, and a pipeline run on demand is *Launch run* in
+Dagster's UI), `port-forward`, and
 `kubectl diff -n <namespace> -f` (manifests here carry no namespace; Argo CD sets it), which replaces `apply --dry-run=server` as the server-side
 check of a manifest. What it does not stop: commands run through `ssh` on the
 node (`sudo k3s kubectl …`, `systemctl`), `kubectl` reached through another
