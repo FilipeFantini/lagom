@@ -5,11 +5,11 @@
 #   Postgres Pod, with the backup sidecar (ADR-0025)    364 /  768
 #   Dagster webserver, daemon, code server (ADR-0026)   800 / 1920
 #   one Dagster run, its own tag in the code location   768 / 1024
-#   the CronJob usgs-pipeline, while it still runs       256 /  512
 #                                                       ----   ----
-#                                                       2188 / 4224
-# rounded up to 2432 / 4608, about 240 Mi of room for a restore test or a
-# manual run. Dagster's figures are measured (architecture.md section 11). The budget check counts the same workloads against the node's
+#                                                       1932 / 3712
+# rounded up to 2432 / 4608, about 500 Mi of room for a restore test or a
+# manual run. The CronJob usgs-pipeline (256 / 512) counted here until it was
+# retired on 2026-11-07 (ADR-0033); the quota was left as it was. Dagster's figures are measured (architecture.md section 11). The budget check counts the same workloads against the node's
 # ceiling (architecture.md section 11); the quota keeps staging inside them.
 apiVersion: v1
 kind: ResourceQuota

@@ -239,7 +239,9 @@ Dagster raises its own alarm through the same Healthchecks.io check
 sensor pings it after each successful `usgs` run, and another calls its
 `/fail` with the error when any run fails. The sensors are in the code
 location ([`alarm.py`](../platform/orchestration/lagom_orchestration/alarm.py)).
-**In staging they are live, and staging's CronJob is gone** (2026-11-07). In
+**In staging they are live, and staging's CronJob is retired** (2026-11-07:
+removed from Git, then deleted by hand, since `postgres-staging` never
+prunes; runbook: *Retire a manifest from `postgres-<env>`*). In
 prod the CronJob keeps running and reporting success to prod's check until
 the prod change retires it the same way
 ([ADR-0018](adr/0018-pipeline-heartbeat.md); runbook: *Pipeline heartbeat*).
@@ -379,8 +381,8 @@ bundles Dagster, dbt, dlt, DuckDB and pyarrow.
 The first two packages are private: an anonymous manifest request to ghcr.io
 returns HTTP 403 (checked 2026-10-17; the same request against a public image
 succeeds). `lagom-orchestration` is checked the same way once it is
-published. Staging's and prod's CronJob `usgs-pipeline` runs them
-every 30 minutes, dbt starting only if the load exited 0: both are init
+published. Prod's CronJob `usgs-pipeline` runs them every 30 minutes
+until it is retired (staging's was on 2026-11-07, [ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)), dbt starting only if the load exited 0: both are init
 containers, and a `heartbeat` container pings Healthchecks.io only if both
 exited 0 ([ADR-0018](adr/0018-pipeline-heartbeat.md)). It pulls from GHCR with
 the sealed `ghcr-pull` Secret, which the operator adds to the same directory.
@@ -1304,22 +1306,22 @@ one — what happened on 2026-10-18.
 the name unique):
 
 ```bash
-kubectl -n staging create job --from=cronjob/usgs-pipeline usgs-manual-$(date +%s)
-kubectl -n staging get pods -w       # Init:0/2 while dlt runs, Init:1/2 while dbt runs, then Running, Completed
+kubectl -n prod create job --from=cronjob/usgs-pipeline usgs-manual-$(date +%s)
+kubectl -n prod get pods -w       # Init:0/2 while dlt runs, Init:1/2 while dbt runs, then Running, Completed
 ```
 
-If the scheduled run is active, the quota refuses the second Pod (room for one
-at a time); wait for it to finish.
+If a scheduled run is active, wait for it to finish: two loads at once would
+both read and write dlt's cursor.
 
 **Read the logs.** The load and the transform are the two init containers, in
 that order; the heartbeat is the only regular container. Replace the Pod name
 from `get pods`:
 
 ```bash
-kubectl -n staging logs <pod> -c ingest       # dlt: "loaded N rows into usgs_events"
-kubectl -n staging logs <pod> -c transform    # dbt build: models and tests
-kubectl -n staging logs <pod> -c heartbeat    # "heartbeat sent: HTTP 200"
-kubectl -n staging describe pod <pod>         # exit codes, OOMKilled, events
+kubectl -n prod logs <pod> -c ingest       # dlt: "loaded N rows into usgs_events"
+kubectl -n prod logs <pod> -c transform    # dbt build: models and tests
+kubectl -n prod logs <pod> -c heartbeat    # "heartbeat sent: HTTP 200"
+kubectl -n prod describe pod <pod>         # exit codes, OOMKilled, events
 ```
 
 If `ingest` fails, `transform` never starts and the Pod shows `Init:Error`;
@@ -1328,10 +1330,10 @@ second failure.
 
 **Check the row counts** through the Pod's local socket (no password, no
 port-forward). The socket session is the administrator's, as in the section
-above; the query only reads, and `-d lagom` selects staging's database:
+above; the query only reads, and `-d lagom` selects the pipeline's database:
 
 ```bash
-kubectl -n staging exec postgres-1 -c postgres -- psql -d lagom -c \
+kubectl -n prod exec postgres-1 -c postgres -- psql -d lagom -c \
   "select (select count(*) from bronze.usgs_events) as bronze,
           (select count(*) from silver.stg_usgs__events) as silver,
           (select count(*) from gold.fct_earthquakes) as gold,
@@ -1386,10 +1388,12 @@ CronJob is retired (staging since 2026-11-07): the sensor
 `run_failure_alarm` calls `/fail` with the error, so the check goes down at
 once. The Secret `pipeline-heartbeat` is the same; it reaches the code server
 as `HEARTBEAT_URL` (`platform/infra/dagster-<env>/values.yaml`). The grace
-stays at 20 minutes: Dagster's runs in staging take under a minute (Jobs of
-2026-11-07, 15:30 and 16:00 UTC: 49 and 47 s from Pod start to completion),
-and the sensor evaluates every 30 s, so a healthy ping arrives in the first
-two minutes of the slot. **When Dagster's e-mail arrives:** a `/fail` carries
+stays at 20 minutes. Two samples so far: staging's Jobs of 2026-11-07, 15:30
+and 16:00 UTC, took 49 and 47 s from Pod start to completion, and the sensor
+evaluates every 30 s, so a healthy ping arrives in the first two minutes of
+the slot. A run is stopped at 25 minutes (`activeDeadlineSeconds`). Kubernetes
+keeps a finished Job for an hour only, so the range is re-read from the run
+list in the UI after a week and the grace corrected if a run comes near it. **When Dagster's e-mail arrives:** a `/fail` carries
 the job, the run ID and the error in its body (*Events* of the check in the
 console); a missing ping means no `usgs` run succeeded: check the run list in
 the UI, then *Automation → Sensors* for a failed tick, then the daemon and the
@@ -1398,7 +1402,10 @@ code server Pods.
 **Retire a manifest from `postgres-<env>`.** Those Applications never prune
 (removing the `Cluster` from Git must never delete the database), so deleting
 a file there leaves its object running, marked *requires pruning* in Argo CD.
-Delete it by hand after the change is merged, from the operator's machine:
+Delete it by hand **right after Argo CD has synced the change**, from the
+operator's machine. For the CronJob this is part of the cutover, not a
+clean-up: while it still runs it pings the same check, and its success
+would clear a Dagster `/fail`. Deleting it removes its Jobs and Pods with it:
 
 ```bash
 kubectl -n <namespace> delete cronjob usgs-pipeline
@@ -1907,16 +1914,19 @@ next index:
 6. [Restore the sealing key](#sealed-secrets-m1) — before step 7.
 7. [Apply the root Application](#hand-over-to-argo-cd-m1) and wait for every
    Application to be `Synced/Healthy` and both Postgres `Cluster`s ready.
-8. Run the pipeline [on demand](#staging-the-pipeline-cronjob), staging first,
-   then prod (`kubectl --context <node-name> -n <namespace> create job
-   --from=cronjob/usgs-pipeline usgs-manual-$(date +%s)`). Each Pod must show
+8. Run the pipeline, staging first, then prod. In staging, *Launch run* on
+   the `usgs` job page of [Dagster's UI](#dagster-m3); the run must succeed
+   with `dbt build` reporting `ERROR=0`, and the check must turn *up*. In
+   prod, while its CronJob runs, also run it [on demand](#staging-the-pipeline-cronjob)
+   (`kubectl --context <node-name> -n prod create job
+   --from=cronjob/usgs-pipeline usgs-manual-$(date +%s)`): the Pod must show
    `ingest`, `transform` and `heartbeat` with exit 0, `Done. PASS=… ERROR=0`
    in `transform`, and `heartbeat sent: HTTP 200` in `heartbeat`. With no
    cursor, the first run is the re-load.
-9. Check the row counts (the query in
-   [the CronJob section](#staging-the-pipeline-cronjob)): `bronze >= silver >=
-   gold`. dbt's `reconcile_*` tests already assert the relations between
-   layers in step 8.
+9. In prod, while its CronJob runs, check the Postgres row counts (the query
+   in [the CronJob section](#staging-the-pipeline-cronjob)): `bronze >=
+   silver >= gold`. dbt's `reconcile_*` tests already assert the relations
+   between layers in step 8, on DuckLake as on Postgres.
 10. Nothing to do for the [operator UIs](#operator-uis-behind-cloudflare-access-m3):
     the tunnel's token is sealed in Git and Argo CD starts `cloudflared` in
     step 7. Check that both addresses show the login page.
