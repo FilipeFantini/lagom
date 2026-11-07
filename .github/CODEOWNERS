@@ -15,15 +15,27 @@
 /.github/                         @FilipeFantini
 /tools/                           @FilipeFantini
 
-# Dependencies (installing a package runs its code) and lint configuration.
+# Dependencies (installing a package runs its code). Unanchored: they match
+# in every subproject.
 pyproject.toml                    @FilipeFantini
 uv.lock                           @FilipeFantini
-/platform/warehouse/.sqlfluff     @FilipeFantini
-/platform/warehouse/.sqlfluffignore @FilipeFantini
+
+# Configuration a lint, type or test tool reads, wherever it is put: a nested
+# file takes precedence over the guarded one above it.
+.sqlfluff                         @FilipeFantini
+.sqlfluffignore                   @FilipeFantini
+ruff.toml                         @FilipeFantini
+.ruff.toml                        @FilipeFantini
+mypy.ini                          @FilipeFantini
+.mypy.ini                         @FilipeFantini
+pytest.ini                        @FilipeFantini
+setup.cfg                         @FilipeFantini
+tox.ini                           @FilipeFantini
 
 # Repository configuration that a check or git reads.
-/.gitattributes                   @FilipeFantini
-/.gitleaks.toml                   @FilipeFantini
+.gitattributes                    @FilipeFantini
+.gitleaks.toml                    @FilipeFantini
+.gitleaksignore                   @FilipeFantini
 
 # The rules, the decisions, and the runbook.
 /AGENTS.md                        @FilipeFantini

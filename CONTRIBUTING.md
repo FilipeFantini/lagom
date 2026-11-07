@@ -168,7 +168,10 @@ What it does not enforce:
 
 - **Review of unguarded paths.** Zero approvals are required outside
   `CODEOWNERS`. A pull request there cannot reach the cluster, CI or the rules
-  without touching a guarded path.
+  without touching a guarded path. Code reaches the cluster when a pin under
+  `platform/infra/` moves, so a pin pull request links the comparison
+  `compare/<old-sha>...<new-sha>` of the commits pinned before and after, and
+  that diff is what the operator approves.
 - **A gate approving a change to itself, on the operator's side.** A pull
   request runs the workflow as it edits it, so a change under
   `.github/workflows/` can change what its own required checks do. For the

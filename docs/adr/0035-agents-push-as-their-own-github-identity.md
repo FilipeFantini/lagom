@@ -53,7 +53,9 @@ that asks for "the operator's approval" would be met by the agent itself.
 narrowest token GitHub has — one repository, chosen permissions. Not
 possible: a fine-grained token reaches only repositories owned by its own
 account or organisation, and GitHub lists contributing as a repository
-collaborator as unsupported. `lagom` is owned by the operator's personal
+collaborator as unsupported
+([GitHub docs](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens),
+read 2026-11-07). `lagom` is owned by the operator's personal
 account.
 
 **A GitHub App installed on `lagom`.** Its tokens are scoped to the one
@@ -97,8 +99,11 @@ a change, or state the rules:
 - `platform/infra/` — everything Argo CD applies, both environments;
 - `.github/` (CI and `CODEOWNERS` itself) and `tools/` (the checks CI runs);
 - `pyproject.toml` and `uv.lock` anywhere — installing a package runs its
-  code — and lint configuration (`.sqlfluff`, `.sqlfluffignore`);
-- `.gitattributes` and `.gitleaks.toml`;
+  code — and the configuration files lint, type and test tools read,
+  anywhere (`.sqlfluff`, `ruff.toml`, `mypy.ini`, `pytest.ini` and the like),
+  since a nested one overrides the guarded one above it;
+- `.gitattributes`, and the secret scan's `.gitleaks.toml` and
+  `.gitleaksignore` — the second silences a finding by its fingerprint;
 - the rules: `AGENTS.md`, `CLAUDE.md`, `.claude/`, `CONTRIBUTING.md`,
   `docs/engineering-protocol.md`, `docs/adr/`, `docs/roadmap.md`, and
   `docs/architecture.md`, which holds the runbook the operator runs by hand.
@@ -120,7 +125,11 @@ guarded path, the rule of ADR-0029 Decision 4 holds: green checks and a
 reviewer's APPROVE, then any agent merges. The reviewer's APPROVE remains an
 instruction there, but what such a pull request can change is bounded: it
 cannot reach the cluster, CI, or the rules. An image built from it runs only
-once a guarded pin under `platform/infra/` names its digest.
+once a guarded pin under `platform/infra/` names its digest — so **the pull
+request that moves a pin is where the operator reads the code.** Its
+description links the comparison of the commit last pinned with the new one
+(`https://github.com/FilipeFantini/lagom/compare/<old-sha>...<new-sha>`),
+and the operator approves that diff, not the 64 characters of a digest.
 
 **6. The patch flow stays for an agent without the token** — any agent on a
 runner that has not passed the setup below, and every agent on a harness
@@ -131,7 +140,10 @@ sandbox ([ADR-0029](0029-agents-on-more-than-one-harness.md) Decision 3).
 from the agents' account that touches a guarded path must show the merge
 blocked for want of a code owner's review, and one that touches none must not.
 The order and the commands are in
-[CONTRIBUTING](../../CONTRIBUTING.md#branch-protection).
+[CONTRIBUTING](../../CONTRIBUTING.md#branch-protection). If GitHub does not
+block the guarded pull request — a code owner's review not enforced with the
+approval count at zero — the token is not handed over, and a new ADR chooses
+between one required approval on every pull request and a GitHub App.
 
 ## Consequences
 
@@ -152,6 +164,14 @@ The order and the commands are in
 - **The classic token is broad in kind.** `public_repo` lets the account act
   on any public repository on GitHub — comment, open issues, push to its own
   forks. It can write only where it is a collaborator, which is `lagom` alone.
+- **The cluster runs code the operator approved as a diff, not line by
+  line as it merged.** Pipeline code and Dockerfiles merge unguarded; the
+  human step before they run in staging or prod is the pin pull request
+  (Decision 5). An operator who approves a pin without opening the
+  comparison approves code nobody but an agent read.
+- **Test code is not guarded.** A test can be weakened — or a `conftest.py`
+  can skip tests — in an unguarded pull request; the reviewer is the only
+  control there.
 - **Unguarded code can still run on the Mac.** An agent can merge service or
   test code without the operator reading it, and the operator's session later
   runs those tests on the Mac, which holds the credentials. Dependencies are
