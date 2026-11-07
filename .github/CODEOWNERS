@@ -1,0 +1,36 @@
+# The paths whose change needs the operator's approval on GitHub
+# (docs/adr/0035-agents-push-as-their-own-github-identity.md).
+#
+# The `code owners` ruleset on main requires a code owner's approval for any
+# pull request that touches one of these. The operator is the only code owner;
+# their own pull requests pass through that ruleset's admin bypass.
+#
+# The last matching pattern wins. Every line names the owner, so a later line
+# never removes ownership by accident.
+
+# Everything Argo CD applies to the cluster, both environments.
+/platform/infra/                  @FilipeFantini
+
+# CI, the checks it runs, and this file.
+/.github/                         @FilipeFantini
+/tools/                           @FilipeFantini
+
+# Dependencies (installing a package runs its code) and lint configuration.
+pyproject.toml                    @FilipeFantini
+uv.lock                           @FilipeFantini
+/platform/warehouse/.sqlfluff     @FilipeFantini
+/platform/warehouse/.sqlfluffignore @FilipeFantini
+
+# Repository configuration that a check or git reads.
+/.gitattributes                   @FilipeFantini
+/.gitleaks.toml                   @FilipeFantini
+
+# The rules, the decisions, and the runbook.
+/AGENTS.md                        @FilipeFantini
+/CLAUDE.md                        @FilipeFantini
+/.claude/                         @FilipeFantini
+/CONTRIBUTING.md                  @FilipeFantini
+/docs/adr/                        @FilipeFantini
+/docs/engineering-protocol.md     @FilipeFantini
+/docs/roadmap.md                  @FilipeFantini
+/docs/architecture.md             @FilipeFantini

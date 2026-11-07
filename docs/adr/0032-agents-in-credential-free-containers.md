@@ -8,6 +8,10 @@
   neither.
 - **Amends:** [ADR-0029](0029-agents-on-more-than-one-harness.md) — reverses
   its rejection of Tucano, and adds a second boundary to its Decision 3.
+- **Amended by:** [ADR-0035](0035-agents-push-as-their-own-github-identity.md)
+  — the container may hold one credential, the agents' own GitHub account's
+  token (Decisions 2 and 5), and with it the agent pushes its own work
+  instead of a patch (Decision 4).
 
 ## Context and problem
 

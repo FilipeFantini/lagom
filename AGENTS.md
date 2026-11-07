@@ -139,7 +139,11 @@ decides macro questions.
 request once every required check is green and a reviewer returned APPROVE; a
 sandboxed agent (§10) cannot, so the session that pushed merges. A guardrail change —
 CI, agent definitions or instructions, permissions, RBAC, secrets — also
-needs the operator's explicit go-ahead for that pull request. Workflow detail: [`CONTRIBUTING.md`](CONTRIBUTING.md#workflow).
+needs the operator's explicit go-ahead for that pull request. For an agent
+pushing as the agents' own GitHub account, GitHub enforces it: the paths in
+[`.github/CODEOWNERS`](.github/CODEOWNERS) merge only with the operator's
+approval ([ADR-0035](docs/adr/0035-agents-push-as-their-own-github-identity.md)).
+Workflow detail: [`CONTRIBUTING.md`](CONTRIBUTING.md#workflow).
 
 **Commits** say which model wrote them: end the message with a
 `Co-Authored-By:` line naming the agent and model, so the history shows who did
@@ -200,11 +204,17 @@ credential to get around it — ask the operator instead
 **An agent runner** — a program that runs several agents at once — puts each
 agent's commands in a container with network but no credential, or nowhere;
 never on the Mac itself. The agent clones the public repository inside its
-container, no Mac folder is lent to it, no connector writes to GitHub or
-reaches infrastructure, and its work leaves as a patch file. A session
-outside the runner treats the patch as untrusted input: it follows the ADR's
-steps (list the paths, the operator's go-ahead before applying one that
-touches a guardrail, a fresh worktree, nothing run until it is read), then
-takes it through §6. The agent's instructions in the runner only point it to
-this file. Any runner that passes the ADR's checks may be used
+container, no Mac folder is lent to it, and no connector reaches
+infrastructure. Its work leaves as a patch file, which a session outside the
+runner treats as untrusted input: it follows the ADR's steps (list the paths,
+the operator's go-ahead before applying one that touches a guardrail, a fresh
+worktree, nothing run until it is read), then takes it through §6. The
+agent's instructions in the runner only point it to this file. Any runner
+that passes the ADR's checks may be used
 ([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)).
+
+The one exception to "no credential": once the setup in
+[ADR-0035](docs/adr/0035-agents-push-as-their-own-github-identity.md) is
+shown to work, the container (or the runner's GitHub connector) may hold the
+agents' own GitHub account's token, and the agent pushes and opens its pull
+requests itself. Never the operator's token, and nothing else.

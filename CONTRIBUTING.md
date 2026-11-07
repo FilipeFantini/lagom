@@ -42,7 +42,11 @@ session outside the sandbox commits and pushes its changes
 container that has network but no credential, on its own clone, and hands its
 work over as a patch file; that session treats the patch as untrusted input,
 applies it in a fresh worktree, and opens the pull request
-([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)).
+([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)). Once
+the setup below is shown to work, a runner's agent may instead hold the
+agents' own GitHub account's token and push, open and merge its own pull
+requests, with GitHub requiring the operator's approval for the guarded paths
+([ADR-0035](docs/adr/0035-agents-push-as-their-own-github-identity.md)).
 
 **Agents.** The main Claude session acts as architect. It can hand a scoped
 task to the `implementer` agent
@@ -133,22 +137,49 @@ enforces, with no bypass — the operator follows the same rules:
   2026-10-27);
 - `main` cannot be force-pushed or deleted.
 
+A second ruleset, `code owners`, requires a code owner's approval for any pull
+request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS) —
+what Argo CD applies, CI and its checks, dependencies, and the rules — and
+dismisses that approval when new commits are pushed. The operator is the only
+code owner and cannot approve their own pull requests, so the Repository admin
+role bypasses this ruleset, for pull requests only; the agents' account has
+Write and cannot
+([ADR-0035](docs/adr/0035-agents-push-as-their-own-github-identity.md)).
+
 Inspect what applies with
-`gh api repos/FilipeFantini/lagom/rules/branches/main`.
+`gh api repos/FilipeFantini/lagom/rules/branches/main`, and check
+`CODEOWNERS` for syntax errors with
+`gh api repos/FilipeFantini/lagom/codeowners/errors`.
+
+**Setting up the agents' account,** in this order — each step depends on the
+one before:
+
+1. `CODEOWNERS` is on `main`.
+2. The `code owners` ruleset is active.
+3. The operator creates the machine account `<agent-github-user>` (with
+   two-factor authentication), invites it as a collaborator with the Write
+   role, and creates its classic token: `public_repo` only, at most 90 days.
+4. From that account, a pull request touching a guarded path shows the merge
+   blocked waiting for a code owner's review; one touching no guarded path
+   does not. Both are closed unmerged.
+5. Only then does the token go to the runner.
 
 What it does not enforce:
 
-- **Review.** Zero approvals are required: GitHub does not let authors
-  approve their own pull requests, and there is one developer. Revisit when a
-  second developer joins (M7).
-- **A gate approving a change to itself.** A pull request runs the workflow as
-  it edits it, so a change under `.github/workflows/` can change what its own
-  required checks do. Changes to CI, agent definitions or instructions,
-  permissions, RBAC, and secrets therefore need the operator's explicit go-ahead before merge, by
-  convention ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
+- **Review of unguarded paths.** Zero approvals are required outside
+  `CODEOWNERS`. A pull request there cannot reach the cluster, CI or the rules
+  without touching a guarded path.
+- **A gate approving a change to itself, on the operator's side.** A pull
+  request runs the workflow as it edits it, so a change under
+  `.github/workflows/` can change what its own required checks do. For the
+  agents' account `code owners` blocks that; the operator's pull requests —
+  and a Mac session pushing as the operator — bypass it. Changes to CI, agent
+  definitions or instructions, permissions, RBAC, and secrets therefore need
+  the operator's explicit go-ahead before merge, by convention
+  ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
 - **The reviewer's APPROVE.** Agents may merge after it
   ([`AGENTS.md`](AGENTS.md) §6), but GitHub does not see it: a token that can
-  merge can merge without it.
+  merge an unguarded pull request can merge it without it.
 
 Until 2026-10-27 `main` had no protection: on a private repository it needs a
 paid plan, and the operator accepted that as an exception (2026-10-13) and as
