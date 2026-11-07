@@ -171,8 +171,6 @@ a reload is the simpler and better-tested path.
    - **Hetzner** label `project=robusta`; **Healthchecks.io** checks
      `robusta-usgs-{staging,prod}`. The ping URLs are unchanged, so both
      renames are only labels.
-   - **The private archive repository** becomes `robusta-archive`. GitHub
-     redirects it too. ADR-0017's text keeps the name it had.
 
 6. **What keeps `lagom`:**
    - **The node, `lagom-shared-02`, until it is replaced.** A Kubernetes node's
@@ -180,6 +178,10 @@ a reload is the simpler and better-tested path.
      bound to that name. A renamed node would be a new node with unreachable
      volumes. The next node is `robusta-shared-03`, by the runbook's
      convention.
+   - **The private archive repository, `lagom-data-solutions-archive`.**
+     It is archived on GitHub, so it is read-only
+     ([ADR-0017](0017-public-repository-from-a-snapshot.md)). It is the
+     Lagom-era record, and renaming it would mean unarchiving it first.
    - **History:** superseded and historical ADR text, the ADR index titles,
      past runs and measurements quoted with the names they had, and the
      operator's local clone folder, which is outside the repository.
