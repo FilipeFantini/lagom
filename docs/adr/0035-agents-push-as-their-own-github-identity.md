@@ -5,8 +5,12 @@
 - **Decided by:** the operator, on 2026-11-07: agents in the runner work
   autonomously — they open and merge their own pull requests — from a place
   that does not reach the operator's files; the operator comes in for
-  changes that need special configuration. The paths that need the
-  operator's approval are the architect's proposal, accepted with this ADR.
+  changes that need special configuration. The operator does not read code:
+  they rely on the reviewer and the gates, and approve a guardrail change
+  only when it comes with a clear explanation of what it changes and
+  touches. They chose a machine account over their own repository-scoped
+  token. The paths that need the operator's approval are the architect's
+  proposal, accepted with this ADR.
 - **Amends:** [ADR-0032](0032-agents-in-credential-free-containers.md)
   Decisions 2, 4 and 5; meets the trigger [ADR-0029](0029-agents-on-more-than-one-harness.md)
   deferred ("a GitHub account of its own for agents").
@@ -86,9 +90,14 @@ an expiry of at most 90 days, and no `workflow` scope. Without `workflow`
 GitHub refuses any push that touches `.github/workflows/`. Without
 `write:packages` it cannot publish images; only `images.yml` on `main` does.
 This token is the one credential that may enter an agent's container, or a
-runner's GitHub connector (amending ADR-0032 Decisions 2 and 5). Nothing
-else changes there: no kubeconfig, SSH key, cloud or provider token, and no
-Mac folder lent.
+runner's GitHub connector (amending ADR-0032 Decisions 2 and 5). The
+connector is preferred: in Tucano it talks to GitHub's remote MCP server and
+keeps the token out of the container, so the agent uses the tools without
+ever reading the token. Nothing else changes there: no kubeconfig, SSH key,
+cloud or provider token, and no Mac folder lent. **The operator's own token
+never goes to a runner,** however narrow: on GitHub the operator's identity
+is the code owner, so an agent holding it could approve, or bypass, the very
+gate in Decision 3.
 
 **3. A `CODEOWNERS` file names the operator as owner of the guarded paths**
 ([`.github/CODEOWNERS`](../../.github/CODEOWNERS)), and a second ruleset,
@@ -125,11 +134,17 @@ guarded path, the rule of ADR-0029 Decision 4 holds: green checks and a
 reviewer's APPROVE, then any agent merges. The reviewer's APPROVE remains an
 instruction there, but what such a pull request can change is bounded: it
 cannot reach the cluster, CI, or the rules. An image built from it runs only
-once a guarded pin under `platform/infra/` names its digest — so **the pull
-request that moves a pin is where the operator reads the code.** Its
-description links the comparison of the commit last pinned with the new one
-(`https://github.com/FilipeFantini/lagom/compare/<old-sha>...<new-sha>`),
-and the operator approves that diff, not the 64 characters of a digest.
+once a guarded pin under `platform/infra/` names its digest, so the pull
+request that moves a pin is the operator's step before code runs in the
+cluster.
+
+**The operator does not read code.** Every guarded pull request — a pin
+included — carries a section **For the operator**, in plain words: what
+changes in behaviour, what it touches, what could go wrong, and how to undo
+it. For a pin, "what changes" covers every merged change between the commit
+pinned before and the new one. The operator approves on that section and on
+the reviewer's verdict, and asks for a clearer one rather than approving a
+change they cannot explain.
 
 **6. The patch flow stays for an agent without the token** — any agent on a
 runner that has not passed the setup below, and every agent on a harness
@@ -164,11 +179,12 @@ between one required approval on every pull request and a GitHub App.
 - **The classic token is broad in kind.** `public_repo` lets the account act
   on any public repository on GitHub — comment, open issues, push to its own
   forks. It can write only where it is a collaborator, which is `lagom` alone.
-- **The cluster runs code the operator approved as a diff, not line by
-  line as it merged.** Pipeline code and Dockerfiles merge unguarded; the
-  human step before they run in staging or prod is the pin pull request
-  (Decision 5). An operator who approves a pin without opening the
-  comparison approves code nobody but an agent read.
+- **No human reads the code.** Pipeline code and Dockerfiles merge
+  unguarded, and the operator approves pins and guardrail changes on a
+  plain-language summary. The code is read by reviewer agents only; a
+  summary that is wrong, or written to mislead, is approved as if it were
+  right. The required checks are the only part that does not depend on a
+  model's judgement.
 - **Test code is not guarded.** A test can be weakened — or a `conftest.py`
   can skip tests — in an unguarded pull request; the reviewer is the only
   control there.
