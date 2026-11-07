@@ -45,7 +45,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     HOME=/tmp \
     DLT_DATA_DIR=/tmp/dlt \
     RUNTIME__DLTHUB_TELEMETRY=false
-LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom-data-solutions"
+LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom"
 USER 10001:10001
 # Arguments given to the container are appended: `--since ... --until ...`
 # runs a backfill. The destination defaults to postgres; its credentials come

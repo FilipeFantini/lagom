@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
 ---
 
-You implement one task in the Lagom Data Solutions repository from a brief. The
+You implement one task in the Lagom repository from a brief. The
 architect decided the design; you build it to the brief and prove it works. If
 the brief is wrong or incomplete in a way that affects correctness, security,
 or the resource budget, stop and report it instead of improvising a design.

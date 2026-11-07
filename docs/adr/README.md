@@ -49,3 +49,4 @@ decision, consequences, and how to reverse it.
 | [0027](0027-hourly-wal-archiving-and-14-day-prod-retention.md) | WAL archived hourly, prod backups kept 14 days | Accepted |
 | [0028](0028-dagster-ui-over-the-tailnet.md) | Dagster's UI over the tailnet, by `tailscale serve` on the node | Accepted |
 | [0029](0029-agents-on-more-than-one-harness.md) | Agents on more than one harness: one rulebook, and who may merge | Accepted |
+| [0031](0031-repository-named-lagom.md) | The repository is named `lagom`; a rename to Robusta was tried and reverted | Accepted |

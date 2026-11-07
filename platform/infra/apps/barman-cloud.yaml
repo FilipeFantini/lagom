@@ -16,7 +16,7 @@ spec:
         releaseName: barman-cloud
         valueFiles:
           - $values/platform/infra/barman-cloud/values.yaml
-    - repoURL: https://github.com/FilipeFantini/lagom-data-solutions.git
+    - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values
   destination:

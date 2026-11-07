@@ -130,7 +130,7 @@ enforces, with no bypass — the operator follows the same rules:
 - `main` cannot be force-pushed or deleted.
 
 Inspect what applies with
-`gh api repos/FilipeFantini/lagom-data-solutions/rules/branches/main`.
+`gh api repos/FilipeFantini/lagom/rules/branches/main`.
 
 What it does not enforce:
 
