@@ -265,7 +265,8 @@ The node that M3 needs, and the orchestration every showcase uses.
       same change — a failure sensor that pings the check's `/fail` at once,
       and a success heartbeat for runs that never start, on the CronJob's
       existing check and Secret; staging first. The operator decided on
-      2026-11-07 not to wait for 2026-11-12
+      2026-11-07 not to wait for 2026-11-12. Code merged 2026-11-07 (PR #55);
+      staging switched over the same day, prod next
       ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed;
       [ADR-0026](adr/0026-dagster-one-instance-per-environment.md))
 - [ ] `dbt test` in CI
