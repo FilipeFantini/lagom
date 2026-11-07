@@ -263,14 +263,14 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [x] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
       prod. Staging's first week: 372 of 373 runs succeeded; prod's first run,
       2026-11-05 12:00 UTC, loaded 30 days (10,042 events), `PASS=33`
-- [ ] Native failure alerting, and the CronJobs on Postgres retired in the
+- [x] Native failure alerting, and the CronJobs on Postgres retired in the
       same change — a failure sensor that pings the check's `/fail` at once,
       and a success heartbeat for runs that never start, on the CronJob's
       existing check and Secret; staging first. The operator decided on
       2026-11-07 not to wait for 2026-11-12. Code merged 2026-11-07 (PR #55);
       staging switched over the same day (PR #57) and passed both a ping and a
-      deliberate `/fail`; prod switched next. Ticked once prod's first ping
-      is seen after its CronJob is deleted
+      deliberate `/fail`; prod switched the same day (PR #62), and its first
+      ping came from Dagster at 21:01 UTC, after its CronJob was deleted
       ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md);
       [ADR-0026](adr/0026-dagster-one-instance-per-environment.md))
 - [ ] Retire the images `lagom-usgs` and `lagom-warehouse`: no manifest pins
