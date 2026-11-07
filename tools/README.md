@@ -19,6 +19,13 @@ action without an explicit flag.
 ruff, mypy, and pytest settings, and `uv.lock` pins them. CI runs
 `ruff format --check`, `ruff check`, `mypy --strict`, and `pytest` on it.
 
+`resource_budget.py` renders charts with `helm template`, and
+`manifest_policy.py` uses that same rendering. A release name, chart,
+repository, version or namespace that starts with `-` is refused, and so is a
+values path that leaves the repository: those strings come from the
+Application, and a leading `-` is how `helm template --post-renderer=...` would
+run a program.
+
 ## Manifest policy check
 
 [`manifest_policy.py`](manifest_policy.py) reads every Application in

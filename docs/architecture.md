@@ -237,7 +237,9 @@ read. Its first content is USGS on DuckLake:
 Dagster raises its own alarm through the same Healthchecks.io check
 ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)): a
 sensor pings it after each successful `usgs` run, and another calls its
-`/fail` with the error when any run fails. The sensors are in the code
+`/fail` with the error when any run fails. A password inside that error is
+removed first: DuckDB echoes the catalog URI, and the body is stored and
+e-mailed by Healthchecks.io. The sensors are in the code
 location ([`alarm.py`](../platform/orchestration/lagom_orchestration/alarm.py)).
 **They are live in both environments, and the CronJobs on Postgres are
 retired** (2026-11-07: removed from Git, then deleted by hand, since the
@@ -1227,7 +1229,7 @@ the one the `hello` app already keeps on the node:
 
 ```bash
 kubectl -n staging run nettest --rm -i --quiet --restart=Never \
-  --image=nginxinc/nginx-unprivileged:1.30.5-alpine -- \
+  --image=nginxinc/nginx-unprivileged:1.30.5-alpine@sha256:56b8272e43a0525f67aed68d1e0794a712d10e3e45a563e118e9a77c817e6f86 -- \
   sh -c 'nc -z -w 4 postgres-rw.prod.svc.cluster.local 5432 && echo REACHED || echo BLOCKED'
 ```
 
@@ -1313,7 +1315,8 @@ Each environment's Dagster reports to its own check at Healthchecks.io
 `usgs_success_heartbeat` pings it after each successful `usgs` run, so a
 missing ping is the alarm for "nothing runs"; `run_failure_alarm` calls its
 `/fail` with the job, the run ID and the error as soon as any run fails, so
-the check goes down at once. Until 2026-11-07 the ping came from the
+the check goes down at once. A database password in that error is removed
+before the body is sent; the host remains. Until 2026-11-07 the ping came from the
 CronJob's `heartbeat` container. The account and the checks are made by hand,
 in its console:
 

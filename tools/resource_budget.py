@@ -223,6 +223,34 @@ def _load_yaml(text: str) -> list[dict[str, Any]]:
     return [doc for doc in yaml.safe_load_all(text) if doc]
 
 
+def _helm_token(value: object, label: str) -> str:
+    """One helm CLI argument. A leading `-` would be a flag, not a name.
+
+    `helm template --post-renderer=...` runs a program. Release name, chart,
+    repository, version and namespace all come from the Application, which a
+    pull request can change, so none of them may look like a flag.
+    """
+    if (
+        not isinstance(value, str)
+        or not value
+        or value.startswith("-")
+        or any(char in value for char in "\r\n\x00")
+    ):
+        raise SystemExit(f"{label} {value!r} is not a safe helm argument")
+    return value
+
+
+def _values_file(repo: Path, relative: str) -> Path:
+    """A values path that stays inside `repo` after `..` is resolved."""
+    if relative.startswith(("-", "/")) or "\x00" in relative:
+        raise SystemExit(f"value file {relative!r} is not inside this repository")
+    root = repo.resolve()
+    path = (root / relative).resolve()
+    if not path.is_relative_to(root):
+        raise SystemExit(f"value file {relative!r} is not inside this repository")
+    return path
+
+
 def _render_chart(
     repo: Path, source: dict[str, Any], namespace: str, refs: set[str]
 ) -> list[dict[str, Any]]:
@@ -230,16 +258,18 @@ def _render_chart(
     unsupported = {"values", "valuesObject", "parameters"} & helm.keys()
     if unsupported:
         raise SystemExit(f"chart {source['chart']}: inline {sorted(unsupported)} not supported")
+    chart = _helm_token(source["chart"], "chart")
     command = [
-        "helm", "template", helm.get("releaseName", source["chart"]), source["chart"],
-        "--repo", source["repoURL"], "--version", source["targetRevision"],
-        "--namespace", namespace,
+        "helm", "template", _helm_token(helm.get("releaseName", chart), "release name"), chart,
+        "--repo", _helm_token(source["repoURL"], "chart repository"),
+        "--version", _helm_token(source["targetRevision"], "chart version"),
+        "--namespace", _helm_token(namespace, "namespace"),
     ]  # fmt: skip
     for value_file in helm.get("valueFiles", []):
         ref, _, relative = value_file.removeprefix("$").partition("/")
         if not value_file.startswith("$") or ref not in refs:
             raise SystemExit(f"chart {source['chart']}: value file {value_file} not from this repo")
-        command += ["--values", str(repo / relative)]
+        command += ["--values", str(_values_file(repo, relative))]
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         raise SystemExit(f"helm template failed for {source['chart']}:\n{result.stderr}")

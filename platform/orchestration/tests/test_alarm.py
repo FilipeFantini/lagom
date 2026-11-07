@@ -215,6 +215,59 @@ def test_a_sensor_tick_fails_when_the_check_is_unreachable(sensors) -> None:  # 
     assert SECRET not in str(raised.value)
 
 
+def test_the_url_must_be_https_and_the_message_hides_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(alarm.HEARTBEAT_URL_VAR, "http://hc-ping.invalid/x")
+    with pytest.raises(RuntimeError, match="https") as raised:
+        alarm.heartbeat_url()
+    assert "hc-ping" not in str(raised.value)
+    monkeypatch.setenv(alarm.HEARTBEAT_URL_VAR, "https://user:secret@hc-ping.invalid/x")
+    with pytest.raises(RuntimeError, match="userinfo") as raised:
+        alarm.heartbeat_url()
+    assert "secret" not in str(raised.value)
+
+
+def test_a_redirect_is_not_followed() -> None:
+    with requests_mock.Mocker() as mock:
+        mock.post(URL, status_code=302, headers={"Location": "https://evil.example/collect"})
+        with pytest.raises(RuntimeError, match="HTTP 302"):
+            alarm.send(URL, "body with a detail")
+    assert mock.call_count == alarm.ATTEMPTS
+    assert [call.url for call in mock.request_history] == [URL] * alarm.ATTEMPTS
+
+
+def test_the_failure_body_drops_a_catalog_password(sensors) -> None:  # type: ignore[no-untyped-def]
+    @op
+    def boom_secret() -> None:
+        raise ValueError(
+            "IO Error: Unable to connect to Postgres at "
+            '"postgresql://lagom:s3cret-password@postgres-rw:5432/lagom"'
+        )
+
+    @job
+    def explodes_secret() -> None:
+        boom_secret()
+
+    context = failed_context(explodes_secret)
+    with requests_mock.Mocker() as mock:
+        mock.post(FAIL_URL, text="OK")
+        sensors["run_failure_alarm"](context)
+    text = mock.last_request.text
+    assert "s3cret-password" not in text
+    assert "postgres-rw" in text
+    assert "ValueError" in text
+
+
+def test_redact_secrets_leaves_an_ordinary_error_alone() -> None:
+    from lagom_orchestration.redact import redact_secrets
+
+    assert redact_secrets("disk full") == "disk full"
+    raw = "CREATE SECRET r2 (KEY_ID 'AKIAtestkey', SECRET 'supersecretvalue')"
+    cleaned = redact_secrets(raw)
+    assert "AKIAtestkey" not in cleaned and "supersecretvalue" not in cleaned
+    keyword = redact_secrets("connect password=s3cret host=localhost")
+    assert "s3cret" not in keyword and "localhost" in keyword
+
+
 def test_the_missing_variable_message_shows_no_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(alarm.HEARTBEAT_URL_VAR, "")
     with pytest.raises(RuntimeError) as raised:

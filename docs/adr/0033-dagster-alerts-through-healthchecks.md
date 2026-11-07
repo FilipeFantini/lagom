@@ -143,5 +143,15 @@ Risk: every Pod of a run holds the ping URL (decision 5). It is covered by the
 same defences as the database and R2 credentials beside it: images built by CI
 from reviewed code, pinned by digest, and no inbound port on the node.
 
+Risk: DuckDB repeats the catalog URI, password included, when attaching the
+lake fails (checked on duckdb 1.5.6). The failure sensor removes URI passwords,
+`password=` parameters and DuckDB `SECRET` / `KEY_ID` literals before the body
+is sent, and the maintenance job rewrites such an error before Dagster records
+it. The host stays, so the e-mail still says where the connection failed. The
+ping does not follow a redirect: the check answers directly, and a redirect
+would send the body to another host. `HEARTBEAT_URL` must be https, with a host
+and no userinfo; anything else fails the code location at load, without
+showing the value.
+
 Reversal: restore the CronJob manifests from Git history and remove the two
 sensors; the check and the Secret are the CronJob's again.
