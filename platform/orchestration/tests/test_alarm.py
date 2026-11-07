@@ -111,6 +111,13 @@ def test_the_success_sensor_watches_only_the_usgs_job(sensors) -> None:  # type:
     assert [monitored_job.name for monitored_job in monitored] == ["usgs"]
 
 
+def test_the_failure_sensor_watches_every_job_in_this_location(sensors) -> None:  # type: ignore[no-untyped-def]
+    # No job filter: a failed lake_maintenance run must raise the alarm too.
+    failure = sensors["run_failure_alarm"]
+    assert not failure._monitored_jobs
+    assert not failure._monitor_all_code_locations
+
+
 def test_success_pings_the_check(sensors) -> None:  # type: ignore[no-untyped-def]
     instance = DagsterInstance.ephemeral()
     result = succeeds.execute_in_process(instance=instance)
