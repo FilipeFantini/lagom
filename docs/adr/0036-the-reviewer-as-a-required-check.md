@@ -1,6 +1,6 @@
 # ADR-0036 — The reviewer runs in CI as a required check
 
-- **Status:** Accepted; Decision 6 amended on 2026-11-07 (Sonnet instead of Opus)
+- **Status:** Accepted
 - **Date:** 2026-11-07
 - **Decided by:** the operator, on 2026-11-07: they do not read code and
   rely on the reviewer and the gates, so "every pull request is reviewed"
@@ -10,6 +10,8 @@
 - **Amends:** [ADR-0029](0029-agents-on-more-than-one-harness.md)
   Decision 4 and [ADR-0035](0035-agents-use-the-operators-scoped-token.md)
   Decision 5 — the reviewer's APPROVE stops being an instruction.
+- **Amended by:** [ADR-0037](0037-the-reviewer-runs-on-sonnet.md) — Decision 6:
+  the reviewer runs on Sonnet, not Opus.
 
 ## Context and problem
 
@@ -96,13 +98,6 @@ does not let Actions approve pull requests.
 `CLAUDE_CODE_OAUTH_TOKEN` repository secret made with `claude setup-token`,
 and uses the Opus model: it is the only reader of the code, so it gets the
 strongest model, at the cost of more of the subscription's usage.
-
-*Amended on 2026-11-07, by the operator:* the model is Sonnet, the one
-[`reviewer.md`](../../.claude/agents/reviewer.md) names, not Opus. The
-subscription's usage was near its limit, and every push to a pull request
-spends a review. Accepted trade-off: a weaker reader of the code, the only
-one; raising it back to Opus is a one-line guarded change in
-[`agent-review.yml`](../../.github/workflows/agent-review.yml).
 
 **7. The order of setup:** the workflow on `main`, then the secret, then one
 pull request showing the check run with a verdict, and only then the check

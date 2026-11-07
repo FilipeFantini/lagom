@@ -417,7 +417,8 @@ by its own trigger, like any other piece.
       approves, and requires a For the operator section on guarded changes.
       Decided 2026-11-07; required on `main` the same day, after it posted a
       verdict on test pull request #60; runs on Sonnet
-      ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md))
+      ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md),
+      [ADR-0037](adr/0037-the-reviewer-runs-on-sonnet.md))
 - [ ] **Notion as the one documentation space outside the repository** —
       status, briefs, pending decisions, and site drafts; it links to the
       repository and never restates it. The Obsidian vault leaves the project
