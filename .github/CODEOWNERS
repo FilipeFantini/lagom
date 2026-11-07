@@ -1,0 +1,48 @@
+# The paths whose change needs the operator's approval on GitHub
+# (docs/adr/0035-agents-use-the-operators-scoped-token.md).
+#
+# The `guardrail approval` workflow reads this list with
+# tools/guarded_paths.py: a pull request that touches one of these waits for
+# the operator's approval of the `guardrail` environment. That script reads a
+# subset of the CODEOWNERS format and fails on the rest: no wildcards, no
+# negations, a leading slash for any path with a slash in it, and an owner on
+# every line (a line without one would remove ownership).
+
+# Everything Argo CD applies to the cluster, both environments.
+/platform/infra/                  @FilipeFantini
+
+# CI, the checks it runs, and this file.
+/.github/                         @FilipeFantini
+/tools/                           @FilipeFantini
+
+# Dependencies (installing a package runs its code). Unanchored: they match
+# in every subproject.
+pyproject.toml                    @FilipeFantini
+uv.lock                           @FilipeFantini
+
+# Configuration a lint, type or test tool reads, wherever it is put: a nested
+# file takes precedence over the guarded one above it.
+.sqlfluff                         @FilipeFantini
+.sqlfluffignore                   @FilipeFantini
+ruff.toml                         @FilipeFantini
+.ruff.toml                        @FilipeFantini
+mypy.ini                          @FilipeFantini
+.mypy.ini                         @FilipeFantini
+pytest.ini                        @FilipeFantini
+setup.cfg                         @FilipeFantini
+tox.ini                           @FilipeFantini
+
+# Repository configuration that a check or git reads.
+.gitattributes                    @FilipeFantini
+.gitleaks.toml                    @FilipeFantini
+.gitleaksignore                   @FilipeFantini
+
+# The rules, the decisions, and the runbook.
+/AGENTS.md                        @FilipeFantini
+/CLAUDE.md                        @FilipeFantini
+/.claude/                         @FilipeFantini
+/CONTRIBUTING.md                  @FilipeFantini
+/docs/adr/                        @FilipeFantini
+/docs/engineering-protocol.md     @FilipeFantini
+/docs/roadmap.md                  @FilipeFantini
+/docs/architecture.md             @FilipeFantini

@@ -605,9 +605,12 @@ every change:
    none can.
 3. **A gate never approves a change to itself.** CI, agent definitions or
    instructions, permissions, RBAC, and secrets need the operator's explicit
-   go-ahead before merge. This holds by
-   convention: branch protection requires the checks to pass, but a pull
-   request runs the workflow as it edits it — see
+   go-ahead before merge. GitHub enforces it: a pull request that touches a
+   path in `CODEOWNERS` waits for the operator's approval of the `guardrail`
+   environment, from a workflow that runs from `main`
+   ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md)). The Mac session's token can, as an
+   administrator, edit rulesets and environments; for it the go-ahead also
+   holds by convention — see
    [CONTRIBUTING](../CONTRIBUTING.md#branch-protection).
 4. **A merge needs green required checks and a reviewer's APPROVE**, from a
    session other than the author's; any agent may then merge (ADR-0029, which
@@ -619,4 +622,6 @@ every change:
    access off, so it cannot reach the cluster, GitHub, or the tailnet — or,
    through an agent runner, in a container that holds no credential, so it
    can reach them but not authenticate ([`AGENTS.md`](../AGENTS.md) §10,
-   [ADR-0032](adr/0032-agents-in-credential-free-containers.md)).
+   [ADR-0032](adr/0032-agents-in-credential-free-containers.md)). The one
+   credential a runner may hold is the operator's repository-scoped token,
+   in its GitHub connector ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md)).
