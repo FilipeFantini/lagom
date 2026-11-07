@@ -419,12 +419,13 @@ by its own trigger, like any other piece.
       and approving with the runner's token was refused (403)
       ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md))
 - [x] **The reviewer as a required check** — `agent review` runs the
-      reviewer role in CI from `main` on every pull request, fails unless it
-      approves, and requires a For the operator section on guarded changes.
-      Decided 2026-11-07; required on `main` the same day, after it posted a
-      verdict on test pull request #60; runs on Sonnet
-      ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md),
-      [ADR-0037](adr/0037-the-reviewer-runs-on-sonnet.md))
+      reviewer role in CI from `main` on every pull request, and fails only on
+      a blocker or major finding; a Markdown-only change outside the agents'
+      instructions passes unreviewed. Decided 2026-11-07; required on `main`
+      the same day, after it posted a verdict on test pull request #60; runs
+      on Sonnet ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md),
+      [ADR-0037](adr/0037-the-reviewer-runs-on-sonnet.md),
+      [ADR-0038](adr/0038-leaner-agent-gates.md))
 - [ ] **Notion as the one documentation space outside the repository** —
       status, briefs, pending decisions, and site drafts; it links to the
       repository and never restates it. The Obsidian vault leaves the project
