@@ -51,7 +51,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     HOME=/tmp \
     DO_NOT_TRACK=1
-LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom-data-solutions"
+LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom"
 USER 10001:10001
 # dbt writes compiled SQL, the manifest, and logs; they go under /tmp so the
 # job can run with a read-only root filesystem and an emptyDir at /tmp.

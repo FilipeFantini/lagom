@@ -1,4 +1,4 @@
-# Lagom Data Solutions
+# Lagom
 
 Open-source data stacks doing real analytics on one small server.
 

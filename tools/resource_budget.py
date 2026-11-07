@@ -43,7 +43,7 @@ from typing import Any
 
 import yaml
 
-REPO_URL = "https://github.com/FilipeFantini/lagom-data-solutions.git"
+REPO_URL = "https://github.com/FilipeFantini/lagom.git"
 CEILING_PATTERN = re.compile(r"Ceiling enforced in CI: ([0-9.]+) GB of declared requests")
 
 # Requests counted per Pod replica. A DaemonSet counts once: one node today.

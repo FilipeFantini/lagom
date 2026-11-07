@@ -55,7 +55,7 @@ RUN LAGOM_LAKE_CATALOG=ducklake:parse.ducklake LAGOM_LAKE_DATA_PATH=parse/ \
     dbt parse --project-dir platform/warehouse --profiles-dir platform/warehouse \
       --target lake --log-path /tmp/dbt-logs --quiet \
     && rm -rf /tmp/dbt-logs
-LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom-data-solutions"
+LABEL org.opencontainers.image.source="https://github.com/FilipeFantini/lagom"
 USER 10001:10001
 # No ENTRYPOINT: the Helm chart starts the code server, and the run launcher
 # each run, with a full command that begins with `dagster`. An entrypoint of
