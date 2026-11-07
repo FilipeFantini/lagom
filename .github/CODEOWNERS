@@ -1,12 +1,12 @@
 # The paths whose change needs the operator's approval on GitHub
-# (docs/adr/0035-agents-push-as-their-own-github-identity.md).
+# (docs/adr/0035-agents-use-the-operators-scoped-token.md).
 #
-# The `code owners` ruleset on main requires a code owner's approval for any
-# pull request that touches one of these. The operator is the only code owner;
-# their own pull requests pass through that ruleset's admin bypass.
-#
-# The last matching pattern wins. Every line names the owner, so a later line
-# never removes ownership by accident.
+# The `guardrail approval` workflow reads this list with
+# tools/guarded_paths.py: a pull request that touches one of these waits for
+# the operator's approval of the `guardrail` environment. That script reads a
+# subset of the CODEOWNERS format and fails on the rest: no wildcards, no
+# negations, a leading slash for any path with a slash in it, and an owner on
+# every line (a line without one would remove ownership).
 
 # Everything Argo CD applies to the cluster, both environments.
 /platform/infra/                  @FilipeFantini

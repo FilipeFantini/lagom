@@ -43,10 +43,11 @@ container that has network but no credential, on its own clone, and hands its
 work over as a patch file; that session treats the patch as untrusted input,
 applies it in a fresh worktree, and opens the pull request
 ([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)). Once
-the setup below is shown to work, a runner's agent may instead hold the
-agents' own GitHub account's token and push, open and merge its own pull
-requests, with GitHub requiring the operator's approval for the guarded paths
-([ADR-0035](docs/adr/0035-agents-push-as-their-own-github-identity.md)).
+the setup below is shown to work, a runner's GitHub connector may instead
+hold the operator's fine-grained token for `lagom` alone, and its agents
+push, open and merge their own pull requests, with GitHub requiring the
+operator's approval for the guarded paths
+([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)).
 
 **Agents.** The main Claude session acts as architect. It can hand a scoped
 task to the `implementer` agent
@@ -137,51 +138,56 @@ enforces, with no bypass — the operator follows the same rules:
   2026-10-27);
 - `main` cannot be force-pushed or deleted.
 
-A second ruleset, `code owners`, requires a code owner's approval for any pull
+**The guardrail approval.** Every agent acts as the operator on GitHub, so
+the gate for a guarded change looks at what a token can do, not at who acts
+([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)). A pull
 request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS) —
-what Argo CD applies, CI and its checks, dependencies, and the rules — and
-dismisses that approval when new commits are pushed. The operator is the only
-code owner and cannot approve their own pull requests, so the Repository admin
-role bypasses this ruleset, for pull requests only; the agents' account has
-Write and cannot
-([ADR-0035](docs/adr/0035-agents-push-as-their-own-github-identity.md)).
+what Argo CD applies, CI and its checks, dependencies, and the rules — makes
+the [`guardrail approval`](.github/workflows/guardrail-approval.yml) workflow
+wait on the `guardrail` environment until the operator approves it (the pull
+request's checks → *Review deployments* → *Approve*). Approving needs the
+Deployments permission, which no agent's token holds. The workflow runs from
+`main` (`pull_request_target`), so a pull request cannot remove its own gate,
+and each new push needs a new approval. The operator approves on the pull
+request's **For the operator** section — what changes in behaviour, what it
+touches, what could go wrong, how to undo it, in plain words; for a pin under
+`platform/infra/`, every change merged since the previous pin — not by
+reading code.
 
 Inspect what applies with
-`gh api repos/FilipeFantini/lagom/rules/branches/main`, and check
-`CODEOWNERS` for syntax errors with
-`gh api repos/FilipeFantini/lagom/codeowners/errors`.
+`gh api repos/FilipeFantini/lagom/rules/branches/main` and
+`gh api repos/FilipeFantini/lagom/environments/guardrail`.
 
-**Setting up the agents' account,** in this order — each step depends on the
-one before:
+**Setting up the gate,** in this order — each step depends on the one before:
 
-1. `CODEOWNERS` is on `main`.
-2. The `code owners` ruleset is active.
-3. The operator creates the machine account `<agent-github-user>` (with
-   two-factor authentication), invites it as a collaborator with the Write
-   role, and creates its classic token: `public_repo` only, at most 90 days.
-4. From that account, a pull request touching a guarded path shows the merge
-   blocked waiting for a code owner's review; one touching no guarded path
-   does not. Both are closed unmerged.
-5. Only then does the token go to the runner, into its GitHub connector.
+1. The operator creates the `guardrail` environment with themselves as the
+   required reviewer, *Prevent self-review* off (agents act as the operator),
+   and administrators' bypass off.
+2. [`guardrail-approval.yml`](.github/workflows/guardrail-approval.yml) is on
+   `main`.
+3. A pull request touching a guarded path shows `guardrail approval` waiting
+   for the environment; one touching none shows it passing. Both are closed
+   unmerged.
+4. `guardrail approval` is added to the `main` ruleset's required checks.
+5. The operator creates the runner's token — fine-grained, `lagom` only, at
+   most 90 days: Contents, Pull requests and (optionally) Issues read and
+   write; every other permission *No access*, Administration, Deployments,
+   Environments, Actions, Secrets and Workflows included.
+6. With that token, approving a waiting run fails:
+   `GH_TOKEN=<token> gh api -X POST repos/FilipeFantini/lagom/actions/runs/<run-id>/pending_deployments`
+   with the environment's id, `state=approved` and a comment, is refused.
+7. Only then does the token go into the runner's GitHub connector.
 
 What it does not enforce:
 
-- **Review of unguarded paths.** Zero approvals are required outside
-  `CODEOWNERS`. A pull request there cannot reach the cluster, CI or the rules
-  without touching a guarded path. Code reaches the cluster when a pin under
-  `platform/infra/` moves. Like every guarded pull request, a pin's carries a
-  **For the operator** section in plain words — what changes in behaviour
-  since the last pin, what it touches, what could go wrong, how to undo it —
-  because the operator approves on that section and the reviewer's verdict,
-  not by reading code
-  ([ADR-0035](docs/adr/0035-agents-push-as-their-own-github-identity.md)).
-- **A gate approving a change to itself, on the operator's side.** A pull
-  request runs the workflow as it edits it, so a change under
-  `.github/workflows/` can change what its own required checks do. For the
-  agents' account `code owners` blocks that; the operator's pull requests —
-  and a Mac session pushing as the operator — bypass it. Changes to CI, agent
-  definitions or instructions, permissions, RBAC, and secrets therefore need
-  the operator's explicit go-ahead before merge, by convention
+- **Review of unguarded paths beyond the reviewer.** Zero approvals are
+  required outside `CODEOWNERS`. A pull request there cannot reach the
+  cluster, CI or the rules without touching a guarded path.
+- **The Mac session's restraint.** The operator's Mac session holds a token
+  with `repo` and `workflow` scopes, which as an administrator can edit
+  rulesets and environments. For it, the operator's go-ahead for a change to
+  CI, agent definitions or instructions, permissions, RBAC, and secrets also
+  holds by convention
   ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
 - **The reviewer's APPROVE.** Agents may merge after it
   ([`AGENTS.md`](AGENTS.md) §6), but GitHub does not see it: a token that can
