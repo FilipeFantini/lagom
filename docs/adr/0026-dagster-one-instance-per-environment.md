@@ -135,3 +135,5 @@ without rewriting it.
   superseded the same day by
   [ADR-0030](0030-operator-uis-behind-cloudflare-access.md): each
   environment's UI is at a `getlagom.app` hostname behind an Access login.
+  Before merge, ADR-0030 moved them to `ops.ofantini.com/dagster` and
+  `ops.ofantini.com/dagster-staging` (2026-11-07).

@@ -1378,8 +1378,13 @@ not.
 The operator's tools share one HTTPS address, one path per tool, behind a
 login ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)):
 
-- `https://ops.ofantini.com/dagster` is prod's Dagster;
-- `https://ops.ofantini.com/dagster-staging` is staging's.
+- `https://ops.ofantini.com/dagster/` is prod's Dagster;
+- `https://ops.ofantini.com/dagster-staging/` is staging's.
+
+Bookmark them with the final slash. Without it, Dagster answers with a
+redirect to the address with the slash, and since it does not know the
+request came in over HTTPS, that redirect says `http://`. *Always Use HTTPS*
+at the zone sends the browser back to HTTPS, at the cost of one extra hop.
 
 **What each piece is:**
 
