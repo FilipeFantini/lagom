@@ -28,7 +28,7 @@ data:
         required: true
         teamName: ofantini
         audTag:
-          - <access-aud-tag>
+          - 9d2af5104655e9bb8e5dc4ab037d90fe7399a5738ca9d6c56ce5c9c8508839e1
     # One hostname, one path per tool. `path` is a regular expression on the
     # request's path; the path is passed on unchanged, so each tool serves
     # itself under its prefix (Dagster's pathPrefix in its values.yaml).
