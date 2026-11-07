@@ -84,13 +84,31 @@ can reach the network, but nothing that would let it authenticate.
 **3. The agent clones the public repository inside its own computer.** No
 folder of an existing checkout on the Mac is lent to it.
 
-**4. The agent's work leaves as a patch.** The agent writes `git diff` or
-`git format-patch` output to a file in its folder. A session outside
-Tucano — the operator's Claude Code session, or the operator — reads the
-patch, applies it in its own checkout (`git apply` or `git am`), and then
-commits, pushes, opens the pull request and merges under
-[`AGENTS.md`](../../AGENTS.md) §6. No git command is run on the Mac inside an
-agent's folder, since its `.git` is the agent's.
+**4. The agent's work leaves as a patch, and the patch is untrusted input.**
+The agent writes `git diff` or `git format-patch` output to a file in its
+folder. A session outside Tucano — the operator's Claude Code session, or the
+operator — takes it through these steps, in order:
+
+1. **Copy the patch out as data.** Read the file's bytes into a new file
+   outside the agent's folder. The agent controls that folder, so the "patch"
+   could be a symlink to a file elsewhere on the Mac. No git command is run on
+   the Mac inside an agent's folder, since its `.git` is the agent's.
+2. **List what it touches** with `git apply --stat --summary --check`,
+   before applying anything. The list shows every path and any mode change.
+3. **Stop at a guardrail path.** A patch that touches `.claude/`, `AGENTS.md`,
+   `CLAUDE.md`, `.github/`, `.gitattributes`, anything a check executes (test
+   files, `conftest.py`, scripts, `pyproject.toml`), or sets an executable
+   bit, is a guardrail change: it needs the operator's go-ahead **before it
+   is applied**, not only before merge
+   ([`AGENTS.md`](../../AGENTS.md) §6).
+4. **Apply it in a fresh worktree** (`git apply` or `git am`), never in the
+   operator's main checkout.
+5. **Run nothing from it until the whole patch is read** — no test, build,
+   hook, or agent started in that worktree. Applying writes files; running
+   them is what would put the agent's code on the Mac, which holds the
+   credentials.
+6. Then commit, push, open the pull request and merge under
+   [`AGENTS.md`](../../AGENTS.md) §6.
 
 **5. Connectors are read-only, and none reaches infrastructure.** No Tucano
 connector gets write access to GitHub, and none connects to the cluster,
@@ -114,8 +132,10 @@ reviewer reads the role file.
 - Several agents, in channels, with a harness and model each — the need
   ADR-0029 said would bring back an orchestration layer.
 - Their commands cannot touch the Mac's files or credentials.
-- The boundary does not depend on the harness: Claude Code, Codex or Pi
-  inside Tucano all run in the same credential-free container.
+- The boundary should not depend on the harness. Tucano's README says every
+  reply runs the harness with no built-in tools, so its commands go through
+  the container whatever the harness. The per-harness table confirms it only
+  for Cursor and Grok; see *What it does not check*.
 
 **Negative.**
 
@@ -126,8 +146,11 @@ reviewer reads the role file.
 - **The boundary is the operator's choice in Tucano's settings.** Nothing in
   the repository can check an agent's computer setting, connectors or lent
   folders.
-- **A patch is applied by hand.** Every agent change takes a step from the
-  outside session; an agent cannot open a pull request.
+- **A patch is applied by hand, and read before anything runs.** Every agent
+  change takes several steps from the outside session; an agent cannot open a
+  pull request. The reader may itself be a model, so a large patch, or text
+  in it written to steer the reader, is a risk that the steps above reduce
+  but do not remove.
 - **Checks needing credentials stay outside.** `kubectl diff` against staging
   and anything on GitHub run in the outside session or in CI.
 - **What an agent reads goes to its model provider,** as with every harness.
@@ -144,8 +167,13 @@ reviewer reads the role file.
 ## What it does not check
 
 ([engineering-protocol](../engineering-protocol.md) §18 rule 5.) Nothing
-verifies an agent's computer setting, its connectors, what is lent to it, or
-that it read `AGENTS.md`. The repository's enforced part is unchanged: the
+verifies an agent's computer setting, its connectors, what is lent to it,
+that it read `AGENTS.md`, or that the outside session followed the patch
+steps in Decision 4. That Tucano turns off the built-in shell and files of
+Claude Code, Codex, OpenCode and Pi is taken from its README, not tested
+here; if one kept its own shell, it would run on the Mac as the operator.
+Before an agent uses one of those harnesses for the first time, ask it to run
+`hostname` and `ls ~` and check that the answer comes from the container. The repository's enforced part is unchanged: the
 required checks and the `main` ruleset, which apply to whatever patch the
 outside session pushes.
 

@@ -197,7 +197,10 @@ credential to get around it — ask the operator instead
 credential. Each agent's computer is *Isolated Linux* or *None*, never *This
 computer*. The agent clones the public repository inside its container, no
 Mac folder is lent to it, no connector writes to GitHub or reaches
-infrastructure, and its work leaves as a patch file that a session outside
-Tucano reads, applies, and takes through §6. Its Tucano instructions only
+infrastructure, and its work leaves as a patch file. A session outside
+Tucano treats the patch as untrusted input: it follows the ADR's steps (list
+the paths, the operator's go-ahead before applying one that touches a
+guardrail, a fresh worktree, nothing run until it is read), then takes it
+through §6. Its Tucano instructions only
 point it to this file
 ([ADR-0032](docs/adr/0032-tucano-agents-in-credential-free-containers.md)).
