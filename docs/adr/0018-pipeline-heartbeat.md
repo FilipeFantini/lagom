@@ -2,6 +2,9 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-27
+- **Amended by:** [ADR-0033](0033-dagster-alerts-through-healthchecks.md)
+  (proposed): the check and the Secret pass to Dagster's sensors, which add an
+  immediate `/fail`; the CronJob's `heartbeat` container goes with the CronJob.
 
 ## Context and problem
 

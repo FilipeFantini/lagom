@@ -25,7 +25,7 @@ dbt, Postgres, Dagster.
 | `staging` namespace | M2 — once there is something to promote |
 | Postgres backup | **entered 2026-10-28** ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). The trigger was: Postgres holds state no source can rebuild (Dagster's metastore in M3, a non-replayable source in M6), or someone other than the operator relies on the database itself — the site does not: it serves pages built after each run — [ADR-0019](adr/0019-postgres-backup-deferred.md); accepted as debt, [architecture.md §12](architecture.md#12-accepted-risks) |
 | Object storage (Cloudflare R2) | the SME-stack spike (M3), as the store of DuckLake's data files ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed) |
-| DuckDB and DuckLake (the SME stack) | the spike in M3; the warehouse moves from Postgres when it passes ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; until then [ADR-0008](adr/0008-postgres-for-all-layers.md)) |
+| DuckDB and DuckLake (the SME stack) | the spike in M3; the warehouse moves from Postgres when it passes ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; until then [ADR-0008](adr/0008-postgres-for-all-layers.md)). USGS already runs on DuckLake under Dagster ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), and the Postgres CronJobs retire with Dagster's alarm, before the spike closes ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed); if the spike fails, ADR-0023's reversal applies |
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | Evidence | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
@@ -259,11 +259,13 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [x] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
       prod. Staging's first week: 372 of 373 runs succeeded; prod's first run,
       2026-11-05 12:00 UTC, loaded 30 days (10,042 events), `PASS=33`
-- [ ] Retire the CronJobs on Postgres once Dagster has run a week in prod
-      (from 2026-11-12) and has taken over the alarm
-      ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md),
-      heartbeat)
-- [ ] Native failure alerting
+- [ ] Native failure alerting, and the CronJobs on Postgres retired in the
+      same change — a failure sensor that pings the check's `/fail` at once,
+      and a success heartbeat for runs that never start, on the CronJob's
+      existing check and Secret; staging first. The operator decided on
+      2026-11-07 not to wait for 2026-11-12
+      ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), proposed;
+      [ADR-0026](adr/0026-dagster-one-instance-per-environment.md))
 - [ ] `dbt test` in CI
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
@@ -397,6 +399,10 @@ by its own trigger, like any other piece.
       work handed over as a patch. Any runner that passes the ADR's checks;
       Tucano first. Decided 2026-11-07
       ([ADR-0032](adr/0032-agents-in-credential-free-containers.md))
+- [ ] **Notion as the one documentation space outside the repository** —
+      status, briefs, pending decisions, and site drafts; it links to the
+      repository and never restates it. The Obsidian vault leaves the project
+      ([ADR-0034](adr/0034-notion-as-the-one-documentation-space-outside-the-repo.md), proposed)
 
 ## Repository layout
 
