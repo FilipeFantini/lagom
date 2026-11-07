@@ -55,4 +55,4 @@ decision, consequences, and how to reverse it.
 | [0033](0033-dagster-alerts-through-healthchecks.md) | Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io | Proposed |
 | [0034](0034-notion-as-the-one-documentation-space-outside-the-repo.md) | Notion is the one documentation space outside the repository | Proposed |
 | [0035](0035-agents-use-the-operators-scoped-token.md) | Agents use the operator's repository-scoped token; an environment approval guards what reaches the cluster | Accepted; Decision 5 amended by 0036 |
-| [0036](0036-the-reviewer-as-a-required-check.md) | The reviewer runs in CI as a required check | Accepted |
+| [0036](0036-the-reviewer-as-a-required-check.md) | The reviewer runs in CI as a required check | Accepted; Decision 6 amended: Sonnet, not Opus |

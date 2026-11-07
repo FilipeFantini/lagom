@@ -126,7 +126,7 @@ jobs:
           # published. pr-head/ and review-input/ are inside the workspace.
           # .git/ is denied: git configuration may hold the job's token.
           claude_args: >-
-            --model opus
+            --model sonnet
             --max-turns 40
             --allowedTools "Read(./**)" Grep Glob
             --disallowedTools "Read(./.git/**)" "Read(./pr-head/.git/**)"
