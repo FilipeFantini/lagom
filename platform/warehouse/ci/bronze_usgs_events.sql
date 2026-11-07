@@ -5,7 +5,7 @@
 --   ev_b..  one event per magnitude class and per depth class
 --   ev_blast  a quarry blast: in silver, not in gold
 --   ev_upper  status in capitals, as network pt sends it
---   ev_nocomma  a place with no comma: the region is the whole place
+--   ev_d    'Fiji region', a place with no comma: the region is the whole place
 --   ev_late   after midnight UTC: a second day in the daily aggregate
 create schema if not exists bronze;
 
@@ -43,7 +43,7 @@ insert into bronze.usgs_events values
         '[-72.0, -33.0, 25.0]', 'reviewed', 1, 720, 5, 'orange', 'us', 'https://example.test/ev_e', 'M 6.5 - Chile'),
     ('ev_f', 'earthquake', 7.5, 'mww', '50 km S of Coast, Japan', 1760005000000, 1760005000000,
         '[142.0, 38.0, 30.0]', 'reviewed', 1, 1000, 100, 'red', 'us', 'https://example.test/ev_f', 'M 7.5 - Japan'),
-    ('ev_g', 'earthquake', null, 'mww', '200 km E of Coast, Japan', 1760006000000, 1760006000000,
+    ('ev_g', 'earthquake', 8.2, 'mww', '200 km E of Coast, Japan', 1760006000000, 1760006000000,
         '[144.0, 38.0, 20.0]', 'reviewed', 1, 1100, 200, 'red', 'us', 'https://example.test/ev_g', 'M 8.2 - Japan'),
     ('ev_h', 'earthquake', 0.5, 'ml', '3 km N of Town, Alaska', 1760007000000, 1760007000000,
         '[-150.1, 61.1, 2.0]', 'automatic', 0, 5, null, null, 'ak', 'https://example.test/ev_h', 'M 0.5 - Alaska'),

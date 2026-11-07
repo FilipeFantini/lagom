@@ -134,6 +134,8 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
 
   warehouse:
+    # The name is a required check on `main` (CONTRIBUTING, branch protection),
+    # so it stays as it is although the job now also builds and tests.
     name: warehouse (lint, parse)
     runs-on: ubuntu-latest
     steps:

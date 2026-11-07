@@ -277,7 +277,11 @@ The node that M3 needs, and the orchestration every showcase uses.
       them since the CronJobs went on 2026-11-07. Their rows in
       `.github/workflows/images.yml` and their Dockerfiles went together, the
       same day; their packages stay in GHCR, no longer updated
-- [ ] `dbt test` in CI
+- [x] `dbt test` in CI — `dbt build` on the `lake` target over a 12-row
+      hand-made bronze fixture in a DuckLake on the runner, every pull
+      request: models, contracts, unit and data tests, reconciliations
+      (`PASS=33`, 2026-11-07). What it does not cover is in the
+      [warehouse README](../platform/warehouse/README.md#tests)
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
 
@@ -377,8 +381,8 @@ by its own trigger, like any other piece.
       the four rules and what the check does not cover are in
       [`tools/README.md`](../tools/README.md#manifest-policy-check). Required
       on `main` by the ruleset since 2026-10-27
-- [ ] Data gates — `dbt test` and reconciliation in CI are M2 and M3 items
-      above, not repeated here
+- [x] Data gates — `dbt test` and reconciliation in CI, the M3 item above
+      (2026-11-07)
 - [x] **CI check that prod only pins a digest staging ran** —
       [`tools/promotion_check.py`](../tools/promotion_check.py): every prod
       image pinned by digest, and that digest pinned in staging on `main`

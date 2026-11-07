@@ -49,10 +49,26 @@ fails.
 A reconciliation test reads bronze live. If dlt loads between the silver build
 and the test, it fails for a reason that is not a defect: run the build again.
 
-What the tests do not cover: `dbt parse` in CI reads the project but never
-queries, so only a run against a database proves the SQL, the contract and the
-tests. Dagster runs `dbt build` on the `lake` target after every dlt load, in
-staging and prod ([`platform/orchestration/`](../orchestration/README.md)).
+**In CI**, every pull request runs `dbt build` on the `lake` target over a
+hand-made bronze table, [`ci/bronze_usgs_events.sql`](ci/bronze_usgs_events.sql):
+12 rows, no real data, in a DuckLake on the runner's disk, loaded by
+[`ci/load_fixture.py`](ci/load_fixture.py). No credential, no R2, no Postgres.
+It runs the models, the contracts, the unit tests, the data tests and the
+reconciliations (`PASS=33` on 2026-11-07), with the same dbt and DuckDB
+versions as the image, since dbt-duckdb is locked in
+[`platform/orchestration/`](../orchestration/pyproject.toml). The rows are
+chosen to reach each rule: two revisions of one event, every magnitude and
+depth class, a quarry blast (silver, not gold), a status in capitals, a place
+with no comma, and an event after midnight UTC. A fixture row that breaks a
+test fails the check.
+
+What CI does not cover: `gold_reader_privileges` (it needs a Postgres role, and
+`dbt_project.yml` enables it on the `postgres` target only), freshness, and
+anything only real data shows: a column dlt adds, renames or retypes reaches
+the fixture only when someone edits it, so the first proof of such a change is
+the next run in staging. Dagster runs `dbt build` on the `lake` target after
+every dlt load, in staging and prod
+([`platform/orchestration/`](../orchestration/README.md)).
 The CronJobs that ran it on Postgres were retired on 2026-11-07
 ([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)).
 

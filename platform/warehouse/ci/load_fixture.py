@@ -31,8 +31,10 @@ def main() -> None:
     )
     connection.execute("USE lake")
     connection.execute(sql)
-    rows = connection.execute("select count(*) from bronze.usgs_events").fetchone()
-    print(f"fixture loaded: {rows[0]} rows in bronze.usgs_events", file=sys.stderr)
+    row = connection.execute("select count(*) from bronze.usgs_events").fetchone()
+    if row is None or row[0] == 0:
+        sys.exit("fixture load left bronze.usgs_events empty")
+    print(f"fixture loaded: {row[0]} rows in bronze.usgs_events", file=sys.stderr)
 
 
 if __name__ == "__main__":
