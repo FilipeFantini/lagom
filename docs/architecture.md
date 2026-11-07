@@ -1426,7 +1426,7 @@ the domain, the DNS, the login policy and the tunnel.
 
 1. **Zero Trust → Access controls → Applications → Create new application →
    Self-hosted and private**.
-2. Name: `Robusta operator tools`.
+2. Name: `Lagom operator tools`.
 3. **Add public hostname**: subdomain `ops`, **Domain** `ofantini.com`, path
    empty, so that every path is covered.
 4. **Access policies**: create a new one.
@@ -1467,9 +1467,9 @@ shown:
 ```bash
 brew install cloudflared
 cloudflared tunnel login                  # browser: authorise the zone ofantini.com; writes ~/.cloudflared/cert.pem
-cloudflared tunnel create robusta         # writes ~/.cloudflared/<tunnel-id>.json
-cloudflared tunnel route dns robusta ops.ofantini.com
-cloudflared tunnel token robusta \
+cloudflared tunnel create lagom           # writes ~/.cloudflared/<tunnel-id>.json
+cloudflared tunnel route dns lagom ops.ofantini.com
+cloudflared tunnel token lagom \
   | kubectl create secret generic cloudflared-token -n cloudflared --from-file=token=/dev/stdin --dry-run=client -o yaml \
   | kubeseal --context <node-name> --format yaml > platform/infra/cloudflared/token-sealed.yaml
 grep -c 'token:' platform/infra/cloudflared/token-sealed.yaml   # 1: one sealed key
@@ -1551,7 +1551,7 @@ Set the request in `deployment.yaml` from the figure, as for every component
    - `path: ^/airflow(/.*)?$`;
    - the tool's Service.
 
-   Then bump `robusta.ofantini.com/config-revision` in `deployment.yaml`.
+   Then bump `lagom.dev/config-revision` in `deployment.yaml`.
 3. If the tool runs in `prod`, add a NetworkPolicy like
    `allow-cloudflared-to-dagster-webserver`.
 
