@@ -23,7 +23,7 @@ spec:
         releaseName: dagster
         valueFiles:
           - $values/platform/infra/dagster-staging/values.yaml
-    - repoURL: https://github.com/FilipeFantini/lagom-data-solutions.git
+    - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values
   destination:
