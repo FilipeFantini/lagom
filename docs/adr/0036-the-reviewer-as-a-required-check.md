@@ -12,6 +12,9 @@
   Decision 5 — the reviewer's APPROVE stops being an instruction.
 - **Amended by:** [ADR-0037](0037-the-reviewer-runs-on-sonnet.md) — Decision 6:
   the reviewer runs on Sonnet, not Opus.
+  [ADR-0038](0038-leaner-agent-gates.md) — Decisions 1, 2 and 4: Markdown-only
+  changes pass unreviewed, no re-run on an edit, and the For the operator
+  section no longer blocks.
 
 ## Context and problem
 

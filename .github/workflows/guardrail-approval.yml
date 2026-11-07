@@ -12,16 +12,16 @@
 # gate. Only pull requests into main run it: on another base the workflow and
 # the list would be that branch's, which anyone who can push could edit. A
 # pull request into another branch therefore has no `guardrail approval`
-# check, and `edited` re-runs it when its base is changed to main. Any other
-# edit re-runs it too, so a change to the description after an approval
-# needs a new one. Nothing from the pull request is checked out or run; only
-# its file names are read.
+# check; if its base is changed to main it stays blocked until the next push,
+# which runs the gate from main. Editing the description does not re-run it,
+# so an approval is not lost to a wording fix (ADR-0038). Nothing from the
+# pull request is checked out or run; only its file names are read.
 name: guardrail approval
 
 on:
   pull_request_target:
     branches: [main]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read

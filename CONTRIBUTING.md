@@ -27,10 +27,13 @@ messages.
    its verdict on the pull request
    ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)); a
    reviewer subagent before opening the pull request is optional. Blocker and
-   major findings are fixed before merge. A pull request that touches a path
-   in [`.github/CODEOWNERS`](.github/CODEOWNERS) has a **For the operator**
-   section in its description — what changes in behaviour, what it touches,
-   what could go wrong, how to undo it, in plain words — or the check fails.
+   major findings are fixed before merge; minor ones never block. A change to
+   Markdown only, outside the agents' instructions, passes without a review,
+   to spend less of the Claude subscription
+   ([ADR-0038](docs/adr/0038-leaner-agent-gates.md)). A pull request that
+   touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS) has a **For
+   the operator** section in its description — what changes in behaviour,
+   what it touches, what could go wrong, how to undo it, in plain words.
 5. Merge to `main`. Argo CD converges the cluster. Who may merge — any agent,
    once the required checks are green and a reviewer returned APPROVE, with the
    operator's explicit go-ahead for a guardrail change — is
@@ -150,15 +153,16 @@ enforces, with no bypass — the operator follows the same rules:
 the gate for a guarded change looks at what a token can do, not at who acts
 ([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)). A pull
 request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS) —
-what Argo CD applies, CI and its checks, dependencies, and the rules — makes
+what Argo CD applies, the gates, and the instructions agents follow — makes
 the [`guardrail approval`](.github/workflows/guardrail-approval.yml) workflow
 wait on the `guardrail` environment until the operator approves it (the pull
 request's checks → *Review deployments* → *Approve*). Approving needs the
 Deployments permission, which no agent's token holds. The workflow runs from
 `main` (`pull_request_target`, for pull requests into `main` only), so a pull
-request cannot remove its own gate, and each new push or edit needs a new
-approval. A pull request stacked on another branch has no `guardrail
-approval` check until its base becomes `main`; the change of base re-runs it. The operator approves on the pull
+request cannot remove its own gate, and each new push needs a new approval
+(an edit to the description does not). A pull request stacked on another
+branch has no `guardrail approval` or `agent review` check; once its base
+becomes `main` it stays blocked until its next push. The operator approves on the pull
 request's **For the operator** section — what changes in behaviour, what it
 touches, what could go wrong, how to undo it, in plain words; for a pin under
 `platform/infra/`, every change merged since the previous pin — not by
@@ -192,7 +196,10 @@ What it does not enforce:
 
 - **Review of unguarded paths beyond the reviewer.** Zero approvals are
   required outside `CODEOWNERS`. A pull request there cannot reach the
-  cluster, CI or the rules without touching a guarded path.
+  cluster, the gates or the agents' instructions without touching a guarded
+  path; it can change dependencies and the rules documents (ADRs, roadmap,
+  runbook), which only the reviewer reads
+  ([ADR-0038](docs/adr/0038-leaner-agent-gates.md)).
 - **The Mac session's restraint.** The operator's Mac session holds a token
   with `repo` and `workflow` scopes, which as an administrator can edit
   rulesets and environments. For it, the operator's go-ahead for a change to
