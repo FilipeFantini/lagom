@@ -2,6 +2,9 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-12
+- **Amended by:** [ADR-0034](0034-notion-as-the-one-documentation-space-outside-the-repo.md)
+  (proposed): the Obsidian vault leaves the project's documentation; Notion is
+  the one space outside the repository.
 
 ## Context and problem
 

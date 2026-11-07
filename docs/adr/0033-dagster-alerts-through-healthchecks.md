@@ -4,20 +4,26 @@
 - **Date:** 2026-11-07
 - **Amends:** in [ADR-0026](0026-dagster-one-instance-per-environment.md),
   *Heartbeat*: "native failure alerting or a ping after each successful run"
-  becomes both, through one check; and the CronJobs on Postgres are retired
-  in the change that turns these sensors on, without waiting for 2026-11-12.
+  becomes both, through one check; and *DuckLake*: the CronJobs on Postgres
+  are retired in the change that turns these sensors on, without waiting for
+  a week in prod (2026-11-12) or for
+  [ADR-0023](0023-sme-stack-duckdb-on-ducklake.md) to be accepted or revised.
 
 ## Context and problem
 
-ADR-0026 retires the CronJobs on Postgres once Dagster has run a week in prod
-(from 2026-11-12) and has taken over the alarm. Today the only alarm is the
+ADR-0026 keeps the CronJobs on Postgres running until two conditions hold:
+Dagster has run a week in prod (from 2026-11-12), and ADR-0023 is accepted or
+revised with the spike's numbers. Dagster must also have taken over the alarm. Today the only alarm is the
 CronJob's heartbeat to Healthchecks.io ([ADR-0018](0018-pipeline-heartbeat.md)).
 Dagster's runs are watched in its UI, which tells nobody.
 
-On 2026-11-07 the operator decided not to wait for the week: Dagster has run
+On 2026-11-07 the operator decided to waive both conditions. Dagster has run
 USGS on DuckLake in staging since 2026-10-28 (372 of 373 runs succeeded in the
-first week) and in prod since 2026-11-05, and the CronJobs feed a Postgres
-warehouse nothing reads. What must not happen is a window with no alarm. So the
+first week) and in prod since 2026-11-05. The CronJobs feed a Postgres
+warehouse nothing reads. The spike's open items — Evidence reading the lake,
+compaction, the memory and time comparison — do not need the CronJobs: the
+Postgres side of the comparison is measured once, by hand, from a re-load, if
+ADR-0023 still asks for it. What must not happen is a window with no alarm. So the
 CronJobs go in the same change that turns Dagster's alarm on.
 
 Two kinds of failure have to reach the operator:
@@ -97,9 +103,13 @@ check; one pipeline per environment instead of two.
 
 **Negative.**
 
-- **The Postgres warehouse stops updating** the moment the CronJobs go. Nothing
-  reads it; it is the fallback ADR-0023 names, and it can be rebuilt by a
-  re-load from USGS.
+- **The Postgres warehouse stops updating** the moment the CronJobs go.
+  Nothing reads it. If ADR-0023 is revised instead of accepted, its reversal
+  applies: the dbt models are re-targeted to Postgres and the data loaded
+  back from the Parquet files, or re-loaded from USGS.
+- **The roadmap's warehouse rule changes earlier than planned:** gold lives in
+  DuckLake from this change, while ADR-0023 is still Proposed. The spike
+  decides whether it stays there.
 - **A failure in any job,** compaction included, marks the environment's check
   down until the next successful USGS run. That is deliberate: the check means
   "this environment's pipeline is healthy".
