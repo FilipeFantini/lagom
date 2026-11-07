@@ -13,6 +13,8 @@
   boundary for Decision 3: a container that holds no credential.
   [ADR-0035](0035-agents-push-as-their-own-github-identity.md) — the
   deferred GitHub account of its own for agents is adopted.
+  [ADR-0036](0036-the-reviewer-as-a-required-check.md) — the reviewer's
+  APPROVE in Decision 4 becomes a required check.
 
 ## Context and problem
 

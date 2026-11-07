@@ -14,6 +14,9 @@
 - **Amends:** [ADR-0032](0032-agents-in-credential-free-containers.md)
   Decisions 2, 4 and 5; meets the trigger [ADR-0029](0029-agents-on-more-than-one-harness.md)
   deferred ("a GitHub account of its own for agents").
+- **Amended by:** [ADR-0036](0036-the-reviewer-as-a-required-check.md) — the
+  reviewer's APPROVE in Decision 5 becomes a required check, which also
+  enforces the For the operator section.
 
 ## Context and problem
 
