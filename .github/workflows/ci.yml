@@ -134,6 +134,8 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
 
   warehouse:
+    # The name is a required check on `main` (CONTRIBUTING, branch protection),
+    # so it stays as it is although the job now also builds and tests.
     name: warehouse (lint, parse)
     runs-on: ubuntu-latest
     steps:
@@ -155,3 +157,29 @@ jobs:
           LAGOM_PG_PASSWORD: ci-placeholder
           LAGOM_PG_DBNAME: ci-placeholder
           LAGOM_PG_SSLMODE: disable
+      # The tests, against data. `dbt build` on the `lake` target (DuckDB on a
+      # DuckLake), the target Dagster runs in staging and prod, over a small
+      # hand-made bronze table: it runs the models, the unit tests, the data
+      # tests and the reconciliations. dbt-duckdb lives in the orchestration
+      # project's lockfile, so that is the environment used here, the same
+      # one the image runs. The catalog and the Parquet files are a temporary
+      # directory on the runner: no R2, no Postgres. The R2 variables are
+      # placeholders the profile requires; nothing here opens a connection to
+      # it. `gold_reader_privileges` is not run: it needs a Postgres role, and
+      # dbt_project.yml enables it on the postgres target only.
+      - name: dbt build (lake target, fixture bronze)
+        run: |
+          set -euo pipefail
+          lake="$(mktemp -d)"
+          export LAGOM_LAKE_CATALOG="ducklake:${lake}/catalog.ducklake"
+          export LAGOM_LAKE_DATA_PATH="${lake}/data/"
+          uv run --project platform/orchestration --locked \
+            python platform/warehouse/ci/load_fixture.py
+          uv run --project platform/orchestration --locked dbt build \
+            --target lake --no-partial-parse \
+            --project-dir platform/warehouse --profiles-dir platform/warehouse
+        env:
+          LAGOM_LAKE_METADATA_SCHEMA: main
+          LAGOM_R2_ACCESS_KEY_ID: ci-placeholder
+          LAGOM_R2_SECRET_ACCESS_KEY: ci-placeholder
+          LAGOM_R2_ENDPOINT: https://ci-placeholder.invalid
