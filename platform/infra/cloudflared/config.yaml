@@ -26,7 +26,7 @@ data:
     originRequest:
       access:
         required: true
-        teamName: <team-name>
+        teamName: ofantini
         audTag:
           - <access-aud-tag>
     # One hostname, one path per tool. `path` is a regular expression on the
