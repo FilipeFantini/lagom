@@ -118,15 +118,22 @@ stops the gate instead of opening it.
 
 **4. A guarded pull request waits for the operator's approval of an
 environment.** The [`guardrail approval`](../../.github/workflows/guardrail-approval.yml)
-workflow runs on `pull_request_target`, so it and the list come from `main`
-and a pull request cannot remove its own gate; it reads only the pull
-request's file names, both names of a rename. When one is guarded, a job
+workflow runs on `pull_request_target`, so it and the list come from the
+base branch, and only for pull requests into `main` — on any other base they
+would be that branch's, which the agents' token can push. It re-runs when a
+pull request is edited, so changing a base to `main` starts a fresh run
+against `main`'s list; without that, a pull request opened against a branch
+that already holds a guarded change would pass there and keep its green
+check after being retargeted. It reads only the pull request's file names,
+both names of a rename, and fails when GitHub lists fewer than the pull
+request changes (the API stops at 3000). When one is guarded, a job
 waits on the `guardrail` environment, whose required reviewer is the
 operator, with administrators' bypass turned off. **Approving needs the
 Deployments permission, which the agents' token does not have,** and
 GitHub's MCP server offers no tool for it, so the agent cannot approve for
-the operator although it acts as them. A new push starts a new run and needs
-a new approval. The required check, `guardrail approval`, reports only after
+the operator although it acts as them. A new push, or an edit — of the
+description the operator approved on, too — starts a new run and needs a
+new approval. The required check, `guardrail approval`, reports only after
 that, and fails if the classification did not run — a skipped job would
 otherwise count as passed.
 
