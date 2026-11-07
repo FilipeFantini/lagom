@@ -34,6 +34,7 @@ dbt, Postgres, Dagster.
 | Streamlit | an interactive app a static page cannot serve |
 | Infrastructure observability (metrics and logs), shown on ofantini.com | the USGS showcase is live on ofantini.com (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
 | PgBouncer (CloudNativePG `Pooler`) | first external BI consumer |
+| Credentials per job, and short-lived ones (ingestion writes only bronze, dbt only the layers it builds; a secret store or workload identity in place of static secrets) | a real client, or a second team on the cluster. Today every run Pod holds the catalog owner's password, the R2 write token and the alarm's ping URL ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), decision 5) |
 | Row Level Security | second consumer with segregated data |
 | PostgREST | first API requirement |
 | Metabase, Superset or Lightdash | a client needs ad-hoc, self-service exploration — behind login |

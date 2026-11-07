@@ -53,8 +53,8 @@ because `urllib3`'s debug lines carry the URL's path.
 alarm replaces, arrive in a later change that pins the image built from this
 one. Until then an image with `alarm.py` must not be pinned in any environment.
 Run Pods import this same module, so they too refuse to load without the
-variable; ADR-0033 keeps it out of them, and how to reconcile the two is
-settled in that change.
+variable. They receive it with the rest of the code server's environment, as
+ADR-0033 decision 5 records.
 
 **Configuration** comes from the environment, set on the code server and on
 every run Pod:
@@ -64,7 +64,7 @@ every run Pod:
 | `DESTINATION__DUCKLAKE__CREDENTIALS__*` | dlt's DuckLake destination: catalog, storage, R2 keys, metadata schema |
 | `LAGOM_LAKE_CATALOG`, `LAGOM_LAKE_DATA_PATH`, `LAGOM_LAKE_METADATA_SCHEMA` | the same lake, for dbt and maintenance |
 | `LAGOM_R2_ACCESS_KEY_ID`, `LAGOM_R2_SECRET_ACCESS_KEY`, `LAGOM_R2_ENDPOINT` | the environment's R2 token |
-| `HEARTBEAT_URL` | the check's ping URL (a secret): required by the code location; ADR-0033 wants it on the code server only |
+| `HEARTBEAT_URL` | the check's ping URL (a secret): required by the code location; run Pods inherit it (ADR-0033 decision 5) |
 
 **Run it locally** against a DuckLake on disk, with no R2 and no secret. dlt
 honours a metadata schema only for a SQL catalog, so a local file uses
