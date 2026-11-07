@@ -61,7 +61,7 @@ through it.
 | Resource | Role |
 |---|---|
 | Hetzner CAX21 (4 ARM vCPU, 8 GB), `lagom-shared-02` in `fsn1` | control plane and main node; hosts the prod and staging namespaces since 2026-10-28 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)) |
-| Hetzner CAX11 (2 ARM vCPU, 4 GB), `lagom-shared-01` in `nbg1` | the previous node, retired by the checklist in the runbook (*Disaster recovery*) |
+| Hetzner CAX11 (2 ARM vCPU, 4 GB), `lagom-shared-01` in `nbg1` | the previous node, deleted on 2026-11-07 by the checklist in the runbook (*Disaster recovery*) |
 | Raspberry Pi 3B (1 GB) | edge agent node, streaming collector |
 | `ofantini.com` domain, registered and served by Cloudflare | public entry: the site at the apex (M4), the operator's tools at `ops.ofantini.com`. It replaced `getlagom.app` on 2026-11-07 ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)) |
 

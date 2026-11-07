@@ -222,8 +222,9 @@ The node that M3 needs, and the orchestration every showcase uses.
       ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Done 2026-10-28: 20 min
       31 s from the first command on the node to prod's first green run
       ([runbook](architecture.md#disaster-recovery))
-- [ ] Delete `lagom-shared-01` — by the checklist in the
-      [runbook](architecture.md#retire-the-old-node)
+- [x] Delete `lagom-shared-01` — by the checklist in the
+      [runbook](architecture.md#retire-the-old-node); deleted by the operator
+      on 2026-11-07
 - [x] Runbook: disaster recovery, written from the drill
 - [ ] Runbook: secret rotation — the drill rotated nothing, so it is written
       when a credential is first rotated
