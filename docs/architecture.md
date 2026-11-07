@@ -352,20 +352,18 @@ outside this repository, or a rendered image without a tag or digest (this
 repository's own images need a digest); what it does not check is in
 [`tools/README.md`](../tools/README.md#manifest-policy-check).
 
-**Images.** Three, built by [`images.yml`](../.github/workflows/images.yml) on a
-native arm64 runner:
+**Images.** One, built by [`images.yml`](../.github/workflows/images.yml) on a
+native arm64 runner: `ghcr.io/filipefantini/lagom-orchestration`, the Dagster
+code location, [`platform/orchestration/Dockerfile`](../platform/orchestration/Dockerfile).
+It is built from the repository root and bundles every service's code and the
+dbt project. Until 2026-11-07 two more were built, `lagom-usgs` (dlt) and
+`lagom-warehouse` (`dbt build`), for the CronJobs on Postgres; they were
+retired with them ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)).
+Their packages stay in GHCR, no longer updated or pinned.
 
-- `ghcr.io/filipefantini/lagom-usgs`: the dlt pipeline,
-  [`services/usgs/Dockerfile`](../services/usgs/Dockerfile).
-- `ghcr.io/filipefantini/lagom-warehouse`: `dbt build`,
-  [`platform/warehouse/Dockerfile`](../platform/warehouse/Dockerfile).
-- `ghcr.io/filipefantini/lagom-orchestration`: the Dagster code location,
-  [`platform/orchestration/Dockerfile`](../platform/orchestration/Dockerfile).
-  It is built from the repository root.
-
-A pull request builds and smoke-tests them without pushing. A push to `main`
-publishes them tagged with the commit SHA, and the digest is printed in the
-run summary. Each image:
+A pull request builds and smoke-tests it without pushing. A push to `main`
+publishes it tagged with the commit SHA, and the digest is printed in the
+run summary. The image:
 
 - is multi-stage, with uv only in the build stage;
 - is pinned by digest at the base;
