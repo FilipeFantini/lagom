@@ -677,9 +677,15 @@ the node allows, not a budget to fill (§1).
   tested (runbook, *Backup and restore*). Retention deleted its first expired
   backup on 2026-11-05 (ADR-0025 notes). Still unproven: a rebuild of the node
   that restores from the bucket, instead of re-loading, has not been run.
-- **Changes to the gates themselves are protected by convention only.**
-  Branch protection (since 2026-10-27) requires the checks to pass, but a pull
-  request runs the workflow as it edits it — see
+- **Changes to the gates themselves are protected by convention only, for
+  the operator.** Branch protection (since 2026-10-27) requires the checks to
+  pass, but a pull request runs the workflow as it edits it. A change to the
+  gates touches a guarded path, so it waits for the operator's approval of
+  the `guardrail` environment, which no agent's token can give
+  ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md)), and the reviewer runs from `main`, out of a pull
+  request's reach ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md)).
+  The Mac session's token can, as an administrator, edit rulesets and
+  environments; for it the gates hold by convention — see
   [CONTRIBUTING](../CONTRIBUTING.md#branch-protection).
 
 ## 13. Runbook

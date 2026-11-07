@@ -129,7 +129,13 @@ Smallest coherent change that solves the problem. No unrelated refactoring.
 **Roles.** The session the operator talks to is the architect: it designs,
 writes briefs, and decides. Scoped implementation can go to an `implementer`,
 and **every pull request is reviewed by a `reviewer` before merge** — no need to
-be asked. The roles are written in [`.claude/agents/`](.claude/agents/) as plain
+be asked. GitHub enforces it: the `agent review` check runs the reviewer role
+in CI and is required on `main`
+([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)). A pull
+request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS)
+carries a **For the operator** section — what changes, what it touches, what
+could go wrong, how to undo it, in plain words — since the operator approves
+on it, not on the code. The roles are written in [`.claude/agents/`](.claude/agents/) as plain
 instructions: Claude Code runs them as subagents; on another harness, start a
 separate agent session whose first instruction is to read and follow the role
 file. A reviewer is never the session that wrote the change. The operator
@@ -139,7 +145,11 @@ decides macro questions.
 request once every required check is green and a reviewer returned APPROVE; a
 sandboxed agent (§10) cannot, so the session that pushed merges. A guardrail change —
 CI, agent definitions or instructions, permissions, RBAC, secrets — also
-needs the operator's explicit go-ahead for that pull request. Workflow detail: [`CONTRIBUTING.md`](CONTRIBUTING.md#workflow).
+needs the operator's explicit go-ahead for that pull request. GitHub enforces
+it: a pull request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS)
+waits for the operator's approval of the `guardrail` environment, which no
+agent's token can give ([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)).
+Workflow detail: [`CONTRIBUTING.md`](CONTRIBUTING.md#workflow).
 
 **Commits** say which model wrote them: end the message with a
 `Co-Authored-By:` line naming the agent and model, so the history shows who did
@@ -200,11 +210,18 @@ credential to get around it — ask the operator instead
 **An agent runner** — a program that runs several agents at once — puts each
 agent's commands in a container with network but no credential, or nowhere;
 never on the Mac itself. The agent clones the public repository inside its
-container, no Mac folder is lent to it, no connector writes to GitHub or
-reaches infrastructure, and its work leaves as a patch file. A session
-outside the runner treats the patch as untrusted input: it follows the ADR's
-steps (list the paths, the operator's go-ahead before applying one that
-touches a guardrail, a fresh worktree, nothing run until it is read), then
-takes it through §6. The agent's instructions in the runner only point it to
-this file. Any runner that passes the ADR's checks may be used
+container, no Mac folder is lent to it, and no connector reaches
+infrastructure. Its work leaves as a patch file, which a session outside the
+runner treats as untrusted input: it follows the ADR's steps (list the paths,
+the operator's go-ahead before applying one that touches a guardrail, a fresh
+worktree, nothing run until it is read), then takes it through §6. The
+agent's instructions in the runner only point it to this file. Any runner
+that passes the ADR's checks may be used
 ([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)).
+
+The one exception to "no credential": once the gate in
+[ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md) is shown to work, the runner's GitHub connector —
+not the container — may hold the operator's fine-grained token for `lagom`
+alone, with only the permissions the ADR lists (never Administration,
+Deployments or Workflows), and the agent pushes, opens and merges its own
+pull requests. Nothing else, and never the Mac session's broader token.

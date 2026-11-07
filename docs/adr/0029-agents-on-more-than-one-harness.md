@@ -11,6 +11,10 @@
 - **Amended by:** [ADR-0032](0032-agents-in-credential-free-containers.md)
   — agent runners (Tucano, rejected below, first) are adopted with a second
   boundary for Decision 3: a container that holds no credential.
+  [ADR-0035](0035-agents-use-the-operators-scoped-token.md) — the go-ahead for a guardrail change in Decision 4
+  is enforced by an environment approval no agent's token can give.
+  [ADR-0036](0036-the-reviewer-as-a-required-check.md) — the reviewer's
+  APPROVE in Decision 4 becomes a required check.
 
 ## Context and problem
 

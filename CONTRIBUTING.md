@@ -23,9 +23,14 @@ messages.
    ([`.claude/agents/reviewer.md`](.claude/agents/reviewer.md)): an
    independent pass that runs the adversarial review of
    [`docs/engineering-protocol.md`](docs/engineering-protocol.md) §12 Phase E.
-   Blocker and major findings are fixed before merge. GitHub does not let an
-   author approve their own pull request, so the architect posts the verdict
-   with `gh pr review --comment`.
+   The required `agent review` check runs it in CI on every push and posts
+   its verdict on the pull request
+   ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)); a
+   reviewer subagent before opening the pull request is optional. Blocker and
+   major findings are fixed before merge. A pull request that touches a path
+   in [`.github/CODEOWNERS`](.github/CODEOWNERS) has a **For the operator**
+   section in its description — what changes in behaviour, what it touches,
+   what could go wrong, how to undo it, in plain words — or the check fails.
 5. Merge to `main`. Argo CD converges the cluster. Who may merge — any agent,
    once the required checks are green and a reviewer returned APPROVE, with the
    operator's explicit go-ahead for a guardrail change — is
@@ -42,7 +47,12 @@ session outside the sandbox commits and pushes its changes
 container that has network but no credential, on its own clone, and hands its
 work over as a patch file; that session treats the patch as untrusted input,
 applies it in a fresh worktree, and opens the pull request
-([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)).
+([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)). Once
+the setup below is shown to work, a runner's GitHub connector may instead
+hold the operator's fine-grained token for `lagom` alone, and its agents
+push, open and merge their own pull requests, with GitHub requiring the
+operator's approval for the guarded paths
+([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)).
 
 **Agents.** The main Claude session acts as architect. It can hand a scoped
 task to the `implementer` agent
@@ -127,28 +137,81 @@ enforces, with no bypass — the operator follows the same rules:
 - the CI checks above must pass, named exactly as their jobs report:
   `tools (lint, types, tests)`, `services (lint, types, tests)`,
   `warehouse (lint, parse)`, `secret scan`, `resource budget`,
-  `promotion (prod pins only staging's digests)`, and `manifest policy` — a
-  renamed job must be renamed in the ruleset too, or every pull request waits
-  for a check that never reports (`manifest policy` joined the ruleset on
-  2026-10-27);
+  `promotion (prod pins only staging's digests)`, `manifest policy`,
+  `guardrail approval` and `agent review` — a renamed job must be renamed in
+  the ruleset too, or every pull request waits for a check that never reports
+  (`manifest policy` joined the ruleset on 2026-10-27; `guardrail approval`
+  and `agent review` on 2026-11-07, after the setup tests below);
 - `main` cannot be force-pushed or deleted.
 
+**The guardrail approval.** Every agent acts as the operator on GitHub, so
+the gate for a guarded change looks at what a token can do, not at who acts
+([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)). A pull
+request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS) —
+what Argo CD applies, CI and its checks, dependencies, and the rules — makes
+the [`guardrail approval`](.github/workflows/guardrail-approval.yml) workflow
+wait on the `guardrail` environment until the operator approves it (the pull
+request's checks → *Review deployments* → *Approve*). Approving needs the
+Deployments permission, which no agent's token holds. The workflow runs from
+`main` (`pull_request_target`, for pull requests into `main` only), so a pull
+request cannot remove its own gate, and each new push or edit needs a new
+approval. A pull request stacked on another branch has no `guardrail
+approval` check until its base becomes `main`; the change of base re-runs it. The operator approves on the pull
+request's **For the operator** section — what changes in behaviour, what it
+touches, what could go wrong, how to undo it, in plain words; for a pin under
+`platform/infra/`, every change merged since the previous pin — not by
+reading code.
+
 Inspect what applies with
-`gh api repos/FilipeFantini/lagom/rules/branches/main`.
+`gh api repos/FilipeFantini/lagom/rules/branches/main` and
+`gh api repos/FilipeFantini/lagom/environments/guardrail`.
+
+**Setting up the gate** (done on 2026-11-07), in this order — each step depends on the one before:
+
+1. The operator creates the `guardrail` environment with themselves as the
+   required reviewer, *Prevent self-review* off (agents act as the operator),
+   and administrators' bypass off.
+2. [`guardrail-approval.yml`](.github/workflows/guardrail-approval.yml) is on
+   `main`.
+3. A pull request touching a guarded path shows `guardrail approval` waiting
+   for the environment; one touching none shows it passing. Both are closed
+   unmerged.
+4. `guardrail approval` is added to the `main` ruleset's required checks.
+5. The operator creates the runner's token — fine-grained, `lagom` only, at
+   most 90 days: Contents, Pull requests and (optionally) Issues read and
+   write; every other permission *No access*, Administration, Deployments,
+   Environments, Actions, Secrets and Workflows included.
+6. With that token, approving a waiting run fails:
+   `GH_TOKEN=<token> gh api -X POST repos/FilipeFantini/lagom/actions/runs/<run-id>/pending_deployments`
+   with the environment's id, `state=approved` and a comment, is refused.
+7. Only then does the token go into the runner's GitHub connector.
 
 What it does not enforce:
 
-- **Review.** Zero approvals are required: GitHub does not let authors
-  approve their own pull requests, and there is one developer. Revisit when a
-  second developer joins (M7).
-- **A gate approving a change to itself.** A pull request runs the workflow as
-  it edits it, so a change under `.github/workflows/` can change what its own
-  required checks do. Changes to CI, agent definitions or instructions,
-  permissions, RBAC, and secrets therefore need the operator's explicit go-ahead before merge, by
-  convention ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
-- **The reviewer's APPROVE.** Agents may merge after it
-  ([`AGENTS.md`](AGENTS.md) §6), but GitHub does not see it: a token that can
-  merge can merge without it.
+- **Review of unguarded paths beyond the reviewer.** Zero approvals are
+  required outside `CODEOWNERS`. A pull request there cannot reach the
+  cluster, CI or the rules without touching a guarded path.
+- **The Mac session's restraint.** The operator's Mac session holds a token
+  with `repo` and `workflow` scopes, which as an administrator can edit
+  rulesets and environments. For it, the operator's go-ahead for a change to
+  CI, agent definitions or instructions, permissions, RBAC, and secrets also
+  holds by convention
+  ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
+- **That the reviewer is right.** `agent review` is required since
+  2026-11-07, so no pull request merges without its APPROVE; whether the
+  verdict is correct rests on a model
+  ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)).
+
+**Making `agent review` required** (done on 2026-11-07), in this order
+([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md) Decision 7):
+
+1. [`agent-review.yml`](.github/workflows/agent-review.yml) is on `main`
+   (it runs on `pull_request_target`, so it reviews nothing before then).
+2. The operator creates a token with `claude setup-token` and stores it as
+   the repository secret `CLAUDE_CODE_OAUTH_TOKEN`.
+3. A pull request shows the `agent review` check run with a verdict comment.
+4. Only then is `agent review` added to the `main` ruleset's required checks;
+   a required check that never reports blocks every pull request.
 
 Until 2026-10-27 `main` had no protection: on a private repository it needs a
 paid plan, and the operator accepted that as an exception (2026-10-13) and as
