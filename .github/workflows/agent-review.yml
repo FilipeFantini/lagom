@@ -119,10 +119,12 @@ jobs:
           # Read is scoped to the workspace: a bare `Read` reaches any file on
           # the runner, /proc included, and what the reviewer writes is
           # published. pr-head/ and review-input/ are inside the workspace.
+          # .git/ is denied: git configuration may hold the job's token.
           claude_args: >-
             --model opus
             --max-turns 40
             --allowedTools "Read(./**)" Grep Glob
+            --disallowedTools "Read(./.git/**)" "Read(./pr-head/.git/**)"
             --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["APPROVE","REQUEST_CHANGES"]},"guarded":{"type":"boolean"},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"string"}}},"required":["verdict","guarded","summary","findings"],"additionalProperties":false}'
 
       # Written by this step, not by the reviewer, from its structured output.
