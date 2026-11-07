@@ -254,3 +254,24 @@ paid.
 3. Delete the DNS record, the Access application and the tunnel in
    Cloudflare.
 4. Remove `pathPrefix` and the probe path from each Dagster's `values.yaml`.
+
+## Notes
+
+The text above is kept as decided. These notes record what changed since,
+without rewriting it.
+
+- **2026-11-07 — live and verified.** After the merge (PR #46), Argo CD
+  showed `cloudflared`, `dagster-prod` and `dagster-staging` Synced and
+  Healthy. `cloudflared` registered four connections to Cloudflare's edge.
+  Both webservers became ready with their prefixed probe
+  (`/dagster/server_info`, `/dagster-staging/server_info`). Without a login,
+  `https://ops.ofantini.com/dagster/`, `/dagster-staging/` and `/` each
+  answered 302 to the Access login page, whose `kid` matched the audience
+  tag in `config.yaml`. The operator logged in from a private window with the
+  e-mail code and used Dagster under both prefixes. An address outside the
+  policy saw "code sent" and received nothing. That is Access's intended
+  behaviour: it does not reveal which addresses are allowed.
+  - **Memory:** `cloudflared` used 24 MiB at start and 31 MiB a few minutes
+    later, idle, against its 48 MiB request. It is re-measured after a week.
+  - **Cleanup:** the operator deleted the Service `dagster-ui-tailnet` left by
+    ADR-0028, and the tunnel's local credentials on the Mac.

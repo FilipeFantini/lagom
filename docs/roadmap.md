@@ -250,11 +250,12 @@ The node that M3 needs, and the orchestration every showcase uses.
       location first (image `lagom-orchestration`), then each environment's
       instance, staging before prod. Staging since 2026-10-28, prod since
       2026-11-05 ([runbook](architecture.md#dagster-m3))
-- [ ] Dagster's UI at `ops.ofantini.com/dagster` and
+- [x] Dagster's UI at `ops.ofantini.com/dagster` and
       `ops.ofantini.com/dagster-staging` behind a Cloudflare Access login, instead of
       `kubectl port-forward`
       ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md);
-      [runbook](architecture.md#operator-uis-behind-cloudflare-access-m3))
+      [runbook](architecture.md#operator-uis-behind-cloudflare-access-m3)).
+      Live since 2026-11-07; the operator logged in to both
 - [x] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
       prod. Staging's first week: 372 of 373 runs succeeded; prod's first run,
       2026-11-05 12:00 UTC, loaded 30 days (10,042 events), `PASS=33`
