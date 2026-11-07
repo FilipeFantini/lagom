@@ -442,3 +442,4 @@ nothing on the VPS.
 under `services/` and one under `platform/warehouse/models/`, and changes
 nothing else. If a new source ever requires touching more, the layout needs
 revisiting — with a new ADR.
+
