@@ -97,7 +97,9 @@ a reload is the simpler and better-tested path.
      Kubernetes convention a prefix is a DNS name, so that it cannot collide
      with anyone else's. `lagom.dev` was never the project's, and
      `robusta.dev` belongs to an unrelated Kubernetes project, so the prefix
-     is under the operator's domain. Only repository code reads it, so every
+     is under the operator's domain. That domain is public in this repository
+     by the operator's decision in ADR-0030, which adds it to `AGENTS.md`'s
+     exposure exceptions. Only repository code reads the annotation, so every
      reader changes in this same commit.
 
    Until stage 3, `main`'s manifests still pin the `lagom-*` digests and

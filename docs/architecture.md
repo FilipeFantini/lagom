@@ -8,7 +8,10 @@ The project is Robusta, called Lagom until 2026-11-07. The rename moves in
 stages ([ADR-0031](adr/0031-rename-to-robusta.md)): names still spelled
 `lagom` in this document — the node, the Tailscale tag, the R2 buckets, the
 databases, roles and Secrets — are the ones whose stage has not run yet, and
-the ADR says when each one does.
+the ADR says when each one does. The other way round holds too: the code
+already uses the `ROBUSTA_*` variables, the module `robusta_orchestration` and
+the run tag `robusta/pipeline`, while each environment's manifests keep the
+`lagom` names until its stage 3 pull request pins the renamed images.
 
 ---
 
@@ -367,7 +370,7 @@ native arm64 runner:
 Until 2026-11-07 they were published as `lagom-usgs`, `lagom-warehouse` and
 `lagom-orchestration`. Staging and prod keep pinning those digests until the
 renamed images are promoted like any new image, staging first
-([ADR-0031](adr/0031-rename-to-robusta.md), decision 5); the old packages stay
+([ADR-0031](adr/0031-rename-to-robusta.md), decision 4); the old packages stay
 in GHCR until then, as the rollback.
 
 A pull request builds and smoke-tests them without pushing. A push to `main`

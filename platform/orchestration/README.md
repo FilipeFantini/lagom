@@ -3,6 +3,11 @@
 The platform's Dagster code location ([ADR-0026](../../docs/adr/0026-dagster-one-instance-per-environment.md)).
 One image, `robusta-orchestration`, runs both the code server and every run Pod.
 
+Staging and prod still run the image published as `lagom-orchestration`,
+with the `LAGOM_*` variables, `-m lagom_orchestration.definitions` and the
+tag `lagom/pipeline` in their manifests, until each one pins the renamed image
+([ADR-0031](../../docs/adr/0031-rename-to-robusta.md), stage 3).
+
 | Path | What it is |
 |---|---|
 | `robusta_orchestration/definitions.py` | The `Definitions`: each service's assets, the dbt project as assets, the jobs and their schedules |
