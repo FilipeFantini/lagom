@@ -31,6 +31,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # to post the verdict as a comment; it cannot approve
+    env:
+      # Claude Code loads a CLAUDE.md it finds under a folder it reads as
+      # project instructions; one inside pr-head/ would let the pull request
+      # instruct its own reviewer. The role is read explicitly instead.
+      CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1"
     steps:
       # A pull request from a fork comes from someone without write access.
       # It fails here instead of being skipped: a skipped required check
@@ -75,9 +80,13 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          # The step summary is public on a public repository; the verdict is
+          # posted by the step below, after a check for leaked tokens.
+          display_report: "false"
           prompt: |
             You are the reviewer defined in .claude/agents/reviewer.md. Read
-            it and follow it, with the changes below for running in CI.
+            it and AGENTS.md, and follow them, with the changes below for
+            running in CI.
 
             You review pull request #${{ github.event.pull_request.number }}
             of ${{ github.repository }}. The workspace root is main. The pull
@@ -107,12 +116,13 @@ jobs:
             Return the structured output: your verdict, whether the change is
             guarded, a summary of at most five sentences in plain words, and
             each finding as one string in the format of reviewer.md.
+          # Read is scoped to the workspace: a bare `Read` reaches any file on
+          # the runner, /proc included, and what the reviewer writes is
+          # published. pr-head/ and review-input/ are inside the workspace.
           claude_args: >-
             --model opus
             --max-turns 40
-            --allowedTools Read,Grep,Glob
-            --add-dir pr-head
-            --add-dir review-input
+            --allowedTools "Read(./**)" Grep Glob
             --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["APPROVE","REQUEST_CHANGES"]},"guarded":{"type":"boolean"},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"string"}}},"required":["verdict","guarded","summary","findings"],"additionalProperties":false}'
 
       # Written by this step, not by the reviewer, from its structured output.
@@ -133,6 +143,13 @@ jobs:
                then "**Findings**\n\n" + (.findings | map("- " + .) | join("\n"))
                else "No findings." end)
           ' > verdict.md
+          # A reviewer steered into echoing a credential is stopped here, and
+          # the job fails: Anthropic tokens start with sk-ant-, GitHub's with
+          # ghp_, ghs_, gho_, ghu_ or github_pat_.
+          if grep -q -E 'sk-ant-|gh[psou]_[A-Za-z0-9]{20,}|github_pat_' verdict.md; then
+            echo "::error::The verdict contains what looks like a token; not posted."
+            exit 1
+          fi
           gh pr comment "$PR" --repo "$REPO" --body-file verdict.md
 
       # The gate. An empty or unparseable output fails too.

@@ -62,9 +62,14 @@ role come from `main`: a pull request cannot weaken the review that judges it
 before it merges. Because that job holds a secret, nothing from the pull
 request runs there: its files are checked out into `pr-head/` as data, its
 diff and description are fetched into files by a step before the reviewer
-starts, and the reviewer's tools are `Read`, `Grep` and `Glob` — no shell, no
-network. The other required checks, on `pull_request` with no secret, run the
-code, linters and tests.
+starts, and the reviewer's tools are `Read` scoped to the workspace
+(`Read(./**)`), `Grep` and `Glob` — no shell, no network, and no file outside
+the workspace, `/proc` included. Claude Code's loading of `CLAUDE.md` files is
+turned off (`CLAUDE_CODE_DISABLE_CLAUDE_MDS`): one placed in `pr-head/` would
+otherwise be read as project instructions, letting the pull request instruct
+its reviewer. The reviewer reads its role and `AGENTS.md` explicitly. The
+other required checks, on `pull_request` with no secret, run the code,
+linters and tests.
 
 **3. A pull request from a fork fails the check** rather than skipping it — a
 skipped required check counts as passed. The operator decides on those.
@@ -78,7 +83,10 @@ section is a major finding, which fails the check.
 
 **5. The verdict is posted on the pull request** by a workflow step from the
 reviewer's structured output, not by the reviewer itself, so the operator
-reads the summary where they approve. The workflow token has
+reads the summary where they approve. The comment is the reviewer's one
+channel to the outside, so the step refuses — and fails the job — when the
+text holds what looks like an Anthropic or GitHub token, and the action's
+public step summary is turned off. The workflow token has
 `pull-requests: write` for that comment and cannot approve: the repository
 does not let Actions approve pull requests.
 
@@ -106,13 +114,16 @@ request.
 **Negative.**
 
 - **The gate is a model.** A reviewer can be wrong, or be steered by text the
-  author wrote to mislead it; the prompt treats such text as a finding, and
-  the action strips hidden markdown, but neither is a guarantee. Author and
+  author wrote to mislead it — hidden in an HTML comment or invisible
+  characters too, since the diff and description reach it unsanitised. The
+  prompt treats such text as a finding; that is not a guarantee. Author and
   reviewer may share a model family's blind spots.
 - **A secret sits in a job triggered by pull requests.** A token in the
-  subscription's name, in a job that reads text an agent wrote. The reviewer
-  has no shell or network tool to send it anywhere, and fork pull requests
-  are refused, but a flaw in the action would put it in reach. Revoking it is
+  subscription's name, in the environment of a process that reads text an
+  agent wrote. The reviewer cannot read outside the workspace, has no shell
+  or network tool, and its one outward channel — the comment — is checked
+  for tokens; fork pull requests are refused. A flaw in the action, or a
+  token encoded past the check, would still put it in reach. Revoking it is
   one action on the operator's Claude account.
 - **It spends the subscription.** Each pull request costs a review, and each
   push to it another; when the usage limit is reached the check fails and
