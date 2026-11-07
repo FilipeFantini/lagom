@@ -1,0 +1,39 @@
+---
+import Base from "../../../layouts/Base.astro";
+import Series from "../../../components/Series.astro";
+---
+
+<Base
+  title="Lagom — Filipe Fantini"
+  description="Lagom is a personal laboratory: one small server, a public earthquake feed, and a record of what was decided, measured, and left open."
+  canonical="https://ofantini.com/projects/lagom"
+  current="projects"
+  inventory="none"
+>
+  <section class="essay">
+    <div class="wrap">
+      <p class="kicker">Laboratory</p>
+      <h1>Lagom, end to end.</h1>
+      <div class="prose">
+        <p>
+          Lagom is not a system I run for an employer. It is the place where a data platform is
+          built small on purpose, written down, and measured. The Swedish word means not too
+          little, not too much.
+        </p>
+        <p>
+          A public feed comes in through a job that starts and exits. The rows land, get cleaned
+          and modelled, and the schedule keeps a history of the run. What a visitor should
+          eventually see is static files, not a connection to the machine. That gallery is not
+          built yet. The pages under this one say what is running, what was decided, and what is
+          still only a proposal.
+        </p>
+        <p>
+          One tension is left in the open, on purpose. The scheduled job loads a lake. The accepted
+          storage decision still says every layer lives in Postgres until a spike passes. These
+          pages do not close that.
+        </p>
+      </div>
+      <Series here="/projects/lagom" />
+    </div>
+  </section>
+</Base>

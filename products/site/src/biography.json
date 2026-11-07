@@ -1,0 +1,21 @@
+{
+  "note": "Professional facts copied from the curriculum vitae supplied for this site. The CV image is not published. Contact details are not included. These are not platform measurements.",
+  "facts": [
+    {"id": "years", "value": "7+ years"},
+    {"id": "envision-when", "value": "Sep 2026"},
+    {"id": "envision-place", "value": "Coimbra"},
+    {"id": "enhesa-span", "value": "Apr 2022 to Sep 2026"},
+    {"id": "enhesa-place", "value": "Lisbon"},
+    {"id": "promoted", "value": "Sep 2024"},
+    {"id": "sources", "value": "15+ sources"},
+    {"id": "records", "value": "100M+ records per day"},
+    {"id": "semantic-models", "value": "50+ Power BI semantic models"},
+    {"id": "team", "value": "a team of 4"},
+    {"id": "team-scaled", "value": "scaled to 6"},
+    {"id": "earlier-span", "value": "2019 to 2022"},
+    {"id": "linkedin-year", "value": "2022"},
+    {"id": "unicamp", "value": "2026 to 2027"},
+    {"id": "unisal", "value": "2016 to 2020"},
+    {"id": "dp600", "value": "DP-600"}
+  ]
+}

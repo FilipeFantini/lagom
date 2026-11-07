@@ -1,7 +1,8 @@
 ---
-import Base from "../../layouts/Base.astro";
-import Figure from "../../components/Figure.astro";
-import inventory from "../../figures.json";
+import Base from "../../../layouts/Base.astro";
+import Figure from "../../../components/Figure.astro";
+import Series from "../../../components/Series.astro";
+import inventory from "../../../figures.json";
 
 const page = inventory.figures.filter((figure) => figure.page === "usgs");
 const group = (name: string) => page.filter((figure) => figure.group === name);
@@ -10,8 +11,10 @@ const group = (name: string) => page.filter((figure) => figure.group === name);
 <Base
   title="USGS earthquakes — ofantini.com"
   description="The problem a public earthquake feed poses, then the path the scheduled job runs, then the numbers the architecture and the roadmap record."
-  canonical="https://ofantini.com/showcase/usgs"
-  current="usgs"
+  canonical="https://ofantini.com/projects/lagom/usgs"
+  current="projects"
+  inventory="platform"
+  figurePage="usgs"
 >
   <section class="hero">
     <div class="wrap">
@@ -228,6 +231,7 @@ const group = (name: string) => page.filter((figure) => figure.group === name);
           ))
         }
       </div>
+      <Series here="/projects/lagom/usgs" />
     </div>
   </section>
 </Base>

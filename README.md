@@ -95,11 +95,10 @@ docs/       architecture, roadmap, decisions (ADRs), runbook
 Adding a source or a dashboard is additive: a new directory and its Argo CD
 Application ([ADR-0006](docs/adr/0006-monorepo-layout.md)).
 
-The site is [`products/site/`](products/site/README.md): static pages for
-ofantini.com. Home says what the platform is. The USGS showcase states the
-problem, then the path the scheduled job runs, then the measured numbers. The
-dashboard gallery is not in it yet, and the pages are not published to
-Cloudflare Pages yet.
+The site is [`products/site/`](products/site/README.md): Filipe Fantini's
+personal pages for ofantini.com. Lagom is one project there, a laboratory,
+not an employer's system. The dashboard gallery is not in it yet, and the
+pages are not published to Cloudflare Pages yet.
 
 ## License
 

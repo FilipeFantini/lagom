@@ -310,15 +310,17 @@ The public face is static: nothing on the node serves it
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
 
 The site source is [`products/site/`](../products/site/README.md): an Astro
-project, static output, two pages. Home says what the platform is. The USGS
-showcase states the problem, then the path the scheduled job runs (dlt into
-DuckLake, dbt on the lake target, Dagster), then the numbers copied from this
-document and the roadmap. It also says what is not settled: ADR-0023 is still
-proposed, and the storage section above still keeps every layer in Postgres
-until that spike passes. Publishing to Cloudflare Pages is still open, so the
-domain does not serve this build yet. The pages load no analytics, no cookie
-and no third-party script. The exact Astro version is pinned in that
-directory's `package.json`, not repeated here.
+project, static output. It is Filipe Fantini's personal site. Home is the
+biography. Lagom is one project on it, not the whole identity, and not an
+employer's system. The Lagom pages state the problem, the decision, the
+evidence and the limit, and the USGS showcase keeps the path the scheduled job
+runs (dlt into DuckLake, dbt on the lake target, Dagster) with the numbers
+copied from this document and the roadmap. Those pages also say what is not
+settled: ADR-0023 is still proposed, and the storage section above still keeps
+every layer in Postgres until that spike passes. Evidence and publishing to
+Cloudflare Pages are still open, so the domain does not serve this build yet.
+The pages load no analytics, no cookie and no third-party script. The exact
+Astro version is pinned in that directory's `package.json`, not repeated here.
 
 How a dashboard is published: a Dagster step after each run builds Evidence in
 the cluster and deploys the static pages to Cloudflare Pages, an outbound

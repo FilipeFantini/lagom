@@ -1,0 +1,45 @@
+---
+import Base from "../../../layouts/Base.astro";
+import Figures from "../../../components/Figures.astro";
+import Series from "../../../components/Series.astro";
+---
+
+<Base
+  title="Infrastructure — Lagom"
+  description="Why Lagom runs on one small server, what was rejected, and the measurements the architecture records."
+  canonical="https://ofantini.com/projects/lagom/infrastructure"
+  current="projects"
+  inventory="platform"
+  figurePage="infra"
+>
+  <article class="essay">
+    <div class="wrap">
+      <p class="kicker">Lagom</p>
+      <h1>One node, on purpose.</h1>
+      <div class="prose">
+        <p>
+          The problem is a platform that is real Kubernetes, cheap enough to defend, and small
+          enough that scarcity shows up in the jobs rather than in the overhead. A second machine
+          was on the table. It is still in the design, as an edge node, and it is not where the
+          platform runs.
+        </p>
+        <p>
+          The decision is k3s on one Hetzner ARM node. The first node was a CAX11. The current one
+          is a CAX21, because the work of the later milestone did not fit the smaller ceiling. Git
+          is the source of truth for what the cluster runs. Argo CD reconciles the cluster to it.
+          Secrets in Git are sealed. The public site, when it is published, is static files, so a
+          visitor never reaches the node.
+        </p>
+        <p>
+          The old quoted size of k3s was a story the machine did not confirm. The numbers below are
+          the ones the architecture and the roadmap record. The exact monthly price of the current
+          node is not among them. There is no second node for high availability, and that is
+          written down as a choice. Terraform for the resources outside the cluster is still
+          deferred. This site is not on the domain yet.
+        </p>
+      </div>
+      <Figures page="infra" />
+      <Series here="/projects/lagom/infrastructure" />
+    </div>
+  </article>
+</Base>

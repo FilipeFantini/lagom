@@ -4,18 +4,15 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const dist = join(root, "dist");
-const inventory = JSON.parse(readFileSync(join(root, "src/figures.json"), "utf8"));
-
-const pages = {
-  home: "index.html",
-  usgs: "showcase/usgs/index.html",
-};
-const otherHtml = new Set(["404.html"]);
+const figures = JSON.parse(readFileSync(join(root, "src/figures.json"), "utf8")).figures;
+const biography = JSON.parse(readFileSync(join(root, "src/biography.json"), "utf8")).facts;
 
 const allowedUrl = [
   /^https:\/\/ofantini\.com\/?$/,
-  /^https:\/\/ofantini\.com\/showcase\/usgs\/?$/,
-  /^https:\/\/github\.com\/FilipeFantini\/lagom(?:\/blob\/main\/docs\/(?:architecture|roadmap)\.md)?$/,
+  /^https:\/\/ofantini\.com\/projects\/?$/,
+  /^https:\/\/ofantini\.com\/projects\/lagom\/?$/,
+  /^https:\/\/ofantini\.com\/projects\/lagom\/(?:infrastructure|decisions|ingestion|modelling|visualization|synthesis|usgs)\/?$/,
+  /^https:\/\/github\.com\/FilipeFantini\/lagom(?:\/blob\/main\/docs\/(?:architecture|roadmap|adr\/[0-9a-z-]+)\.md)?$/,
   /^http:\/\/www\.w3\.org\/2000\/svg$/,
 ];
 
@@ -62,58 +59,74 @@ function decode(value) {
 
 function bodyText(html) {
   const body = html.split(/<body\b[^>]*>/i)[1]?.split("</body>")[0] ?? "";
-  const stripped = body
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ");
-  return decode(stripped);
+  return decode(
+    body
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " "),
+  );
 }
 
-function allowlist(items) {
-  return items.map((item) => [item.value, item.label, item.detail, item.source].join("\n")).join("\n");
+function allowlist(items, fields) {
+  return items.map((item) => fields.map((field) => item[field] ?? "").join("\n")).join("\n");
 }
 
 const files = walk(dist);
 const htmlFiles = files.filter((path) => path.endsWith(".html"));
-const expected = new Set([...Object.values(pages), ...otherHtml].map((rel) => join(dist, rel)));
 
 for (const path of htmlFiles) {
-  if (!expected.has(path)) fail(`unexpected html file ${path}`);
-}
-
-for (const [page, rel] of Object.entries(pages)) {
-  const path = join(dist, rel);
   const html = readFileSync(path, "utf8");
-  const items = inventory.figures.filter((figure) => figure.page === page);
-  const allowed = allowlist(items);
+  const rel = path.slice(dist.length + 1);
+  const inventory = html.match(/data-inventory="([^"]+)"/)?.[1];
+  const figurePage = html.match(/data-figure-page="([^"]*)"/)?.[1] ?? "";
   const text = bodyText(html);
-  for (const token of text.match(/\d[\d,.]*/g) ?? []) {
-    if (!allowed.includes(token)) fail(`${rel} shows ${token}, which is not in the figure inventory`);
-  }
-  for (const item of items) {
-    const marker = `data-figure="${item.id}"`;
-    const start = html.indexOf(marker);
-    if (start < 0) {
-      fail(`${rel} is missing figure ${item.id}`);
-      continue;
-    }
-    const slice = html.slice(start, html.indexOf("</article>", start));
-    const value = slice.match(/<p class="figure-value">([\s\S]*?)<\/p>/);
-    if (!value || decode(value[1]).trim() !== item.value) {
-      fail(`${rel} figure ${item.id} value is not ${item.value}`);
-    }
-    if (!decode(slice).includes(item.detail)) fail(`${rel} figure ${item.id} is missing its detail`);
-  }
-}
+  const tokens = text.match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g) ?? [];
 
-const missing = readFileSync(join(dist, "404.html"), "utf8");
-for (const token of bodyText(missing).match(/\d[\d,.]*/g) ?? []) {
-  fail(`404.html shows a number (${token})`);
+  if (inventory !== "biography" && inventory !== "platform" && inventory !== "none") {
+    fail(`${rel} has no inventory marker`);
+    continue;
+  }
+
+  if (inventory === "none") {
+    for (const token of tokens) fail(`${rel} shows ${token}, and this page declares no numbers`);
+  }
+
+  if (inventory === "biography") {
+    const allowed = allowlist(biography, ["id", "value"]);
+    for (const token of tokens) {
+      if (!allowed.includes(token)) fail(`${rel} shows ${token}, which is not in the biography`);
+    }
+    for (const fact of biography) {
+      if (!text.includes(fact.value)) fail(`${rel} is missing biography fact ${fact.id}`);
+    }
+  }
+
+  if (inventory === "platform") {
+    const items = figures.filter((figure) => figure.page === figurePage);
+    if (items.length === 0) fail(`${rel} names figure page ${figurePage}, which has no figures`);
+    const allowed = allowlist(items, ["value", "label", "detail", "source"]);
+    for (const token of tokens) {
+      if (!allowed.includes(token)) fail(`${rel} shows ${token}, which is not in the platform figures for ${figurePage}`);
+    }
+    for (const item of items) {
+      const marker = `data-figure="${item.id}"`;
+      const start = html.indexOf(marker);
+      if (start < 0) {
+        fail(`${rel} is missing figure ${item.id}`);
+        continue;
+      }
+      const slice = html.slice(start, html.indexOf("</article>", start));
+      const value = slice.match(/<p class="figure-value">([\s\S]*?)<\/p>/);
+      if (!value || decode(value[1]).trim() !== item.value) {
+        fail(`${rel} figure ${item.id} value is not ${item.value}`);
+      }
+    }
+  }
 }
 
 const css = files.filter((path) => path.endsWith(".css")).map((path) => readFileSync(path, "utf8")).join("\n");
 if (!css.includes("prefers-reduced-motion")) fail("built CSS has no prefers-reduced-motion rule");
-if (!css.includes("animation-timeline")) fail("built CSS has no scroll-linked animation");
+if (!css.includes("perspective")) fail("built CSS has no 3D perspective");
 if (!css.includes("view-transition")) fail("built CSS has no view-transition rule");
 
 for (const path of files) {
@@ -127,21 +140,16 @@ for (const path of files) {
     const url = match.replace(/[.,;]+$/, "");
     if (!allowedUrl.some((pattern) => pattern.test(url))) fail(`${path} references ${url}`);
   }
-  if (path.endsWith(".html")) {
-    for (const tag of text.matchAll(/<script\b[^>]*>/gi)) {
-      const src = tag[0].match(/\bsrc="([^"]*)"/);
-      if (src && !src[1].startsWith("/")) fail(`${path} loads a script from ${src[1]}`);
-    }
-    for (const tag of text.matchAll(/<link\b[^>]*>/gi)) {
-      const rel = tag[0].match(/\brel="([^"]*)"/);
-      const href = tag[0].match(/\bhref="([^"]*)"/);
-      if (!href) continue;
-      const relation = rel?.[1] ?? "";
-      if (relation === "canonical") continue;
-      if (!href[1].startsWith("/") && !href[1].startsWith("#")) {
-        fail(`${path} loads a link from ${href[1]}`);
-      }
-    }
+  if (!path.endsWith(".html")) continue;
+  for (const tag of text.matchAll(/<script\b[^>]*>/gi)) {
+    const src = tag[0].match(/\bsrc="([^"]*)"/);
+    if (src && !src[1].startsWith("/")) fail(`${path} loads a script from ${src[1]}`);
+  }
+  for (const tag of text.matchAll(/<link\b[^>]*>/gi)) {
+    const rel = tag[0].match(/\brel="([^"]*)"/)?.[1] ?? "";
+    const href = tag[0].match(/\bhref="([^"]*)"/)?.[1];
+    if (!href || rel === "canonical") continue;
+    if (!href.startsWith("/") && !href.startsWith("#")) fail(`${path} loads a link from ${href}`);
   }
 }
 

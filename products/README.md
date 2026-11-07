@@ -5,7 +5,7 @@ audience each.
 
 | Product | Form | State |
 |---|---|---|
-| [`site/`](site/README.md) | Astro, static pages | M4. Source is in the repo: home, and the USGS showcase. Not published to Cloudflare Pages yet |
+| [`site/`](site/README.md) | Astro, static pages | M4. Filipe Fantini's personal site. Lagom is one project in it, with the USGS showcase. Not published to Cloudflare Pages yet |
 | dashboards | Evidence, built after each run | M4, not started ([ADR-0022](../docs/adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 
 The globe left the milestones

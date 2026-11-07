@@ -1,0 +1,32 @@
+---
+interface Props {
+  here: string;
+}
+
+const { here } = Astro.props;
+
+const links = [
+  ["/projects/lagom", "Overview"],
+  ["/projects/lagom/infrastructure", "Infrastructure"],
+  ["/projects/lagom/decisions", "Decisions"],
+  ["/projects/lagom/ingestion", "Ingestion"],
+  ["/projects/lagom/modelling", "Modelling"],
+  ["/projects/lagom/visualization", "Visualization"],
+  ["/projects/lagom/synthesis", "Synthesis"],
+  ["/projects/lagom/usgs", "USGS showcase"],
+];
+---
+
+<nav class="series" aria-label="Lagom">
+  <ol class="rail">
+    {
+      links.map(([href, label]) => (
+        <li>
+          <a href={href} aria-current={href === here ? "page" : undefined}>
+            {label}
+          </a>
+        </li>
+      ))
+    }
+  </ol>
+</nav>

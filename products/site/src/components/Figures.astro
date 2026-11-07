@@ -1,0 +1,30 @@
+---
+import Figure from "./Figure.astro";
+import inventory from "../figures.json";
+
+interface Props {
+  page: string;
+  group?: string;
+}
+
+const { page, group } = Astro.props;
+const items = inventory.figures.filter(
+  (figure) => figure.page === page && (group === undefined || figure.group === group),
+);
+---
+
+<div class="figures">
+  {
+    items.map((item) => (
+      <Figure
+        id={item.id}
+        display={item.display}
+        value={item.value}
+        label={item.label}
+        detail={item.detail}
+        source={item.source}
+        href={item.href}
+      />
+    ))
+  }
+</div>

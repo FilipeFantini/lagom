@@ -1,0 +1,41 @@
+---
+import Base from "../../../layouts/Base.astro";
+import Figures from "../../../components/Figures.astro";
+import Series from "../../../components/Series.astro";
+---
+
+<Base
+  title="Visualization — Lagom"
+  description="Charts for Lagom are planned as static files. None are published yet."
+  canonical="https://ofantini.com/projects/lagom/visualization"
+  current="projects"
+  inventory="platform"
+  figurePage="visualization"
+>
+  <article class="essay">
+    <div class="wrap">
+      <p class="kicker">Lagom</p>
+      <h1>No chart is published yet.</h1>
+      <div class="prose">
+        <p>
+          A visitor must not reach the cluster, and a dashboard server would sit in memory the rest
+          of the time. The decision is static files. Evidence is the tool chosen for the charts:
+          SQL and Markdown, built by a Dagster step after each run, then published. That build does
+          not exist yet. There is no dashboard on this site, and no number of charts to invent.
+        </p>
+        <p>
+          This personal site is the pages you are reading. Publishing them to the domain is still
+          open. The gallery of showcases is the other half of the same milestone. Grafana, later,
+          would be for the operator, not for this public site, and only after the earthquake
+          showcase is live. Streamlit waits until an interactive app cannot be a static page.
+        </p>
+        <p>
+          What the architecture does record is the memory the public site is allowed to use on the
+          node, and the fact that the gallery is not this set of essays.
+        </p>
+      </div>
+      <Figures page="visualization" />
+      <Series here="/projects/lagom/visualization" />
+    </div>
+  </article>
+</Base>

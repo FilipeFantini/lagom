@@ -1,146 +1,139 @@
 ---
 import Base from "../layouts/Base.astro";
-import Figure from "../components/Figure.astro";
-import inventory from "../figures.json";
+import biography from "../biography.json";
 
-const home = inventory.figures.filter((figure) => figure.page === "home");
-const group = (name: string) => home.filter((figure) => figure.group === name);
+const fact = Object.fromEntries(biography.facts.map((item) => [item.id, item.value]));
 ---
 
 <Base
-  title="ofantini.com — a data platform that stays small"
-  description="Lagom runs an open-source data stack on one modest server. Cheap to run, small enough to explain, and it grows by adding a pipeline."
+  title="Filipe Fantini — ofantini.com"
+  description="Filipe Fantini designs and builds data platforms, from ingestion to the people who run them. Lagom is a personal laboratory, not an employer's system."
   canonical="https://ofantini.com/"
   current="home"
+  inventory="biography"
 >
-  <section class="hero">
+  <section class="intro">
     <div class="wrap">
-      <p class="kicker">Lagom</p>
-      <h1 transition:name="title">Data, on a small server.</h1>
+      <p class="kicker">Personal</p>
+      <h1 transition:name="title">Platforms, built and handed on.</h1>
       <p class="lede">
-        Most data is not big data. Lagom runs an open-source stack on one modest server, measures
-        what that costs, and grows by adding a pipeline — not by adding a platform.
+        I am a data engineering lead with {fact.years} of designing and building platforms end to
+        end: ingestion, modelling, governance, BI and AI enablement. This site is that work, in my
+        own words. The laboratory is a separate page.
       </p>
     </div>
   </section>
 
-  <section class="band enter" id="cheap">
+  <section class="stage stage-3d" aria-label="On the bench">
     <div class="wrap">
-      <p class="kicker">Cheap</p>
-      <h2>As much infrastructure as the data needs.</h2>
-      <div class="prose">
-        <p>
-          The previous machine has a price written down. The machine that runs the platform now is
-          described as roughly double that. Its exact price is whatever the provider's console
-          shows, and it is not copied onto this page.
-        </p>
-      </div>
-      <div class="figures">
-        {
-          group("cost").map((item) => (
-            <Figure
-              id={item.id}
-              display={item.display}
-              value={item.value}
-              label={item.label}
-              detail={item.detail}
-              source={item.source}
-              href={item.href}
-            />
-          ))
-        }
-      </div>
+      <p class="kicker stage-label">On the bench</p>
+      <ul class="pieces">
+        <li>
+          <a class="piece piece-work" href="#work">
+            <span class="piece-name">The work</span>
+            <span class="piece-line">Envision, Enhesa, and the years before.</span>
+          </a>
+        </li>
+        <li>
+          <a class="piece piece-standards" href="#standards">
+            <span class="piece-name">The standard</span>
+            <span class="piece-line">Reliability, and a roadmap a business can use.</span>
+          </a>
+        </li>
+        <li>
+          <a class="piece piece-lab" href="/projects">
+            <span class="piece-name">The laboratory</span>
+            <span class="piece-line">Lagom. Not an employer's system.</span>
+          </a>
+        </li>
+      </ul>
     </div>
   </section>
 
-  <section class="band band-quiet enter" id="small">
+  <section class="era era-now" id="work">
     <div class="wrap">
-      <p class="kicker">Small</p>
-      <h2>One node. Jobs that exit.</h2>
-      <div class="prose">
-        <p>
-          One machine hosts both environments. Work that can finish starts, runs, and leaves, so
-          the memory is held for the run and then given back. These pages are files built ahead of
-          time: a visitor never reaches the cluster. Git is the source of truth for what the
-          cluster runs, and Argo CD reconciles the cluster to it.
-        </p>
-      </div>
-      <div class="figures">
-        {
-          group("machine").map((item) => (
-            <Figure
-              id={item.id}
-              display={item.display}
-              value={item.value}
-              label={item.label}
-              detail={item.detail}
-              source={item.source}
-              href={item.href}
-            />
-          ))
-        }
-      </div>
+      <p class="kicker">Now</p>
+      <h2>Envision Pharma Group</h2>
+      <p>
+        Since {fact["envision-when"]}, in {fact["envision-place"]}, I lead the data engineering
+        team and own platform direction on Snowflake, dbt and Fivetran: architecture, roadmap and
+        delivery. Ingestion and dbt modelling are scaling with a layered project structure —
+        staging, intermediate, marts — with testing and documentation conventions, and cost-aware
+        warehouse usage. Governance, lineage and DataOps are how reliability, data quality and cost
+        stay in the same conversation.
+      </p>
     </div>
   </section>
 
-  <section class="band enter" id="composition">
+  <section class="era era-enhesa">
     <div class="wrap">
-      <p class="kicker">Composition</p>
-      <h2>A new source is another pipeline.</h2>
-      <div class="prose">
-        <p>
-          Ingestion, storage, transformation and orchestration stay. Adding a source does not
-          reorganize them. The layout's test is one new service directory and one new place in the
-          transformation project, and nothing else.
-        </p>
-        <p>
-          The event path is deferred until a source needs it. It is not part of what runs for the
-          earthquake feed.
-        </p>
-      </div>
+      <p class="kicker">Before that</p>
+      <h2>Enhesa</h2>
+      <p>
+        From {fact["enhesa-span"]}, in {fact["enhesa-place"]}, I was Business Intelligence Manager,
+        promoted from BI Engineer in {fact.promoted}. I designed and delivered the company's cloud
+        data platform on Microsoft Fabric and Azure: a medallion architecture, Bronze, Silver and
+        Gold, built on Spark, which became the single source of truth for analytics. I led the move
+        off SSRS and Azure Synapse.
+      </p>
+      <p>
+        Pipelines with Fivetran, Azure Data Factory and Spark crossed {fact.sources} — databases,
+        APIs, SaaS and files — processing {fact.records}. Reverse ETL with Census pushed curated
+        data back into business tools. Kimball models, slowly changing dimensions and conformed
+        dimensions, feed {fact["semantic-models"]}, with row-level security and incremental refresh.
+      </p>
+      <p>
+        I introduced Git-based CI/CD on Azure DevOps, mandatory code reviews, layer and naming
+        conventions, data quality checks, documentation and lineage. An MCP-based data assistant,
+        built with Claude, is used company-wide by hundreds of employees to query data in natural
+        language, with access restricted to the curated Gold layer. I led {fact.team} of data
+        engineers and BI developers, {fact["team-scaled"]} for project demand, and developed an
+        integration developer into a Senior Data Engineer based on delivery.
+      </p>
     </div>
   </section>
 
-  <section class="band band-quiet enter" id="recovery">
+  <section class="era era-early">
     <div class="wrap">
-      <p class="kicker">Rebuilt</p>
-      <h2>Small is not a reason to skip a rehearsal.</h2>
-      <div class="prose">
-        <p>
-          The move to the current node was a rebuild from Git plus a re-load. The measured time is
-          below. The estimate beside it is the document's estimate, not a second measurement.
-        </p>
-      </div>
-      <div class="figures">
-        {
-          group("recovery").map((item) => (
-            <Figure
-              id={item.id}
-              display={item.display}
-              value={item.value}
-              label={item.label}
-              detail={item.detail}
-              source={item.source}
-              href={item.href}
-            />
-          ))
-        }
-      </div>
+      <p class="kicker">Earlier</p>
+      <h2>Brazil, {fact["earlier-span"]}</h2>
+      <p>
+        Data Analyst, Sales Operations, at LinkedIn in {fact["linkedin-year"]}, using Power BI, SQL
+        and ETL. Before that, Data Analyst and BI Intern at Padtec, {fact["earlier-span"]}, with
+        ETL in Python and Pentaho, SQL Server, Power BI and SSRS.
+      </p>
     </div>
   </section>
 
-  <section class="band band-solution enter">
+  <section class="pull" id="standards">
     <div class="wrap">
-      <p class="kicker">First showcase</p>
-      <h2>USGS earthquakes</h2>
-      <div class="prose">
+      <blockquote>
+        I hire and grow engineers, set the standards that keep platforms reliable, and partner with
+        business leaders to turn priorities into delivered value.
+      </blockquote>
+      <p>
+        The tools named on the CV are Snowflake, Microsoft Fabric, Azure Data Factory, Azure
+        Synapse, Azure Blob Storage, dbt, Fivetran, Census, Apache Spark, PySpark, SQL, Python and
+        Power BI, with Kimball modelling, CI/CD and access control around them.
+      </p>
+    </div>
+  </section>
+
+  <section class="era" id="study">
+    <div class="wrap study">
+      <div>
+        <p class="kicker">Study</p>
+        <h2>Still in the tools.</h2>
         <p>
-          A public feed, then the path the scheduled job runs, then the rows, the time and the
-          memory the documents record. The warehouse decision that path exercises is still open.
-          The page says so.
+          Postgraduate study in Complex Data Mining at UNICAMP, {fact.unicamp}, in progress. A
+          bachelor's degree in Mechatronics and Robotics from UNISAL, {fact.unisal}.
         </p>
       </div>
-      <a class="button" href="/showcase/usgs">Read the showcase</a>
+      <div>
+        <p class="kicker">Certificate and languages</p>
+        <h2>{fact.dp600}</h2>
+        <p>Microsoft Fabric Analytics Engineer. Portuguese is native. English is fluent.</p>
+      </div>
     </div>
   </section>
 </Base>

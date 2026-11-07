@@ -10,10 +10,12 @@ interface Props {
   title: string;
   description: string;
   canonical: string;
-  current?: "home" | "usgs";
+  current?: "home" | "projects";
+  inventory: "biography" | "platform" | "none";
+  figurePage?: string;
 }
 
-const { title, description, canonical, current } = Astro.props;
+const { title, description, canonical, current, inventory, figurePage } = Astro.props;
 ---
 
 <!doctype html>
@@ -23,30 +25,23 @@ const { title, description, canonical, current } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#f3ead7" />
+    <meta name="theme-color" content="#14181f" />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{title}</title>
     <ClientRouter />
   </head>
-  <body>
+  <body data-inventory={inventory} data-figure-page={figurePage}>
     <a class="skip" href="#content">Skip to content</a>
     <header class="mast">
       <div class="wrap mast-row">
         <a class="wordmark" href="/">
-          <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" fill="currentColor"></rect>
-            <rect x="5" y="7" width="9" height="18" fill="#f0b429"></rect>
-            <rect x="18" y="7" width="9" height="18" fill="#f3ead7"></rect>
-          </svg>
-          <span>ofantini</span>
+          <span class="wordmark-name">Filipe Fantini</span>
+          <span class="wordmark-host">ofantini.com</span>
         </a>
-        <p class="mast-tag">a data platform, measured</p>
         <nav class="nav" aria-label="Pages">
           <a href="/" aria-current={current === "home" ? "page" : undefined}>Home</a>
-          <a href="/showcase/usgs" aria-current={current === "usgs" ? "page" : undefined}
-            >USGS earthquakes</a
-          >
+          <a href="/projects" aria-current={current === "projects" ? "page" : undefined}>Projects</a>
         </nav>
       </div>
     </header>

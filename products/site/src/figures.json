@@ -1,86 +1,86 @@
 {
-  "note": "Every number on the site is copied from docs/architecture.md or docs/roadmap.md and listed here. Do not add a number that is not in those files.",
+  "note": "Platform measurements only, copied from docs/architecture.md or docs/roadmap.md. Professional biography is src/biography.json and is not mixed into these entries.",
   "figures": [
     {
       "id": "cax11-price",
-      "page": "home",
+      "page": "infra",
       "group": "cost",
       "display": "stat",
       "value": "EUR 7.37/month",
       "label": "Previous node",
       "detail": "Hetzner CAX11, as shown in the Console on 2026-10-12. The CAX21 now in use is described as roughly double; its exact price is the one the Console shows, and that figure is not in the architecture or the roadmap.",
-      "source": "docs/architecture.md §3; docs/roadmap.md, M0",
+      "source": "docs/architecture.md \u00a73; docs/roadmap.md, M0",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
       "id": "node-shape",
-      "page": "home",
+      "page": "infra",
       "group": "machine",
       "display": "stat",
       "value": "4 ARM vCPU, 8 GB",
       "label": "The machine",
       "detail": "Hetzner CAX21, lagom-shared-02, in fsn1. It has hosted prod and staging since 2026-10-28. The previous node, a CAX11 in nbg1, was deleted on 2026-11-07.",
-      "source": "docs/architecture.md §3",
+      "source": "docs/architecture.md \u00a73",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
       "id": "ram-visible",
-      "page": "home",
+      "page": "infra",
       "group": "machine",
       "display": "stat",
       "value": "7,741 MiB",
       "label": "RAM the operating system sees",
       "detail": "On lagom-shared-02. The rest of the nominal 8 GB is reserved by firmware and the kernel.",
-      "source": "docs/architecture.md §11",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
       "id": "overhead",
-      "page": "home",
+      "page": "infra",
       "group": "machine",
       "display": "stat",
       "value": "1,687 MiB",
       "label": "Outside Kubernetes",
       "detail": "RSS on 2026-10-28, two hours after k3s started, with 12 Pods running: k3s-server 1,022, containerd 200, 12 shims 254, tailscaled 55, the rest of the OS ~156.",
-      "source": "docs/architecture.md §11; docs/roadmap.md, M3",
+      "source": "docs/architecture.md \u00a711; docs/roadmap.md, M3",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
       "id": "ceiling",
-      "page": "home",
+      "page": "infra",
       "group": "machine",
       "display": "stat",
       "value": "5.5 GB",
       "label": "Request ceiling, enforced in CI",
       "detail": "5,632 MiB. It sits ~420 MiB under what remains after the overhead above: 7,741 MiB visible minus 1,687 MiB. A change that would exceed the ceiling fails the build. On the 4 GB node the ceiling was 2.2 GB.",
-      "source": "docs/architecture.md §11; docs/roadmap.md, M3",
+      "source": "docs/architecture.md \u00a711; docs/roadmap.md, M3",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
       "id": "requests-today",
-      "page": "home",
+      "page": "infra",
       "group": "machine",
       "display": "stat",
       "value": "5,070 MiB",
       "label": "Declared requests today",
       "detail": "Dagster in both environments, each 800 resident and 768 per run, and cloudflared at 48. It was 5,582, 50 MiB under the ceiling, until the two CronJobs on Postgres were retired on 2026-11-07, which freed 256 each.",
-      "source": "docs/architecture.md §11",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
       "id": "site-ram",
-      "page": "home",
+      "page": "infra",
       "group": "machine",
       "display": "stat",
       "value": "0",
       "label": "RAM this site uses on the node",
       "detail": "The architecture table lists the site at 0. The pages are static files. Nothing on the node serves them.",
-      "source": "docs/architecture.md §9",
+      "source": "docs/architecture.md \u00a79",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
       "id": "rto",
-      "page": "home",
+      "page": "synthesis",
       "group": "recovery",
       "display": "stat",
       "value": "20 min 31 s",
@@ -108,7 +108,7 @@
       "value": "Catalog in Postgres, files on R2",
       "label": "Where the lake target points",
       "detail": "The proposed SME stack: DuckDB is the engine, DuckLake the table format, Postgres the catalog, the data files on Cloudflare R2. The orchestration section says the usgs job loads into that lake and dbt builds on the lake target. The storage section says this replaces Postgres only after the spike passes.",
-      "source": "docs/architecture.md §2 and §7",
+      "source": "docs/architecture.md \u00a72 and \u00a77",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
@@ -130,7 +130,7 @@
       "value": "2 h warn, 6 h error",
       "label": "Bronze freshness, as recorded",
       "detail": "Checked by dbt source freshness, which dbt build does not run. The roadmap item that declares and asserts a freshness threshold is still open.",
-      "source": "docs/architecture.md §6; docs/roadmap.md, M3",
+      "source": "docs/architecture.md \u00a76; docs/roadmap.md, M3",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
@@ -151,8 +151,8 @@
       "display": "stat",
       "value": "550 MiB",
       "label": "Memory of that first prod run",
-      "detail": "Steps in one process. The next run was 442 MiB. Samples are 2–15 s apart and miss short peaks, so the true peak may be higher.",
-      "source": "docs/architecture.md §11",
+      "detail": "Steps in one process. The next run was 442 MiB. Samples are 2\u201315 s apart and miss short peaks, so the true peak may be higher.",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
@@ -162,8 +162,8 @@
       "display": "stat",
       "value": "768 MiB",
       "label": "Request for each run",
-      "detail": "The limit is 1 GiB. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image.",
-      "source": "docs/architecture.md §11",
+      "detail": "The limit is 1 GiB. The request stays at 768: the samples are 2\u201315 s apart and miss short peaks, and lowering it by 64\u2013128 MiB would need a new image.",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
@@ -207,7 +207,7 @@
       "value": "623, 631 and 640 MiB",
       "label": "Staging, same day, one process",
       "detail": "2026-11-05, image d6716cc.",
-      "source": "docs/architecture.md §11",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
@@ -217,8 +217,8 @@
       "display": "stat",
       "value": "699 and 674 MiB",
       "label": "Earlier peaks, two processes",
-      "detail": "During dbt build, when each step still ran in a second Python process. 6–8 samples each, so the true peak may be higher.",
-      "source": "docs/architecture.md §11",
+      "detail": "During dbt build, when each step still ran in a second Python process. 6\u20138 samples each, so the true peak may be higher.",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
@@ -251,7 +251,7 @@
       "value": "Not accepted",
       "label": "The warehouse decision",
       "detail": "The storage section says every layer lives in Postgres until the SME-stack spike passes. The orchestration section says the usgs job loads DuckLake and dbt builds on the lake target. The roadmap records both: the job runs on DuckLake, and the spike is still open. This page does not close that decision.",
-      "source": "docs/architecture.md §2 and §7; docs/roadmap.md, the trigger table and M3",
+      "source": "docs/architecture.md \u00a72 and \u00a77; docs/roadmap.md, the trigger table and M3",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/roadmap.md"
     },
     {
@@ -273,7 +273,7 @@
       "value": "Not on this site",
       "label": "Dashboards",
       "detail": "Evidence, the dashboard gallery, is a separate piece of the same milestone. It is not built in these pages.",
-      "source": "docs/roadmap.md, M4; docs/architecture.md §9",
+      "source": "docs/roadmap.md, M4; docs/architecture.md \u00a79",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/roadmap.md"
     },
     {
@@ -317,7 +317,7 @@
       "value": "8 new events, 15 s",
       "label": "First scheduled run",
       "detail": "2026-10-18 20:30. One kubelet sample per container gave dlt ~60 MiB and dbt ~151 MiB. That is a floor, not a peak: the stats refresh every ~10 s.",
-      "source": "docs/architecture.md §11",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     },
     {
@@ -351,6 +351,94 @@
       "label": "Rebuild, prod re-load",
       "detail": "Started 12:13:45 UTC on 2026-10-28. PASS=34, heartbeat 200.",
       "source": "docs/architecture.md, Disaster recovery",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
+    },
+    {
+      "id": "decision-article",
+      "page": "decisions",
+      "group": "open",
+      "display": "note",
+      "value": "Not accepted",
+      "label": "The warehouse decision",
+      "detail": "The storage section says every layer lives in Postgres until the SME-stack spike passes. The orchestration section says the usgs job loads DuckLake and dbt builds on the lake target. The roadmap records both: the job runs on DuckLake, and the spike is still open. This page does not close that decision.",
+      "source": "docs/architecture.md \u00a72 and \u00a77; docs/roadmap.md, the trigger table and M3. ADR-0006, ADR-0007, ADR-0008, ADR-0022, ADR-0023.",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/roadmap.md"
+    },
+    {
+      "id": "feed-ingestion",
+      "page": "ingestion",
+      "group": "problem",
+      "display": "note",
+      "value": "Public GeoJSON",
+      "label": "The feed",
+      "detail": "Refreshed every few minutes, no API key, no practical rate limit. Ready-made windows cover the past hour, the past day and the past 30 days. Each event carries magnitude, depth, coordinates, a timestamp and a place.",
+      "source": "docs/roadmap.md, M2",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/roadmap.md"
+    },
+    {
+      "id": "freshness-modelling",
+      "page": "modelling",
+      "group": "solution",
+      "display": "stat",
+      "value": "2 h warn, 6 h error",
+      "label": "Bronze freshness, as recorded",
+      "detail": "Checked by dbt source freshness, which dbt build does not run. The roadmap item that declares and asserts a freshness threshold is still open.",
+      "source": "docs/architecture.md \u00a76; docs/roadmap.md, M3",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
+    },
+    {
+      "id": "ci-modelling",
+      "page": "modelling",
+      "group": "lake",
+      "display": "stat",
+      "value": "PASS=33",
+      "label": "CI, not a production load",
+      "detail": "dbt build on the lake target over a 12-row hand-made bronze fixture in a DuckLake on the runner, on 2026-11-07.",
+      "source": "docs/roadmap.md, M3",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/roadmap.md"
+    },
+    {
+      "id": "evidence-visual",
+      "page": "visualization",
+      "group": "open",
+      "display": "note",
+      "value": "Not on this site",
+      "label": "Dashboards",
+      "detail": "Evidence, the dashboard gallery, is a separate piece of the same milestone. It is not built in these pages.",
+      "source": "docs/roadmap.md, M4; docs/architecture.md \u00a79",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/roadmap.md"
+    },
+    {
+      "id": "site-ram-visual",
+      "page": "visualization",
+      "group": "machine",
+      "display": "stat",
+      "value": "0",
+      "label": "RAM this site uses on the node",
+      "detail": "The architecture table lists the site at 0. The pages are static files. Nothing on the node serves them.",
+      "source": "docs/architecture.md \u00a79",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
+    },
+    {
+      "id": "pi",
+      "page": "infra",
+      "group": "machine",
+      "display": "note",
+      "value": "1 GB",
+      "label": "The other machine",
+      "detail": "Raspberry Pi 3B, the edge agent node. It is not the machine the platform runs on.",
+      "source": "docs/architecture.md \u00a73",
+      "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
+    },
+    {
+      "id": "k3s-estimate",
+      "page": "infra",
+      "group": "machine",
+      "display": "note",
+      "value": "300 MB",
+      "label": "The old quoted figure for k3s",
+      "detail": "The commonly quoted figure. On the 4 GB node the server process alone was twice that, and the container runtime was missing from the count.",
+      "source": "docs/architecture.md \u00a711",
       "href": "https://github.com/FilipeFantini/lagom/blob/main/docs/architecture.md"
     }
   ]

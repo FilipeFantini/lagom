@@ -295,9 +295,10 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
 
 - [ ] Astro site on Cloudflare Pages at ofantini.com — design inspired by
       PostHog's; each page states the problem, then the solution.
-      The source is in [`products/site/`](../products/site/README.md): home,
-      and the USGS showcase. Publishing to Pages is still open, so the site
-      is not live on the domain yet
+      The source is in [`products/site/`](../products/site/README.md): a personal
+      site, with Lagom as one project and the USGS showcase inside it.
+      Publishing to Pages is still open, so the site is not live on the domain
+      yet
 - [ ] Evidence dashboards built in the cluster by a Dagster step after each
       run and published to Cloudflare Pages, shown as a gallery of cards on the
       site ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed)

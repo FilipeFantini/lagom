@@ -1,0 +1,46 @@
+---
+import Base from "../../../layouts/Base.astro";
+import Figures from "../../../components/Figures.astro";
+import Series from "../../../components/Series.astro";
+---
+
+<Base
+  title="Modelling — Lagom"
+  description="How Lagom turns the raw earthquake feed into tested silver and gold, and what is not asserted yet."
+  canonical="https://ofantini.com/projects/lagom/modelling"
+  current="projects"
+  inventory="platform"
+  figurePage="modelling"
+>
+  <article class="essay">
+    <div class="wrap">
+      <p class="kicker">Lagom</p>
+      <h1>Layers a reader can trust.</h1>
+      <div class="prose">
+        <p>
+          The raw feed keeps every revision of an event. That is not what a question asks. dbt
+          builds three layers. Bronze is what the load wrote. Silver,
+          <code>stg_usgs__events</code>, is the latest revision, typed, times in UTC. Gold is
+          <code>fct_earthquakes</code>, earthquakes only, with magnitude and depth classes, and
+          <code>agg_earthquakes_daily_region</code>, counts by day and region. Both gold models
+          have an enforced contract.
+        </p>
+        <p>
+          The same build runs the tests: keys, ranges, accepted values, reconciliation of row
+          counts from bronze to silver to gold to the daily aggregate, and unit tests of the
+          deduplication, the region parsing and the class boundaries. Freshness of bronze is a
+          separate check. The build does not run it, and the roadmap item that would declare and
+          assert a threshold is still open.
+        </p>
+        <p>
+          There were two homes for these models. A CronJob used to run them in Postgres. The
+          scheduled job now runs them on the lake target. The production counts for both paths are
+          on the USGS showcase, labelled as which path they belong to. The figure below is the CI
+          gate, a fixture, not a production load.
+        </p>
+      </div>
+      <Figures page="modelling" />
+      <Series here="/projects/lagom/modelling" />
+    </div>
+  </article>
+</Base>

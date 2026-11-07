@@ -1,0 +1,43 @@
+---
+import Base from "../../../layouts/Base.astro";
+import Figures from "../../../components/Figures.astro";
+import Series from "../../../components/Series.astro";
+---
+
+<Base
+  title="Ingestion — Lagom"
+  description="How Lagom ingests a batch feed, and which event tools are chosen but not running."
+  canonical="https://ofantini.com/projects/lagom/ingestion"
+  current="projects"
+  inventory="platform"
+  figurePage="ingestion"
+>
+  <article class="essay">
+    <div class="wrap">
+      <p class="kicker">Lagom</p>
+      <h1>Two shapes of intake. One of them runs.</h1>
+      <div class="prose">
+        <p>
+          Batch APIs and continuous events are different problems. The decision is dlt for a batch
+          API, and Redpanda Connect for events. NATS waits for a second consumer of the same stream,
+          or a need to replay. A source that is polled often can be written straight through, and
+          NATS would add nothing. The event path is not in this project yet.
+        </p>
+        <p>
+          dlt is a library, not a server. The job starts, pages the feed, keeps a cursor, writes,
+          and exits. Between runs it holds no memory. The first source is the USGS earthquake feed:
+          public, no key, a stable shape, a small volume. The work is the conveyor.
+        </p>
+        <p>
+          The scheduled job asks dlt for the DuckLake destination. The accepted storage decision
+          still says Postgres holds every layer until the spike passes. Both sentences are in the
+          sources. The measured loads are on the USGS showcase, not repeated here as if the
+          decision were closed. How many files the lake holds, and how many bytes, are not in those
+          sources.
+        </p>
+      </div>
+      <Figures page="ingestion" />
+      <Series here="/projects/lagom/ingestion" />
+    </div>
+  </article>
+</Base>

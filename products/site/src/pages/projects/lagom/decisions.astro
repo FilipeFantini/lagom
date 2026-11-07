@@ -1,0 +1,44 @@
+---
+import Base from "../../../layouts/Base.astro";
+import Figures from "../../../components/Figures.astro";
+import Series from "../../../components/Series.astro";
+---
+
+<Base
+  title="Decisions — Lagom"
+  description="The architecture decisions behind Lagom, including the warehouse choice that is still proposed."
+  canonical="https://ofantini.com/projects/lagom/decisions"
+  current="projects"
+  inventory="platform"
+  figurePage="decisions"
+>
+  <article class="essay">
+    <div class="wrap">
+      <p class="kicker">Lagom</p>
+      <h1>Decisions, including the open one.</h1>
+      <div class="prose">
+        <p>
+          A choice that is hard to undo is written as an ADR: the problem, the alternatives, the
+          decision, and how to reverse it. The layout of the repository is one of them (ADR-0006):
+          shared backbone, one directory per source, and what a person sees under products. Adding
+          a source is supposed to be additive.
+        </p>
+        <p>
+          Three environments share the one node (ADR-0007): dev against staging's data, plus
+          staging and prod namespaces. The accepted storage decision (ADR-0008) keeps every layer
+          in Postgres until a lake has a measured reason. The alternative, a lakehouse from the
+          first source, was rejected because the volume did not need it.
+        </p>
+        <p>
+          The portfolio decision (ADR-0022) says each architecture is a showcase on that backbone,
+          published as static pages, with no login for public data. A later decision (ADR-0023)
+          proposes the SME stack: DuckDB, DuckLake, a Postgres catalog, files on Cloudflare R2. It
+          is still proposed. The spike that would accept or revise it is open. The job that runs
+          already loads DuckLake, which the card below states without closing the decision.
+        </p>
+      </div>
+      <Figures page="decisions" />
+      <Series here="/projects/lagom/decisions" />
+    </div>
+  </article>
+</Base>
