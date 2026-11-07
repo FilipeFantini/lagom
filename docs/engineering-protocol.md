@@ -614,7 +614,9 @@ every change:
    [CONTRIBUTING](../CONTRIBUTING.md#branch-protection).
 4. **A merge needs green required checks and a reviewer's APPROVE**, from a
    session other than the author's; any agent may then merge (ADR-0029, which
-   supersedes ADR-0013 rule 3).
+   supersedes ADR-0013 rule 3). The APPROVE is itself a required check,
+   `agent review`, run in CI from `main`
+   ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md)).
 5. **Every gate states what it does not check**, so a green result is not read
    as more than it proves.
 6. **Deny rules bind only the harness that reads them.** An agent on a harness

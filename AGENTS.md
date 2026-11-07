@@ -129,7 +129,13 @@ Smallest coherent change that solves the problem. No unrelated refactoring.
 **Roles.** The session the operator talks to is the architect: it designs,
 writes briefs, and decides. Scoped implementation can go to an `implementer`,
 and **every pull request is reviewed by a `reviewer` before merge** — no need to
-be asked. The roles are written in [`.claude/agents/`](.claude/agents/) as plain
+be asked. GitHub enforces it: the `agent review` check runs the reviewer role
+in CI and is required on `main`
+([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)). A pull
+request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS)
+carries a **For the operator** section — what changes, what it touches, what
+could go wrong, how to undo it, in plain words — since the operator approves
+on it, not on the code. The roles are written in [`.claude/agents/`](.claude/agents/) as plain
 instructions: Claude Code runs them as subagents; on another harness, start a
 separate agent session whose first instruction is to read and follow the role
 file. A reviewer is never the session that wrote the change. The operator

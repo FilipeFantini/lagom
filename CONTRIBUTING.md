@@ -23,9 +23,14 @@ messages.
    ([`.claude/agents/reviewer.md`](.claude/agents/reviewer.md)): an
    independent pass that runs the adversarial review of
    [`docs/engineering-protocol.md`](docs/engineering-protocol.md) §12 Phase E.
-   Blocker and major findings are fixed before merge. GitHub does not let an
-   author approve their own pull request, so the architect posts the verdict
-   with `gh pr review --comment`.
+   The required `agent review` check runs it in CI on every push and posts
+   its verdict on the pull request
+   ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)); a
+   reviewer subagent before opening the pull request is optional. Blocker and
+   major findings are fixed before merge. A pull request that touches a path
+   in [`.github/CODEOWNERS`](.github/CODEOWNERS) has a **For the operator**
+   section in its description — what changes in behaviour, what it touches,
+   what could go wrong, how to undo it, in plain words — or the check fails.
 5. Merge to `main`. Argo CD converges the cluster. Who may merge — any agent,
    once the required checks are green and a reviewer returned APPROVE, with the
    operator's explicit go-ahead for a guardrail change — is
@@ -191,9 +196,21 @@ What it does not enforce:
   CI, agent definitions or instructions, permissions, RBAC, and secrets also
   holds by convention
   ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
-- **The reviewer's APPROVE.** Agents may merge after it
-  ([`AGENTS.md`](AGENTS.md) §6), but GitHub does not see it: a token that can
-  merge an unguarded pull request can merge it without it.
+- **The reviewer's APPROVE, until `agent review` is required.** Agents may
+  merge after it ([`AGENTS.md`](AGENTS.md) §6). Once the check is in the
+  ruleset GitHub enforces it; until then a token that can merge an unguarded
+  pull request can merge it without it.
+
+**Making `agent review` required,** in this order
+([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md) Decision 7):
+
+1. [`agent-review.yml`](.github/workflows/agent-review.yml) is on `main`
+   (it runs on `pull_request_target`, so it reviews nothing before then).
+2. The operator creates a token with `claude setup-token` and stores it as
+   the repository secret `CLAUDE_CODE_OAUTH_TOKEN`.
+3. A pull request shows the `agent review` check run with a verdict comment.
+4. Only then is `agent review` added to the `main` ruleset's required checks;
+   a required check that never reports blocks every pull request.
 
 Until 2026-10-27 `main` had no protection: on a private repository it needs a
 paid plan, and the operator accepted that as an exception (2026-10-13) and as

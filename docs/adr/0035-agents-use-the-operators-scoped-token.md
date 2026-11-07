@@ -14,6 +14,9 @@
   guarded paths are the architect's proposal, accepted with this ADR.
 - **Amends:** [ADR-0032](0032-agents-in-credential-free-containers.md)
   Decisions 2, 4 and 5.
+- **Amended by:** [ADR-0036](0036-the-reviewer-as-a-required-check.md) — the
+  reviewer's verdict in Decision 5 becomes a required check, which also
+  enforces the For the operator section.
 
 ## Context and problem
 
@@ -89,7 +92,7 @@ session (`repo` and `workflow` scopes) never goes to a runner.
 
 **2. Every gate is a required check on `main`, which has no bypass,** so it
 binds the operator's identity — and an agent acting as it — like any other:
-the CI checks, the reviewer (ADR-0036, once its check is required),
+the CI checks, the reviewer ([ADR-0036](0036-the-reviewer-as-a-required-check.md)),
 and the guardrail approval below.
 
 **3. `.github/CODEOWNERS` is the list of guarded paths**

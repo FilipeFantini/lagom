@@ -411,6 +411,11 @@ by its own trigger, like any other piece.
       Decided 2026-11-07; done when the setup test in
       [CONTRIBUTING](../CONTRIBUTING.md#branch-protection) passes
       ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md))
+- [ ] **The reviewer as a required check** — `agent review` runs the
+      reviewer role in CI from `main` on every pull request, fails unless it
+      approves, and requires a For the operator section on guarded changes.
+      Decided 2026-11-07; done when the check is in the `main` ruleset
+      ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md))
 - [ ] **Notion as the one documentation space outside the repository** —
       status, briefs, pending decisions, and site drafts; it links to the
       repository and never restates it. The Obsidian vault leaves the project
