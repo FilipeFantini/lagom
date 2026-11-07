@@ -145,14 +145,11 @@ set. The tests set it; set it wherever the job runs.
 
 ## Image
 
-`Dockerfile` builds `ghcr.io/filipefantini/lagom-usgs`, whose entrypoint is
-`python ingestion/pipeline.py`: arguments given to the container (`--since`,
-`--until`) are passed on. CI builds it and publishes it from `main`
-([`images.yml`](../../.github/workflows/images.yml),
-[ADR-0015](../../docs/adr/0015-images-on-ghcr.md)). It runs as UID 10001 on a
-read-only root filesystem; dlt writes under `/tmp`, so mount a writable volume
-there. The credentials are still `DESTINATION__POSTGRES__CREDENTIALS`, supplied
-by the job.
+No image of its own since 2026-11-07: `lagom-usgs` ran only in the CronJobs on
+Postgres, retired that day
+([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)). The
+code is bundled into `lagom-orchestration`, which runs it as the asset
+`usgs/events` ([`platform/orchestration/`](../../platform/orchestration/README.md)).
 
 ## Tests
 

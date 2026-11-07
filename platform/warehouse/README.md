@@ -112,14 +112,11 @@ settings are listed in `profiles.yml` and in the code location's
 
 ## Image
 
-`Dockerfile` builds `ghcr.io/filipefantini/lagom-warehouse`, whose entrypoint is
-`dbt build` with the project and profiles directories set; extra arguments
-(`--select`) are appended. CI builds it and publishes it from `main`
-([`images.yml`](../../.github/workflows/images.yml),
-[ADR-0015](../../docs/adr/0015-images-on-ghcr.md)). The image carries `tests/`
-because `dbt build` runs them. It runs as UID 10001 on a read-only root
-filesystem; dbt writes only under `/tmp`, so mount a writable volume there. The
-`LAGOM_PG_*` variables are supplied by the job.
+No image of its own since 2026-11-07: `lagom-warehouse` ran only in the
+CronJobs on Postgres, retired that day
+([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)). The
+project is bundled into `lagom-orchestration`, whose `warehouse` asset runs
+`dbt build` on the `lake` target ([`platform/orchestration/`](../orchestration/README.md)).
 
 ## Known limits
 

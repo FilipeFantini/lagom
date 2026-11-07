@@ -273,10 +273,10 @@ The node that M3 needs, and the orchestration every showcase uses.
       ping came from Dagster at 21:01 UTC, after its CronJob was deleted
       ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md);
       [ADR-0026](adr/0026-dagster-one-instance-per-environment.md))
-- [ ] Retire the images `lagom-usgs` and `lagom-warehouse`: no manifest pins
+- [x] Retire the images `lagom-usgs` and `lagom-warehouse`: no manifest pins
       them since the CronJobs went on 2026-11-07. Their rows in
-      `.github/workflows/images.yml` and their Dockerfiles go together; a CI
-      change, so the operator's go-ahead is needed
+      `.github/workflows/images.yml` and their Dockerfiles went together, the
+      same day; their packages stay in GHCR, no longer updated
 - [ ] `dbt test` in CI
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
