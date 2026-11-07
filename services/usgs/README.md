@@ -9,7 +9,7 @@ The CronJobs that ran it on Postgres were retired on 2026-11-07
 | | |
 |---|---|
 | **Source** | `https://earthquake.usgs.gov/fdsnws/event/1/query`, `format=geojson`. No key, no authentication. The static summary feeds are not used: they have no `updatedafter` and cannot be paged or backfilled. |
-| **Destination** | dlt `postgres` destination, dataset `bronze`, table `usgs_events` |
+| **Destination** | dlt `ducklake` destination in staging and prod (catalog in the environment's Postgres, files in its R2 bucket, [ADR-0026](../../docs/adr/0026-dagster-one-instance-per-environment.md)), dataset `bronze`, table `usgs_events`. The command line takes the destination as a required argument |
 | **Freshness threshold** | 2 hours — the newest `properties__updated` in bronze may not be older than that. Asserted by dbt in the next step, not here. |
 | **Volume** | about 9 events an hour, roughly 300 000 a year |
 
@@ -33,8 +33,8 @@ A stable order is what offset pagination needs.
 **Cursor.** `properties.updated`, epoch milliseconds, sent to the API as
 `updatedafter` in ISO 8601 UTC. dlt stores the cursor in its pipeline state,
 which it also writes to the destination (`_dlt_pipeline_state`), so a
-CronJob pod with no disk restores it from Postgres and the cursor can be
-inspected with SQL. `updatedafter` ignores fractions of a second, so the request
+Dagster run Pod, which starts with no disk, restores it from DuckLake and the
+cursor can be inspected with SQL. `updatedafter` ignores fractions of a second, so the request
 is cut to whole seconds and the API re-sends the events of the last second; the
 merge key removes them.
 
@@ -100,17 +100,30 @@ into columns whichever way this is set.
 
 ## Running it
 
-Everything runs from the repository root, because dlt reads `.dlt/` from the
-working directory.
+In staging and prod Dagster runs it: the asset `usgs/events`
+([`assets/__init__.py`](assets/__init__.py)) calls `run("ducklake", ...)`
+every 30 minutes, and a run on demand is *Launch run* on the `usgs` job.
+By hand, everything runs from the repository root, because dlt reads `.dlt/`
+from the working directory.
 
 ```sh
 uv run --project services/usgs python services/usgs/ingestion/pipeline.py --help
 ```
 
-**Incremental run** (what the CronJob will do):
+`--destination` is required and has no default, so a run never writes
+somewhere nobody chose. The destinations in use:
+
+| `--destination` | Where | Environment to run it from |
+|---|---|---|
+| `ducklake` | DuckLake, what Dagster runs in staging and prod | `platform/orchestration`, which has `dlt[ducklake,s3]` |
+| `postgres` | `lagom_dev` in staging's Postgres, the developer's database ([ADR-0014](../../docs/adr/0014-develop-against-staging.md)) | `services/usgs` |
+| `duckdb` | a local `usgs.duckdb` file, for a quick try | `services/usgs` |
+
+**Incremental run** into `lagom_dev`:
 
 ```sh
-uv run --project services/usgs python services/usgs/ingestion/pipeline.py
+uv run --project services/usgs python services/usgs/ingestion/pipeline.py \
+  --destination postgres
 ```
 
 **Backfill a window** of `updated` times, without editing code. `--since` is
@@ -119,14 +132,14 @@ not changed, so a backfill cannot move current data:
 
 ```sh
 uv run --project services/usgs python services/usgs/ingestion/pipeline.py \
-  --since 2026-10-01T00:00:00Z --until 2026-10-02T00:00:00Z
+  --destination postgres --since 2026-10-01T00:00:00Z --until 2026-10-02T00:00:00Z
 ```
 
 The API cannot filter by an upper bound on `updated`, so a backfill reads
 everything updated after `--since` and drops what is at or after `--until`
 before loading. Pick `--since` close to the window you want.
 
-**Try it without Postgres** — loads into a local DuckDB file named
+**Try it with no database** — loads into a local DuckDB file named
 `usgs.duckdb` in the current directory (git-ignored):
 
 ```sh
@@ -134,14 +147,39 @@ uv run --project services/usgs python services/usgs/ingestion/pipeline.py \
   --destination duckdb --since 2026-10-16T10:00:00Z --until 2026-10-16T11:00:00Z
 ```
 
-**Postgres.** Credentials come from dlt's own mechanism and are never in this
-repository: the environment variable `DESTINATION__POSTGRES__CREDENTIALS`
-(a connection string), or `.dlt/secrets.toml` at the repository root, which is
-git-ignored. Do not create `secrets.toml` anywhere else: the ignore rule is
-anchored to the root.
+**Try DuckLake locally** — the destination Dagster runs, with the catalog in a
+local DuckDB file and the Parquet files in a local directory instead of
+Postgres and R2. It runs from the orchestration environment, which has the
+DuckLake destination:
+
+```sh
+LAKE="$(mktemp -d)"
+DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG="duckdb:///$LAKE/catalog.duckdb" \
+DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL="$LAKE/files" \
+uv run --project platform/orchestration python services/usgs/ingestion/pipeline.py \
+  --destination ducklake --since 2026-11-06T10:00:00Z --until 2026-11-06T11:00:00Z
+```
+
+The lake lives in a temporary directory outside the repository; delete it
+with `rm -rf "$LAKE"` when done.
+
+**DuckLake in the cluster.** The run Pod gets the destination from dlt's
+environment variables, `DESTINATION__DUCKLAKE__CREDENTIALS__*`, set in each
+environment's Dagster values
+([`platform/infra/dagster-staging/values.yaml`](../../platform/infra/dagster-staging/values.yaml)):
+the catalog is the environment's `lagom` database, the files go to
+`s3://lagom-<env>-lake`, and the R2 token comes from a sealed Secret.
+
+**Postgres (`lagom_dev`).** Credentials come from dlt's own mechanism and are
+never in this repository: the environment variable
+`DESTINATION__POSTGRES__CREDENTIALS` (a connection string), or
+`.dlt/secrets.toml` at the repository root, which is git-ignored. Do not create
+`secrets.toml` anywhere else: the ignore rule is anchored to the root. The
+connection goes through `kubectl port-forward`
+([architecture.md, Staging](../../docs/architecture.md#staging)).
 
 dlt sends anonymous usage telemetry unless `RUNTIME__DLTHUB_TELEMETRY=false` is
-set. The tests set it; set it wherever the job runs.
+set. The tests set it; set it wherever the pipeline runs.
 
 ## Image
 

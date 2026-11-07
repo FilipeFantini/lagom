@@ -171,8 +171,12 @@ def _utc_datetime(text: str) -> datetime:
 
 def main(argv: Sequence[str], now: datetime) -> int:
     parser = argparse.ArgumentParser(description="Load USGS earthquake events into bronze.")
+    # No default: Dagster loads into ducklake, a developer into postgres
+    # (lagom_dev) or duckdb, and a default would pick one of them silently.
     parser.add_argument(
-        "--destination", default="postgres", help="dlt destination (default: postgres)"
+        "--destination",
+        required=True,
+        help="dlt destination: ducklake (staging and prod), postgres (lagom_dev) or duckdb",
     )
     parser.add_argument(
         "--since",
