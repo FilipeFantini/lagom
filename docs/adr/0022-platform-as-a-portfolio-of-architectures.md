@@ -145,3 +145,7 @@ without rewriting it.
   dashboards are built in the cluster after each run, not in CI; Terraform
   enters with the move to `lagom-shared-02` — withdrawn on 2026-10-28, see
   ADR-0023's notes. The rest stands.
+- **2026-11-07 — the domain is `ofantini.com`.** `getlagom.app` is replaced
+  by `ofantini.com`: the site at its apex, the operator's tools at
+  `ops.ofantini.com` ([ADR-0030](0030-operator-uis-behind-cloudflare-access.md)).
+  No site had been published on `getlagom.app`. The rest stands.

@@ -1,0 +1,44 @@
+# What the tunnel serves (ADR-0030). This file is the whole list of what the
+# internet can ask for through it: a hostname not listed here gets a 404 from
+# the tunnel, whatever the DNS says.
+#
+# There is no `tunnel:` key: the sealed token (token-sealed.yaml) carries the
+# tunnel's ID and secret, so neither is in the repository.
+#
+# `access` makes cloudflared itself check, on every request, the JWT that
+# Cloudflare Access adds after a login, against this team's keys and this
+# application's audience tag. A request without a valid one is refused here,
+# so an Access application deleted or set to bypass by mistake fails closed
+# instead of publishing a UI that has no login of its own. The team name and
+# the audience tag are not secrets: Access puts both in the URL of every
+# redirect to its login page.
+#
+# cloudflared reads this file at start only. A change here must also change
+# `lagom.dev/config-revision` in deployment.yaml, which restarts it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+data:
+  config.yaml: |
+    # Liveness and readiness are read from /ready on this port.
+    metrics: 0.0.0.0:2000
+    originRequest:
+      access:
+        required: true
+        teamName: ofantini
+        audTag:
+          - 9d2af5104655e9bb8e5dc4ab037d90fe7399a5738ca9d6c56ce5c9c8508839e1
+    # One hostname, one path per tool. `path` is a regular expression on the
+    # request's path; the path is passed on unchanged, so each tool serves
+    # itself under its prefix (Dagster's pathPrefix in its values.yaml).
+    # Rules are tried in order and the first match wins.
+    ingress:
+      - hostname: ops.ofantini.com
+        path: ^/dagster-staging(/.*)?$
+        service: http://dagster-dagster-webserver.staging.svc.cluster.local:80
+      - hostname: ops.ofantini.com
+        path: ^/dagster(/.*)?$
+        service: http://dagster-dagster-webserver.prod.svc.cluster.local:80
+      # Anything else, ops.ofantini.com/ included: refused by the tunnel.
+      - service: http_status:404

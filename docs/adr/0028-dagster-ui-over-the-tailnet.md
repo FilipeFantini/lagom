@@ -1,6 +1,6 @@
 # ADR-0028 — Dagster's UI over the tailnet, by `tailscale serve` on the node
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0030](0030-operator-uis-behind-cloudflare-access.md)
 - **Date:** 2026-11-05
 - **Decided by:** the operator, who asked on 2026-11-05 for a stable address
   for the UI "protected by the tailnet"; the mechanism is the one this ADR
@@ -231,3 +231,22 @@ The URL would stop working loudly, and port-forward still works.
 2. Delete the Service file.
 3. Remove the port from the ACL.
 
+## Notes
+
+The text above is kept as decided. These notes record what changed since,
+without rewriting it.
+
+- **2026-11-05 — set up, measured, and withdrawn the same day.** On the node
+  (Tailscale 1.104.4), the Service answered `/server_info` with 200 from the
+  node, and `tailscale serve --bg --http=8080` listened only on the node's two
+  tailnet addresses (`ss` showed both bound to `tailscale0`). `tailscaled`'s
+  RSS went from 60,708 to 60,824 KiB, about 0.1 MiB, idle. From the Mac the
+  URL timed out, as expected: the ACL had not yet granted the port, which
+  also showed the default deny at work. The operator then rejected the
+  approach (a port in the URL, plain HTTP, tailnet only) for Cloudflare
+  Tunnel + Access, [ADR-0030](0030-operator-uis-behind-cloudflare-access.md).
+  Serve was turned off on the node the same day, the ACL was never changed,
+  and ADR-0030 removed the `tailnet-access` Application from Git. Removing an
+  Application does not remove its objects (no Application here carries Argo
+  CD's resources finalizer), so the operator deletes the Service by hand:
+  `kubectl -n staging delete svc dagster-ui-tailnet`.

@@ -1,0 +1,46 @@
+# Who cloudflared may reach, and who may reach it (ADR-0030).
+#
+# 1. Nothing connects to cloudflared: it only dials out. This policy selects
+#    its Pod and allows no ingress. The kubelet's probes still pass, because
+#    k3s's policy controller admits traffic from the local node (tested
+#    2026-10-17; postgres-prod/networkpolicy.yaml).
+# 2. Prod's Dagster webserver admits cloudflared. Prod's own policy,
+#    allow-prod-and-operator, admits only prod and the CloudNativePG operator;
+#    policies add up, so this one opens the webserver's port to this namespace
+#    and nothing else in prod. Staging has no NetworkPolicy, so it needs none.
+#
+# Not restricted: cloudflared's egress. It needs Cloudflare's edge (port
+# 7844), Access's key endpoint (443), cluster DNS and the two webservers; a
+# list of Cloudflare's addresses would go stale.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cloudflared-to-dagster-webserver
+  namespace: prod
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dagster
+      app.kubernetes.io/instance: dagster
+      component: dagster-webserver
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloudflared
+          podSelector:
+            matchLabels:
+              app: cloudflared
+      ports:
+        - {protocol: TCP, port: 80}

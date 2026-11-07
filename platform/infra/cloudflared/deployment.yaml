@@ -1,0 +1,70 @@
+# One cloudflared, which opens four outbound connections to Cloudflare's edge
+# and receives requests through them; nothing listens for the internet on the
+# node (ADR-0030). One replica: the node is single, so a second one would add
+# memory without surviving anything the first does not.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: cloudflared}
+  template:
+    metadata:
+      labels: {app: cloudflared}
+      annotations:
+        # Bump with every change to config.yaml: cloudflared reads it at start
+        # only, and a new value here rolls the Pod.
+        lagom.dev/config-revision: "2"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: cloudflared
+          # 2026.10.1, released 2026-10-15; multi-arch, arm64 included.
+          image: cloudflare/cloudflared:2026.10.1@sha256:a15a3b50b8dabd57ac2090e9484c0247dba9dfa1f0df4d298d4317f9d69eb2d5
+          # The image's entrypoint is `cloudflared --no-autoupdate`.
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config.yaml
+            - run
+            - --token-file
+            - /etc/cloudflared-token/token
+          env:
+            # Go runtime: return memory before the container limit is reached.
+            - name: GOMEMLIMIT
+              value: 100MiB
+          ports:
+            - {name: metrics, containerPort: 2000}
+          # Not measured yet: the roadmap's ~30 MB is Cloudflare's figure. The
+          # request is re-set from `kubectl top` after a week (runbook).
+          resources:
+            requests: {cpu: 10m, memory: 48Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          # /ready answers 200 once at least one connection to the edge is up.
+          readinessProbe:
+            httpGet: {path: /ready, port: metrics}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /ready, port: metrics}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - {name: config, mountPath: /etc/cloudflared, readOnly: true}
+            - {name: token, mountPath: /etc/cloudflared-token, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: cloudflared-config}
+        - name: token
+          secret: {secretName: cloudflared-token}
