@@ -19,6 +19,9 @@ dependencies = [
     # 2.0 removes an API dlt 1.31 uses (Relation.fetchone); found 2026-10-28.
     "duckdb>=1.5.5,<2",
     "pyyaml>=6",
+    # The alarm sensors' HTTP client (alarm.py): already in the image through
+    # dagster and dlt, declared because the code imports it.
+    "requests>=2.32",
 ]
 
 [dependency-groups]
