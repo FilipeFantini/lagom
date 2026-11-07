@@ -196,7 +196,10 @@ What it does not enforce:
 
 - **Review of unguarded paths beyond the reviewer.** Zero approvals are
   required outside `CODEOWNERS`. A pull request there cannot reach the
-  cluster, CI or the rules without touching a guarded path.
+  cluster, the gates or the agents' instructions without touching a guarded
+  path; it can change dependencies and the rules documents (ADRs, roadmap,
+  runbook), which only the reviewer reads
+  ([ADR-0038](docs/adr/0038-leaner-agent-gates.md)).
 - **The Mac session's restraint.** The operator's Mac session holds a token
   with `repo` and `workflow` scopes, which as an administrator can edit
   rulesets and environments. For it, the operator's go-ahead for a change to
