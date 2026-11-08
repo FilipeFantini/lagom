@@ -305,7 +305,7 @@ The public face is static: nothing on the node serves it
 
 | Tool | Role | RAM on the node | Enters when |
 |---|---|---|---|
-| **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases | 0 (static, Cloudflare Pages) | M4 |
+| **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
 | **Evidence** | the dashboards: SQL + Markdown, charts built on Apache ECharts, built by a Dagster step in the cluster after each run | 0 resident (an ephemeral build job) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
