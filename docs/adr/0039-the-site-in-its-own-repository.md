@@ -3,7 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-11-08
 - **Decided by:** the operator, in conversation on 2026-11-08: the site moves
-  to its own repository, named `ofantini`.
+  to its own repository, named `ofantini`. The repository was created as
+  `ofantini.com`, matching the domain, and the operator kept that name the
+  same day.
 - **Amends:** [ADR-0022](0022-platform-as-a-portfolio-of-architectures.md),
   *The pieces*: the site no longer lives under `products/`; the dashboards do.
 
@@ -48,7 +50,7 @@ above: the projects do not share a lifecycle with each other or with the site.
 
 ## Decision
 
-1. **The site lives in `FilipeFantini/ofantini`**, a public repository: the
+1. **The site lives in `FilipeFantini/ofantini.com`**, a public repository: the
    Astro project, its layout and design, the home, the projects list, one page
    per project, and the articles. Lagom no longer holds any of the site.
 2. **Lagom keeps its dashboards.** Evidence stays under `products/`, built in
