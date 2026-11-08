@@ -149,3 +149,7 @@ without rewriting it.
   by `ofantini.com`: the site at its apex, the operator's tools at
   `ops.ofantini.com` ([ADR-0030](0030-operator-uis-behind-cloudflare-access.md)).
   No site had been published on `getlagom.app`. The rest stands.
+- **2026-11-08 — the site moves to its own repository.** `ofantini.com` is the
+  operator's personal site, with Lagom as one of its projects. The site lives
+  in `FilipeFantini/ofantini`; the dashboards stay under `products/`
+  ([ADR-0039](0039-the-site-in-its-own-repository.md)). The rest stands.
