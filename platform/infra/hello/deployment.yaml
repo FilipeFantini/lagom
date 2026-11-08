@@ -17,7 +17,9 @@ spec:
       containers:
         - name: nginx
           # Unprivileged variant: runs as a non-root user and listens on 8080.
-          image: nginxinc/nginx-unprivileged:1.30.5-alpine
+          # Digest is the multi-arch index of tag 1.30.5-alpine, resolved
+          # 2026-11-07, so a moved tag cannot change the bytes.
+          image: nginxinc/nginx-unprivileged:1.30.5-alpine@sha256:56b8272e43a0525f67aed68d1e0794a712d10e3e45a563e118e9a77c817e6f86
           ports:
             - {name: http, containerPort: 8080}
           resources:

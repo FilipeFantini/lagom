@@ -8,6 +8,8 @@ history nobody reads.
 
 import duckdb
 
+from lagom_orchestration.redact import redact_secrets
+
 # Snapshots younger than this stay, so a recent version of any table can
 # still be read (time travel) and a reader in flight never loses its files.
 SNAPSHOT_RETENTION = "7 days"
@@ -15,17 +17,34 @@ SNAPSHOT_RETENTION = "7 days"
 
 def maintenance_statements(alias: str = "lake") -> list[str]:
     """The SQL run against an attached DuckLake, in order."""
+    name = _literal(alias)
+    retention = _literal(SNAPSHOT_RETENTION)
     return [
-        f"CALL ducklake_merge_adjacent_files('{alias}')",
-        f"CALL ducklake_expire_snapshots('{alias}', "
-        f"older_than => now() - INTERVAL '{SNAPSHOT_RETENTION}')",
-        f"CALL ducklake_cleanup_old_files('{alias}', cleanup_all => true)",
+        f"CALL ducklake_merge_adjacent_files({name})",
+        f"CALL ducklake_expire_snapshots({name}, older_than => now() - INTERVAL {retention})",
+        f"CALL ducklake_cleanup_old_files({name}, cleanup_all => true)",
     ]
+
+
+def _execute(connection: duckdb.DuckDBPyConnection, statement: str) -> None:
+    """Run `statement`. An error that contains a credential is rewritten without it.
+
+    DuckDB includes the catalog URI in an attach failure. Re-raising that
+    exception would keep the password in Dagster's event log and, from there,
+    in the alarm body. The rewritten error is not chained to the original.
+    """
+    try:
+        connection.execute(statement)
+    except Exception as error:
+        message = redact_secrets(str(error))
+        if message == str(error):
+            raise
+        raise RuntimeError(message) from None
 
 
 def run_maintenance(connection: duckdb.DuckDBPyConnection, alias: str = "lake") -> None:
     for statement in maintenance_statements(alias):
-        connection.execute(statement)
+        _execute(connection, statement)
 
 
 def _require(name: str) -> str:
@@ -47,24 +66,26 @@ def attach_lake(alias: str = "lake") -> duckdb.DuckDBPyConnection:
 
     Reads the same variables as the dbt `lake` target (platform/warehouse/
     profiles.yml), so maintenance and transformation see the same catalog.
-    The statements hold the R2 key and the catalog's password; this code never
-    logs them. Whether a DuckDB error echoes the catalog string is checked on
-    the first staging run, where the catalog is Postgres.
+    The statements hold the R2 key and the catalog's password. DuckDB echoes
+    the catalog URI when attach fails; `_execute` redacts that before the
+    exception can reach a log or the alarm.
     """
     connection = duckdb.connect()
     for extension in ("ducklake", "httpfs", "postgres"):
-        connection.execute(f"INSTALL {extension}; LOAD {extension}")
+        _execute(connection, f"INSTALL {extension}; LOAD {extension}")
     key_id = _literal(_require("LAGOM_R2_ACCESS_KEY_ID"))
     secret = _literal(_require("LAGOM_R2_SECRET_ACCESS_KEY"))
     endpoint = _literal(_require("LAGOM_R2_ENDPOINT").removeprefix("https://"))
-    connection.execute(
+    _execute(
+        connection,
         f"CREATE SECRET r2 (TYPE s3, KEY_ID {key_id}, SECRET {secret}, "
-        f"ENDPOINT {endpoint}, REGION 'auto', URL_STYLE 'path')"
+        f"ENDPOINT {endpoint}, REGION 'auto', URL_STYLE 'path')",
     )
     catalog = _literal(_require("LAGOM_LAKE_CATALOG"))
     data_path = _literal(_require("LAGOM_LAKE_DATA_PATH"))
     metadata_schema = _literal(_require("LAGOM_LAKE_METADATA_SCHEMA"))
-    connection.execute(
-        f"ATTACH {catalog} AS {alias} (DATA_PATH {data_path}, METADATA_SCHEMA {metadata_schema})"
+    _execute(
+        connection,
+        f"ATTACH {catalog} AS {alias} (DATA_PATH {data_path}, METADATA_SCHEMA {metadata_schema})",
     )
     return connection

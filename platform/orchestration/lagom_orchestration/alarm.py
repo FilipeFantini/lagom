@@ -9,11 +9,18 @@ Two sensors, both running in the code server:
 
 The ping URL is a secret: whoever has it can silence the alarm. It is read
 from `HEARTBEAT_URL` when the code location loads, and nothing here prints it,
-logs it, or puts it in an exception message.
+logs it, or puts it in an exception message. It must be https. A redirect is
+not followed: the check answers directly, and following one would send the
+body to whatever host answered.
+
+The failure body is the job, the run and the error, with credentials removed.
+DuckDB repeats the catalog URI, password included, when the lake fails to
+attach; that text would otherwise be stored by Healthchecks.io and e-mailed.
 """
 
 import os
 import time
+from urllib.parse import urlparse
 
 import requests
 from dagster import (
@@ -28,6 +35,8 @@ from dagster import (
 
 # define_asset_job returns this type; dagster does not export it at the top level.
 from dagster._core.definitions.unresolved_asset_job_definition import UnresolvedAssetJobDefinition
+
+from lagom_orchestration.redact import redact_secrets
 
 HEARTBEAT_URL_VAR = "HEARTBEAT_URL"
 
@@ -45,12 +54,22 @@ TRUNCATION_MARK = "\n[... truncated ...]\n"
 
 
 def heartbeat_url() -> str:
-    """The check's ping URL, or an error that does not name its value."""
+    """The check's ping URL, or an error that does not name its value.
+
+    Only https, with a host and no userinfo. The value itself is never part of
+    the message: a file or http URL would be a place to send the failure body.
+    """
     url = os.environ.get(HEARTBEAT_URL_VAR)
     if not url:
         raise RuntimeError(
             f"environment variable {HEARTBEAT_URL_VAR} is not set or is empty: "
             "the code location cannot raise the alarm (ADR-0033)"
+        )
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise RuntimeError(
+            f"environment variable {HEARTBEAT_URL_VAR} must be an https URL "
+            "with a host and no userinfo; the value is not shown"
         )
     return url
 
@@ -70,11 +89,14 @@ def send(url: str, body: str) -> None:
                 data=body.encode("utf-8"),
                 headers={"Content-Type": "text/plain; charset=utf-8"},
                 timeout=TIMEOUT_SECONDS,
+                allow_redirects=False,
             )
         except requests.RequestException as error:
             reason = type(error).__name__
         else:
-            if response.ok:
+            # 2xx only. response.ok is also true for a redirect, and a redirect
+            # is not followed: the body would go to the Location host.
+            if 200 <= response.status_code < 300:
                 return
             reason = f"HTTP {response.status_code}"
         if attempt < ATTEMPTS:
@@ -114,7 +136,7 @@ def failure_report(context: RunFailureSensorContext) -> str:
         error = event.step_failure_data.error
         if error is not None:
             lines.append(f"step {event.step_key} failed:\n{error.to_string()}")
-    return truncate("\n".join(lines))
+    return truncate(redact_secrets("\n".join(lines)))
 
 
 def build_alarm_sensors(usgs_job: UnresolvedAssetJobDefinition) -> list[SensorDefinition]:

@@ -260,6 +260,23 @@ def test_declared_ephemeral_reads_the_annotation() -> None:
     )
 
 
+def test_helm_refuses_a_token_that_is_a_flag() -> None:
+    from resource_budget import _helm_token
+
+    assert _helm_token("argocd", "release name") == "argocd"
+    with pytest.raises(SystemExit, match="release name"):
+        _helm_token("--post-renderer=sh", "release name")
+
+
+def test_values_file_must_stay_inside_the_repo(tmp_path: Path) -> None:
+    from resource_budget import _values_file
+
+    (tmp_path / "values.yaml").write_text("x: 1\n")
+    assert _values_file(tmp_path, "values.yaml") == (tmp_path / "values.yaml").resolve()
+    with pytest.raises(SystemExit, match="not inside"):
+        _values_file(tmp_path, "../outside.yaml")
+
+
 def test_declared_ephemeral_absent_without_annotation() -> None:
     from resource_budget import declared_ephemeral
 
