@@ -87,7 +87,7 @@ every change reaches the cluster through a pull request.
 ```
 platform/   the shared backbone: cluster manifests, Argo CD apps, the dbt project
 services/   one directory per data source: ingestion, its tests and image
-products/   what people see: the site and its dashboards
+products/   what people see: the dashboards (the site has its own repository)
 tools/      CI checks and operational scripts
 docs/       architecture, roadmap, decisions (ADRs), runbook
 ```
