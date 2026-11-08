@@ -293,9 +293,11 @@ to stop and reassess before adding anything.**
 The platform's public face: a static site and a gallery of dashboards, with
 the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Public data, no login.
 
-- [ ] The site at ofantini.com, in its own repository
+- [x] The site at ofantini.com, in its own repository
       `FilipeFantini/ofantini.com`, with Lagom as its first project
-      ([ADR-0039](adr/0039-the-site-in-its-own-repository.md))
+      ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)). Live since
+      2026-11-08 on Cloudflare Pages; its deployment and its gates are in that
+      repository's README and ADR-0001
 - [ ] Evidence dashboards built in the cluster by a Dagster step after each
       run and published to Cloudflare Pages, shown as a gallery of cards on the
       site ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed)
