@@ -1,0 +1,247 @@
+# Earthquakes: the first board. It reads gold only, through ref(), and only
+# filters and aggregates gold's columns: the classes, the regions and the
+# counts are gold's, not redefined here. check_boards.py proves the numbers
+# on the page against gold after every render.
+#
+# The page is static: nothing in it can filter, so it has no variables. The
+# window is fixed in the SQL below instead.
+#
+# The id is what check_boards.py finds the board's comparison by; without it
+# the id is made from the title, and a new title would lose the check.
+id: earthquakes
+title: Earthquakes in the last 30 days (UTC)
+source: lake
+
+style:
+  # The default footer stamp is "Data as of <time>" and that time is when the
+  # page was rendered, not the data's. The data's own freshness is the first
+  # line of the page, from the data itself.
+  timestamp:
+    visible: false
+  text:
+    column: {max_number: 1}
+  charts:
+    # One colour per class on every chart. Fixed here because the colours
+    # follow the class, not its position in a chart.
+    category_colors:
+      magnitude_class:
+        values: {micro: '#fed976', minor: '#feb24c', light: '#fd8d3c', moderate: '#f03b20', strong: '#bd0026', major: '#800026', great: '#4d0019'}
+      depth_class:
+        values: {shallow: '#c7e9b4', intermediate: '#41b6c4', deep: '#253494'}
+
+queries:
+  # Gold's earthquakes of the last 30 UTC days up to the latest one in the
+  # table, by origin time. The window is relative to the data, not to the
+  # clock, so a stalled pipeline shows its last 30 days instead of an empty
+  # page. It also keeps the daily chart under the 50 bars dct draws.
+  # event_time is a UTC timestamptz in gold: `at time zone 'UTC'` gives the
+  # UTC wall clock.
+  base:
+    sql: |
+      with bounds as (
+          select cast(max(event_time at time zone 'UTC') as date) - 29 as first_day
+          from {{ ref('fct_earthquakes') }}
+      )
+      select
+          event_id,
+          strftime(event_time at time zone 'UTC', '%Y-%m-%d') as event_day,
+          strftime(event_time at time zone 'UTC', '%Y-%m-%d %H:%M') as event_utc,
+          strftime(updated_at at time zone 'UTC', '%Y-%m-%d %H:%M') as updated_utc,
+          magnitude, magnitude_class, place,
+          coalesce(region, '(no place given)') as region,
+          latitude, longitude, depth_km, depth_class, status, is_reviewed, url
+      from {{ ref('fct_earthquakes') }}, bounds
+      where cast(event_time at time zone 'UTC' as date) >= bounds.first_day
+  kpis:
+    # The two times are the data's: the newest earthquake, and the newest USGS
+    # revision among the earthquakes in the window (not the pipeline's clock).
+    sql: |
+      select
+          count(*) as events,
+          max(magnitude) as largest,
+          count(*) filter (where magnitude >= 4) as m4_plus,
+          count(*) filter (where is_reviewed) * 1.0 / nullif(count(*), 0) as reviewed_share,
+          max(event_utc) as last_event,
+          max(updated_utc) as last_revision
+      from {{ queries.base }}
+  daily:
+    # Ordered by each class's lowest magnitude first and by day second: the
+    # stack follows the order the classes first appear in, so every class must
+    # appear in class order before any day repeats.
+    sql: |
+      select
+          event_day as day,
+          magnitude_class,
+          min(min(magnitude)) over (partition by magnitude_class) as class_floor,
+          count(*) as events
+      from {{ queries.base }}
+      group by 1, 2
+      order by 3, 1
+  by_magnitude_class:
+    sql: |
+      select magnitude_class, count(*) as events, min(magnitude) as lowest
+      from {{ queries.base }} group by 1 order by 3
+  by_depth_class:
+    sql: |
+      select depth_class, count(*) as events, min(depth_km) as shallowest
+      from {{ queries.base }} group by 1 order by 3
+  top_regions:
+    sql: |
+      select region, count(*) as events
+      from {{ queries.base }} group by 1 order by 2 desc, 1 limit 15
+  # Every earthquake of magnitude 4.0 or more in the window: the same set as
+  # the KPI, so the map drops none of them.
+  on_map:
+    sql: |
+      select event_id, place, latitude, longitude, magnitude, magnitude_class,
+             depth_km, event_utc, url
+      from {{ queries.base }} where magnitude >= 4 order by magnitude desc
+  largest:
+    sql: |
+      select event_utc, magnitude, magnitude_class, region, place, depth_km,
+             depth_class, status, 'USGS' as usgs_page, url
+      from {{ queries.base }} order by magnitude desc, event_utc desc limit 100
+
+charts:
+  k_events:
+    type: kpi
+    query: kpis
+    label: Earthquakes
+    value: events
+    style:
+      value:
+        format: integer
+  k_largest:
+    type: kpi
+    query: kpis
+    label: Largest magnitude
+    value: largest
+    style:
+      value:
+        format: ".1f"
+  k_m4:
+    type: kpi
+    query: kpis
+    label: Magnitude 4.0 or more
+    value: m4_plus
+    style:
+      value:
+        format: integer
+  k_reviewed:
+    type: kpi
+    query: kpis
+    label: Reviewed by USGS
+    value: reviewed_share
+    style:
+      value:
+        format: percent_whole
+  per_day:
+    type: bar
+    query: daily
+    title: Earthquakes per UTC day, by magnitude class
+    subtitle: Number of earthquakes by origin date (UTC). The latest day is partial.
+    x: day
+    y: events
+    color: magnitude_class
+    x_label: Origin date (UTC)
+    y_label: Earthquakes
+    # Shorter than the default (the width over 1.5) so the chart is no taller
+    # than the map, and bars capped at 36 px: with one bar per day there are
+    # about 30 of them, but a lake with two days must not draw two slabs.
+    height: 280
+    style:
+      stack: zero
+      stack_order: data
+      marks: {bar: {max_size: 36}}
+      # A legend in place of the default, a label per class on the last bar:
+      # that bar is the partial day and may lack some classes. dct draws the
+      # legend in the order of the stack, top to bottom: great first. Its
+      # `legend.values` has no effect on a stacked bar, so none is set.
+      endpoint_labels: {visible: false}
+      axis_y: {position: left}
+  map:
+    type: bubble_map
+    query: on_map
+    title: Where the earthquakes of magnitude 4.0 or more happened
+    subtitle: One circle per earthquake, sized by magnitude.
+    size: magnitude
+    geo_source: world-countries
+    # One colour, no class legend: dct draws a map's legend in alphabetical
+    # order and `legend.values` has no effect on it, and the size already
+    # carries the magnitude.
+    style:
+      color: {static: '#bd0026'}
+      marks: {point: {opacity: 0.55}}
+  by_class:
+    type: bar
+    query: by_magnitude_class
+    title: Earthquakes by magnitude class
+    subtitle: Number of earthquakes, from the smallest class to the largest.
+    x: magnitude_class
+    y: events
+    color: magnitude_class
+    sort: {by: lowest}
+    x_label: Magnitude class
+    y_label: Earthquakes
+    style:
+      legend: {visible: false}
+      marks: {bar: {labels: {visible: true, position: above, format: integer, font: {color: '#333333'}}}}
+    # Needed once a count passes 999 (the default writes 3.17k); on small
+    # data dct reports it as restating the default.
+    warnings_ignore: [WARN-RESTATED-FORMAT]
+  by_depth:
+    type: bar
+    query: by_depth_class
+    title: Earthquakes by depth class
+    subtitle: Number of earthquakes, from the shallowest class to the deepest.
+    x: depth_class
+    y: events
+    color: depth_class
+    sort: {by: shallowest}
+    x_label: Depth class
+    y_label: Earthquakes
+    style:
+      legend: {visible: false}
+      marks: {bar: {labels: {visible: true, position: above, format: integer, font: {color: '#333333'}}}}
+    # Needed once a count passes 999 (the default writes 3.17k); on small
+    # data dct reports it as restating the default.
+    warnings_ignore: [WARN-RESTATED-FORMAT]
+  top_regions:
+    type: bar
+    query: top_regions
+    title: Top 15 regions by number of earthquakes
+    subtitle: Region is the text after the last comma of USGS's place description.
+    x: region
+    y: events
+    x_label: Region
+    y_label: Earthquakes
+    style:
+      marks: {bar: {labels: {visible: true, position: above}}}
+  largest:
+    type: table
+    query: largest
+    title: The 100 largest earthquakes
+    subtitle: By magnitude, with the most recent first among equals. Times are UTC, depth is in km.
+    style:
+      columns:
+        event_utc: {label: Origin time (UTC)}
+        usgs_page: {label: USGS page, link: "{{ url }}"}
+        url: {visible: false}
+
+rows:
+  - text: "Latest earthquake in the data: **{{ queries.kpis.one.last_event }} UTC**. Latest USGS revision of these earthquakes: **{{ queries.kpis.one.last_revision }} UTC**. Both times come from the data, not from when this page was built."
+  - cols: [k_events, k_largest, k_m4, k_reviewed]
+  - per_day
+  - map
+  - cols: [by_class, by_depth]
+  - top_regions
+  - largest
+  - text: |
+      **About these numbers**
+
+      - **Source:** the [USGS Earthquake Catalog](https://earthquake.usgs.gov/fdsnws/event/1/), earthquakes only: other event types, such as quarry blasts, are left out.
+      - **Window:** the last 30 UTC days up to the latest earthquake in the data, by origin time. The current UTC day is partial.
+      - **Classes:** the magnitude classes (micro to great) and depth classes (shallow, intermediate, deep) are defined in the warehouse; see [its README](https://github.com/FilipeFantini/lagom/blob/main/platform/warehouse/README.md#what-the-models-decide).
+      - **Revisions:** an earthquake marked `automatic` has not been reviewed by a USGS analyst and may be revised, magnitude and class included. The share reviewed is of the earthquakes in the window.
+      - **Units:** all times are UTC; depth is in kilometres; magnitude has no unit.
+      - **Static page:** it cannot filter or search. 

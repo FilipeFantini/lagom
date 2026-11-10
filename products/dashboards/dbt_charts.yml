@@ -1,0 +1,20 @@
+# The dbt Charts project: where `dct` finds its sources. Boards are in charts/.
+#
+# The boards read the warehouse's gold models through dbt's own machinery, on
+# the `lake` target, so what they query is what Dagster builds. Without the
+# `target:` line a source falls back to the profile's default (`dev`, which is
+# Postgres and wants LAGOM_PG_* variables).
+#
+# `ref()` is resolved from the dbt manifest, which `dbt parse` writes; it is
+# not committed (platform/warehouse/target/ is ignored).
+#
+# The profile is this directory's own, not the warehouse's, for one reason:
+# the scope of the R2 secret. See profiles.yml. `profiles_dir` is relative to
+# the dbt project directory.
+dbt_project_dir: ../../platform/warehouse
+sources:
+  lake:
+    type: dbt_profile
+    profile: lagom_dashboards
+    profiles_dir: ../../products/dashboards
+    target: lake

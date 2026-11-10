@@ -153,3 +153,8 @@ without rewriting it.
   operator's personal site, with Lagom as one of its projects. The site lives
   in `FilipeFantini/ofantini.com`; the dashboards stay under `products/`
   ([ADR-0039](0039-the-site-in-its-own-repository.md)). The rest stands.
+- **2026-11-10 — the dashboards' tool is dbt Charts, not Evidence.** The rest
+  of the row (static output, built in the cluster, published to Cloudflare
+  Pages) stands; the exit named above was checked and the Observable Framework
+  had no commit since May 2026
+  ([ADR-0040](0040-dbt-charts-for-the-dashboards.md), proposed).

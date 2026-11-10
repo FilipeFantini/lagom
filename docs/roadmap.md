@@ -28,7 +28,7 @@ dbt, Postgres, Dagster.
 | DuckDB and DuckLake (the SME stack) | the spike in M3; the warehouse moves from Postgres when it passes ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; until then [ADR-0008](adr/0008-postgres-for-all-layers.md)). USGS already runs on DuckLake under Dagster ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), and the Postgres CronJobs were retired with Dagster's alarm on 2026-11-07, before the spike closes ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)); if the spike fails, ADR-0023's reversal applies |
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
-| Evidence | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
+| dbt Charts (the dashboards) | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)); replaced Evidence on 2026-11-10 ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), proposed) |
 | Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `ops.ofantini.com/<tool>` ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
 | NATS | second consumer of the same stream, or a replay requirement |
 | Streamlit | an interactive app a static page cannot serve |
@@ -236,9 +236,10 @@ The node that M3 needs, and the orchestration every showcase uses.
       ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)); re-measured after
       three days of uptime
 - [ ] **Spike: the SME stack** — the USGS pipeline into DuckLake (Postgres
-      catalog, data on R2) with dbt-duckdb; Evidence reading it; compaction of
-      small files; memory and time against Postgres, including the Evidence
-      build and the Pages deploy. Accept or revise
+      catalog, data on R2) with dbt-duckdb; the dashboards reading it (Evidence
+      was tried and replaced by dbt Charts, [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md));
+      compaction of small files; memory and time against Postgres, including
+      the dashboards' render and the Pages deploy. Accept or revise
       ADR-0023 with the numbers
 - [x] Postgres backup — before Dagster's metastore, whose run history exists
       only on the node. With the SME stack the state to protect is the catalog
@@ -298,9 +299,15 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
       ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)). Live since
       2026-11-08 on Cloudflare Pages; its deployment and its gates are in that
       repository's README and ADR-0001
-- [ ] Evidence dashboards built in the cluster by a Dagster step after each
+- [ ] dbt Charts dashboards built in the cluster by a Dagster step after each
       run and published to Cloudflare Pages, shown as a gallery of cards on the
-      site ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed)
+      site ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed;
+      [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), proposed)
+  - [x] The project and its CI gate: `products/dashboards/`, the first board
+        (earthquakes), and a check that fails a render that disagrees with gold
+  - [ ] The Dagster step that renders the boards after each run, its memory
+        measured on real data and budgeted, and its output redacted
+  - [ ] Publishing: the Cloudflare Pages project and hostname, and the token
 - [ ] **Showcase: the SME stack on USGS** — the pipeline, with its real numbers
       (rows, run time, memory)
 - [ ] **Showcase: the platform itself**, after the USGS showcase is live —

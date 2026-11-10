@@ -91,3 +91,12 @@ with a peak of 356 MiB for the whole process.
 
 **DuckDB is pinned below 2.0.** DuckDB 2.0 removes `Relation.fetchone()`,
 which dlt 1.31 calls.
+
+**The `dashboards` dependency group** holds `dbt-charts` (`dct`), the renderer
+of [`products/dashboards/`](../../products/dashboards/README.md)
+([ADR-0040](../../docs/adr/0040-dbt-charts-for-the-dashboards.md)). It is not in
+`dependencies`: the image installs with `uv sync --locked --no-dev`, which
+leaves out every group that is not a default one, so the image does not grow
+until the step that renders the boards exists. CI and a local render ask for it
+with `--group dashboards`. It adds 18 packages to the lock and changes none;
+DuckDB stays at 1.5.6.

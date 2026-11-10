@@ -306,24 +306,28 @@ The public face is static: nothing on the node serves it
 | Tool | Role | RAM on the node | Enters when |
 |---|---|---|---|
 | **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
-| **Evidence** | the dashboards: SQL + Markdown, charts built on Apache ECharts, built by a Dagster step in the cluster after each run | 0 resident (an ephemeral build job) | M4 |
+| **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check exist in `products/dashboards/`; the Dagster step that renders and publishes them in the cluster does not yet ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)) | 0 resident (an ephemeral render job; about 0.7 GB at its peak on the CI fixture, to be measured on real data and budgeted) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
 
-How a dashboard is published: a Dagster step after each run builds Evidence in
-the cluster and deploys the static pages to Cloudflare Pages, an outbound
-connection, so the site follows the data ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed). A visitor never reaches the
-cluster.
+How a dashboard is published (the design; only the first two steps exist): a
+Dagster step after each run reads gold through `dct`, renders each board to one
+HTML file and deploys the files to Cloudflare Pages, an outbound connection,
+so the site follows the data ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)).
+A visitor never reaches the cluster.
 
-Evidence is MIT-licensed with no per-seat cost. It is built for reviewed
-reports, not ad-hoc exploration. Its npm releases paused between February and
-October 2026; the exit is the Observable Framework, which keeps the SQL and the
-Parquet ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)).
+dbt Charts is Apache-2.0 with no per-seat cost, and beta: its syntax is
+pre-1.0 and it is pinned. It replaced Evidence on 2026-11-10 after a trial
+(frozen npm release, a DuckDB that cannot read the lake, a Node toolchain
+beside the Python one). It is built for reviewed reports, not ad-hoc
+exploration, and the page it makes is static: no in-page filters, search or map
+zoom. Its render exits 0 on a query that returns nothing, so CI checks every
+figure against gold ([`products/dashboards/`](../products/dashboards/README.md)).
 
-Two cautions: in static build mode the data is **embedded in the site** as
-Parquet, and Evidence has **no authentication and no row-level security**. A
-public showcase therefore publishes only public data. Private data means one
-build per audience behind Cloudflare Access — not a permission inside the app.
+Two cautions: the data is **embedded in the page**, and the page has **no
+authentication and no row-level security**. A public showcase therefore
+publishes only public data. Private data means one build per audience behind
+Cloudflare Access — not a permission inside the app.
 
 Metabase, Superset and Lightdash are the self-service BI options, at 600 MB to
 1 GB or more each. They enter when a client needs ad-hoc exploration, behind
@@ -637,8 +641,8 @@ not a peak, since the stats refresh every ~10 s; the request stays until a
 longer run is sampled. dbt's SQL runs inside Postgres while every layer
 lives there ([ADR-0008](adr/0008-postgres-for-all-layers.md)). Sealed Secrets
 declares 32 MB and uses 16 MiB measured ([ADR-0010](adr/0010-sealed-secrets.md)), small enough to leave
-the totals above unchanged at this precision. The Evidence build is an
-ephemeral job, measured in the SME-stack spike.
+the totals above unchanged at this precision. The dashboards' render is an
+ephemeral job, not yet measured on real data ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)).
 
 **Full design**, adding what enters by trigger:
 

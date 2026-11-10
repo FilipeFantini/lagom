@@ -1,0 +1,41 @@
+# How the boards reach the lake: the warehouse's `lake` target
+# (platform/warehouse/profiles.yml) plus one line, `scope`.
+#
+# Why a profile of its own. dct opens its connection with file access closed
+# and then allows back only the attached catalog and the secrets' scopes. A
+# secret with no scope reaches nothing, so with the warehouse's profile a query
+# that has to read a Parquet file fails ("file system operations are disabled
+# by configuration"). Gold is Parquet from the first rows beyond DuckLake's
+# inline limit (10); `dct validate --warehouse` does not notice, because it
+# only describes the query. The scope is the lake's data path, from the same
+# variable the attach uses, so it is the bucket in the cluster and a directory
+# in CI, and the boards can read nothing else. Everything else is the
+# warehouse's profile, and must be kept the same; the variables are in
+# platform/orchestration/README.md.
+#
+# Read by dct only (dbt_charts.yml names it). dbt never reads this file: it
+# parses and builds with the warehouse's own.
+lagom_dashboards:
+  target: lake
+  outputs:
+    lake:
+      type: duckdb
+      path: ":memory:"
+      extensions: [ducklake, httpfs, postgres]
+      secrets:
+        - type: s3
+          key_id: "{{ env_var('LAGOM_R2_ACCESS_KEY_ID') }}"
+          secret: "{{ env_var('LAGOM_R2_SECRET_ACCESS_KEY') }}"
+          endpoint: "{{ env_var('LAGOM_R2_ENDPOINT') | replace('https://', '') }}"
+          region: auto
+          url_style: path
+          scope: "{{ env_var('LAGOM_LAKE_DATA_PATH') }}"
+      attach:
+        - path: "{{ env_var('LAGOM_LAKE_CATALOG') }}"
+          alias: lake
+          options:
+            data_path: "{{ env_var('LAGOM_LAKE_DATA_PATH') }}"
+            metadata_schema: "{{ env_var('LAGOM_LAKE_METADATA_SCHEMA') }}"
+      database: lake
+      schema: main
+      threads: 1

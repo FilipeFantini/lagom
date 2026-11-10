@@ -198,3 +198,87 @@ jobs:
           LAGOM_R2_ACCESS_KEY_ID: ci-placeholder
           LAGOM_R2_SECRET_ACCESS_KEY: ci-placeholder
           LAGOM_R2_ENDPOINT: https://ci-placeholder.invalid
+
+  dashboards:
+    # What this proves: the boards under products/dashboards validate, render
+    # against a lake built exactly as the `warehouse` job builds it (gold in
+    # Parquet files, as in the cluster), and every figure on the page is the
+    # one gold holds (check_boards.py). The render exits 0 on a query that
+    # returns nothing; the check does not.
+    # What it does not prove: anything about real data, how the page looks in a
+    # browser, or publishing: nothing is uploaded and no secret is used.
+    name: dashboards (render)
+    runs-on: ubuntu-latest
+    env:
+      # dct sends usage statistics to dbt Labs unless told not to
+      # (docs/adr/0040-dbt-charts-for-the-dashboards.md).
+      DO_NOT_TRACK: "1"
+      # check_boards.py and its tests import the code location's lake module.
+      PYTHONPATH: products/dashboards:platform/orchestration
+      # The variables the `lake` target requires. The R2 values are
+      # placeholders; the lake is a directory on the runner.
+      LAGOM_LAKE_METADATA_SCHEMA: main
+      LAGOM_R2_ACCESS_KEY_ID: ci-placeholder
+      LAGOM_R2_SECRET_ACCESS_KEY: ci-placeholder
+      LAGOM_R2_ENDPOINT: https://ci-placeholder.invalid
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # The check's own code, with the orchestration project's settings. ruff
+      # finds its config from the file's directory, so it is named; mypy runs
+      # from the project, as the `services` job does, so the lake module
+      # resolves.
+      - name: check_boards (lint, types, tests)
+        run: |
+          set -euo pipefail
+          p=platform/orchestration
+          uv run --project $p --locked ruff format --check --config $p/pyproject.toml products/dashboards
+          uv run --project $p --locked ruff check --config $p/pyproject.toml products/dashboards
+          (cd $p && uv run --locked mypy lagom_orchestration ../../products/dashboards)
+          uv run --project $p --locked pytest products/dashboards/tests
+      - name: build the fixture lake, then validate and render the boards
+        run: |
+          set -euo pipefail
+          lake="$(mktemp -d)"
+          out="$(mktemp -d)"
+          export LAGOM_LAKE_CATALOG="ducklake:${lake}/catalog.ducklake"
+          export LAGOM_LAKE_DATA_PATH="${lake}/data/"
+          u="uv run --project platform/orchestration --locked --group dashboards"
+          # As the `warehouse` job.
+          $u python platform/warehouse/ci/load_fixture.py
+          $u dbt build --target lake --no-partial-parse \
+            --project-dir platform/warehouse --profiles-dir platform/warehouse
+          # DuckLake keeps a table of up to 10 rows in its catalog and writes no
+          # file. Gold would then never be read from Parquet, which is how it is
+          # read in the cluster and where dct's file lock applies
+          # (products/dashboards/profiles.yml). Writing the files out makes this
+          # job exercise the same path.
+          $u python -c "
+          from lagom_orchestration.lake import attach_lake
+          attach_lake().execute(\"CALL ducklake_flush_inlined_data('lake')\")"
+          # The manifest dct resolves ref() against. `dbt build` writes one too;
+          # this is the command the cluster step will run.
+          $u dbt parse --target lake \
+            --project-dir platform/warehouse --profiles-dir platform/warehouse
+          # --strict: a warning fails. --warehouse: the SQL is described against
+          # the lake, which catches a column that does not exist. It does not
+          # read data, so the render below is what catches the rest.
+          $u dct validate --strict --warehouse products/dashboards/charts \
+            --project-dir products/dashboards
+          # --no-cache: a cached result is not a render of this lake. A class
+          # that no earthquake in the window belongs to is expected, and is not
+          # worth a warning.
+          for format in html data; do
+            $u dct render products/dashboards/charts/*.yml --project-dir products/dashboards \
+              --no-cache --ignore-warning WARN-CATEGORY-COLOR-PIN-UNSEEN --format $format \
+              --output "${out}/{stem}.${format}"
+          done
+          ls -l "$out"
+          # The published page must load nothing from outside.
+          if grep -E '<(script|link|img|iframe|source)[^>]*(src|href)=' "$out"/*.html; then
+            echo "::error::a rendered page references an external resource"
+            exit 1
+          fi
+          $u python products/dashboards/check_boards.py "$out"/*.data
