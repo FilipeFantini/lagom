@@ -51,7 +51,7 @@ and the test, it fails for a reason that is not a defect: run the build again.
 
 **In CI**, every pull request runs `dbt build` on the `lake` target over a
 hand-made bronze table, [`ci/bronze_usgs_events.sql`](ci/bronze_usgs_events.sql):
-12 rows, no real data, in a DuckLake on the runner's disk, loaded by
+14 rows, no real data, in a DuckLake on the runner's disk, loaded by
 [`ci/load_fixture.py`](ci/load_fixture.py). No credential, no R2, no Postgres.
 It runs the models, the contracts, the unit tests, the data tests and the
 reconciliations (`PASS=33` on 2026-11-07), with the same dbt and DuckDB
@@ -59,7 +59,9 @@ versions as the image, since dbt-duckdb is locked in
 [`platform/orchestration/`](../orchestration/pyproject.toml). The rows are
 chosen to reach each rule: two revisions of one event, every magnitude and
 depth class, a quarry blast (silver, not gold), a status in capitals, a place
-with no comma, and an event after midnight UTC. A fixture row that breaks a
+with no comma, an event after midnight UTC, and the two seconds either side of
+the edge of the dashboards' 30-day window
+([`products/dashboards/`](../../products/dashboards/README.md)). A fixture row that breaks a
 test fails the check.
 
 What CI does not cover: `gold_reader_privileges` (it needs a Postgres role, and

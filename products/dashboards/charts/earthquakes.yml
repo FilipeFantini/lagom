@@ -100,7 +100,7 @@ queries:
     sql: |
       select event_utc, magnitude, magnitude_class, region, place, depth_km,
              depth_class, status, 'USGS' as usgs_page, url
-      from {{ queries.base }} order by magnitude desc, event_utc desc limit 100
+      from {{ queries.base }} order by magnitude desc, event_utc desc, event_id limit 100
 
 charts:
   k_events:

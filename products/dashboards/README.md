@@ -39,22 +39,29 @@ gold in the lake → dbt parse → dct validate → dct render → check_boards.
 5. **`check_boards.py`** reads the rows and the lake and fails, with one line per
    problem, when:
    - any query on the board returned zero rows (`dct render` only warns and exits 0);
-   - the KPI count of earthquakes differs from `count(*)` of `fct_earthquakes`
-     over the same window, or the largest magnitude from its `max(magnitude)`;
-   - the KPI count of magnitude 4.0 or more differs from the sum of
-     `count_magnitude_4_plus` in `agg_earthquakes_daily_region`;
-   - the earthquakes per UTC day differ from `sum(event_count)` of that
-     aggregate, day by day;
-   - a class chart's total, the map's circles or the table's rows do not add up
-     to what gold holds;
-   - the two times in the first line differ from gold's;
+   - any column of any query the board draws differs from what gold holds over
+     the same window, compared in the order the page draws it: the headline
+     figures (earthquakes, largest magnitude, magnitude 4.0 or more, reviewed
+     share, the two times in the first line), each bar of the daily chart by
+     day and class, the class and depth charts, the top 15 regions, every
+     circle on the map, and the 100 rows of the table;
+   - the events per UTC day differ from `sum(event_count)` of
+     `agg_earthquakes_daily_region`, the count of magnitude 4.0 or more from its
+     `sum(count_magnitude_4_plus)`, or the top regions from its counts summed per
+     region (a second path: the board reads `fct_earthquakes`);
    - a board has no comparison in `BOARD_CHECKS`, or its render lacks a query.
+
+   Not compared: the table's constant `usgs_page` label, the board's static text,
+   and how a chart draws its rows. The window is restated in the check, apart
+   from the board's: the last 30 UTC days up to the latest earthquake in gold.
+   The reviewed share is compared to 1e-9, because the board and the check divide
+   in different types.
 
 ## Run it locally
 
 Everything runs in a container; nothing is installed on your machine. From the
 repository root, with Docker running. The lake is built from the CI fixture
-(12 hand-made rows, no real data) in the container's `/tmp`, and the rendered
+(14 hand-made rows, no real data) in the container's `/tmp`, and the rendered
 files land in `/tmp/lagom-dashboards` on your machine:
 
 ```sh
@@ -81,6 +88,7 @@ attach_lake().execute("CALL ducklake_flush_inlined_data(\x27lake\x27)")
 PY
     $u dbt parse --target lake \
       --project-dir platform/warehouse --profiles-dir platform/warehouse
+    export TZ=Pacific/Auckland
     $u dct validate --strict --warehouse products/dashboards/charts \
       --project-dir products/dashboards
     for format in html data; do
@@ -97,7 +105,11 @@ step for step; the CI job also lints, type-checks and tests `check_boards.py`
 (with `ruff`, `mypy` and `pytest` from the orchestration project) and checks
 that the page loads nothing from outside. The flush step writes gold out as
 Parquet files: DuckLake keeps a table of up to 10 rows in its catalog, and the
-fixture's gold has 10, which would never exercise the path the cluster uses.
+fixture's daily aggregate has 10, so it would be read from the catalog and not
+from files, as it is not in the cluster. `TZ=Pacific/Auckland` runs the validation, the
+render and the check 13 hours from UTC. `dct` runs its queries in UTC whatever
+the machine's zone, so this does not test the board's `at time zone 'UTC'`; it
+tests that the check's own reading of gold does not depend on the zone.
 `dbt` writes `target/` and `logs/` under `platform/warehouse/`; both are ignored
 by Git. `dct` writes nothing inside the repository when `--output` is given.
 
@@ -127,12 +139,15 @@ a board: `dct validate` does not treat it as one.
 
 Proves, on the CI fixture: the boards are valid YAML for this version of `dct`;
 every query runs against a DuckLake whose gold is in Parquet files; no query is
-empty; the figures on the page are the figures gold holds; and the page is one
-file that makes no request to any other.
+empty; every column of every query the board draws is what gold holds over the
+same window; the edge of the 30-day window (the fixture has an earthquake a
+second inside it and one a second outside); and the page is one file that loads
+nothing from outside (no script, stylesheet, image or frame by address, no
+`@import`, no `url()` to another host; a missing or empty page fails).
 
 Does not prove:
 
-- **Real data.** The fixture has 10 earthquakes. A real window has thousands:
+- **Real data.** The fixture has 12 earthquakes, 11 of them in the window. A real window has thousands:
   how many bars, circles and rows a board can carry, and how long and how much
   memory a render takes, are known only from a render on real data. On the
   fixture, one render takes about 4 s and a peak of about 0.7 GB, and a window of
@@ -145,7 +160,11 @@ Does not prove:
 - **The R2 path.** The secret's scope is the lake's data path, which in the
   cluster is a bucket. Tested with a directory only.
 - **A comparison that is not written.** The check covers what the earthquakes
-  board shows; a new chart or figure is unchecked until its comparison is added.
+  board draws; a new query or column is unchecked until its comparison is added.
+- **The board's own `at time zone 'UTC'`.** `dct` runs queries in UTC (the board's
+  `regional.time_zone`, UTC by default), so removing the conversions from the
+  board changes nothing, even rendered in another zone, and nothing can fail.
+  They stay as the board's statement of what it means.
 
 ## A static page: no filters
 

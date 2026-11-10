@@ -26,8 +26,9 @@ Evidence was tried against the lake, and it did not hold:
 - **Frozen releases.** Its npm release has been 40.1.8 since February 2026,
   although the repository is active.
 - **Cannot read the lake as it is.** The DuckDB inside that release is 1.4.2,
-  and it cannot read a DuckLake 1.0 catalog without an override that was not
-  tested.
+  and it refuses a DuckLake 1.0 catalog. Forcing DuckDB 1.5.6 into it with an
+  npm override read the fixture lake, but that is a combination Evidence does
+  not test, and it was never tried against a Postgres catalog or R2.
 - **A strict build misses errors** in the queries behind dropdowns.
 - **The date-range control shifts a day** east of UTC.
 - **The default basemap needs a key.**
@@ -62,8 +63,9 @@ Evidence reads the files. Works around the DuckDB version. Rejected: it
 keeps the frozen release, the audit findings and the Node toolchain, and adds
 a copy of gold that can fall behind it.
 
-**Evidence reading the lake with the DuckDB override.** Rejected: untested,
-and it leaves everything else in the list above.
+**Evidence reading the lake with the DuckDB override.** Rejected: a
+combination Evidence does not test, never tried against a Postgres catalog or
+R2, and it leaves everything else in the list above.
 
 **Streamlit.** A resident Python server, with a public route into the cluster.
 Rejected: it breaks ADR-0022's rule that nothing on the node serves the public
@@ -96,7 +98,9 @@ as YAML beside the warehouse project, queries as SQL over dbt models through
    SQL.
 4. **CI renders the boards against a lake built from the warehouse's
    fixture,** and `check_boards.py` fails where `dct` does not: on a query with
-   no rows, and on any figure that differs from gold.
+   no rows, and on any column of any query the board draws that differs from
+   gold over the same window (the constant label of the table is the one thing
+   left out).
 5. **Telemetry is off:** `DO_NOT_TRACK=1` wherever `dct` runs, as in the
    orchestration image.
 
@@ -118,14 +122,14 @@ inline script, nothing fetched.
   mitigation; an upgrade is its own pull request.
 - **No filters, no search, no map zoom** on the static page.
 - **`dct render` exits 0 when a query returns no rows.** `check_boards.py` is
-  the answer, and it is only as complete as the comparisons written in it. The
-  gap between the render and gold is closed for the figures it names.
+  the answer, and it is only as complete as the comparisons written in it: a
+  new query or column of a board is unchecked until its comparison is added.
 - **Reading Parquet needs a scope on the secret.** `dct` closes DuckDB's file
   access to the attached catalog and the secrets' scopes. The warehouse's
   profile has a secret with none, so a gold table with Parquet files cannot be
   read, and `dct validate --warehouse` does not notice. Found while building
-  the first board: the fixture's 10-row gold is kept by DuckLake in the
-  catalog, not in files, and passed. CI now writes the fixture's gold out as
+  the first board: the fixture's tables of up to 10 rows are kept by DuckLake in
+  the catalog, not in files, and passed. CI now writes the fixture's gold out as
   files first. The scope is the lake's data path; **tested with a local
   directory, not with R2.**
 - **A failed attach prints the catalog's connection string,** password
@@ -144,8 +148,11 @@ inline script, nothing fetched.
   3. **Redaction** (`lagom_orchestration.redact`) of anything logged or sent to
      the alarm, as the safety net only: pattern-based masking is not a primary
      control.
-  4. **The credential can be rotated.** The runbook for secret rotation is
-     still an open item of [M3](../roadmap.md#m3--the-8-gb-node-and-dagster).
+  4. **The credential can be rotated,** automated and on a schedule: the
+     operator's requirement of 2026-11-10, an open item of
+     [M3](../roadmap.md#m3--the-8-gb-node-and-dagster) with no mechanism chosen
+     yet. The weakness exists today, before the dashboards, and is tracked there
+     too.
 - **Cost of a render:** about 0.7 GB at its peak (resident set) and 4 s on the
   fixture; the same for a window of 3,500 synthetic events. It is not measured
   on real data and not in the budget: it must be measured and budgeted before

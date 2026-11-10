@@ -231,6 +231,21 @@ The node that M3 needs, and the orchestration every showcase uses.
 - [x] Runbook: disaster recovery, written from the drill
 - [ ] Runbook: secret rotation — the drill rotated nothing, so it is written
       when a credential is first rotated
+- [ ] **Secret rotation, automated and on a schedule** — the operator's
+      requirement of 2026-11-10, beyond the runbook above. The mechanism is not
+      chosen and needs its own ADR: Sealed Secrets are sealed by hand today
+      ([ADR-0010](adr/0010-sealed-secrets.md))
+- [ ] **The catalog password out of the connection string, everywhere** — today
+      `LAGOM_LAKE_CATALOG` embeds the Postgres password, so DuckDB echoes it
+      when an attach fails ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)),
+      and the only protection is pattern-based redaction
+      (`lagom_orchestration/lake.py`, `redact.py`). This weakness exists today,
+      before the dashboards; dbt's `lake` target and dlt's destination read the
+      same string. Target: the string carries no password and libpq reads it
+      from the environment or a password file, for lake maintenance, dbt, dlt
+      and the dashboards' render step, verified in staging first; redaction
+      stays as the safety net. The order of defences is in
+      [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)
 - [x] Measure the new node's overhead and set its CI ceiling, as ADR-0016 did —
       1,687 MiB outside Kubernetes, ceiling 5.5 GB
       ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)); re-measured after

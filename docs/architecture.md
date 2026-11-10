@@ -322,7 +322,7 @@ pre-1.0 and it is pinned. It replaced Evidence on 2026-11-10 after a trial
 beside the Python one). It is built for reviewed reports, not ad-hoc
 exploration, and the page it makes is static: no in-page filters, search or map
 zoom. Its render exits 0 on a query that returns nothing, so CI checks every
-figure against gold ([`products/dashboards/`](../products/dashboards/README.md)).
+column of every query a board draws against gold ([`products/dashboards/`](../products/dashboards/README.md)).
 
 Two cautions: the data is **embedded in the page**, and the page has **no
 authentication and no row-level security**. A public showcase therefore

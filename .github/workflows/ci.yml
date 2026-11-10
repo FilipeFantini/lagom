@@ -201,10 +201,15 @@ jobs:
 
   dashboards:
     # What this proves: the boards under products/dashboards validate, render
-    # against a lake built exactly as the `warehouse` job builds it (gold in
-    # Parquet files, as in the cluster), and every figure on the page is the
-    # one gold holds (check_boards.py). The render exits 0 on a query that
-    # returns nothing; the check does not.
+    # against a lake built as the `warehouse` job builds it (gold in Parquet
+    # files, as in the cluster), no query is empty, and every column of every
+    # query a board draws equals what gold holds over the same window
+    # (check_boards.py: the one thing it leaves out is a constant label). The
+    # render exits 0 on a query that returns nothing; the check does not. The
+    # fixture holds an earthquake a second inside the 30-day window and one a
+    # second outside it, and the render and the check run in a time zone far
+    # from UTC, so a window that is wrong, or a check that follows the
+    # machine's zone, fails.
     # What it does not prove: anything about real data, how the page looks in a
     # browser, or publishing: nothing is uploaded and no secret is used.
     name: dashboards (render)
@@ -242,7 +247,8 @@ jobs:
         run: |
           set -euo pipefail
           lake="$(mktemp -d)"
-          out="$(mktemp -d)"
+          out="$RUNNER_TEMP/dashboards"
+          mkdir -p "$out"
           export LAGOM_LAKE_CATALOG="ducklake:${lake}/catalog.ducklake"
           export LAGOM_LAKE_DATA_PATH="${lake}/data/"
           u="uv run --project platform/orchestration --locked --group dashboards"
@@ -255,13 +261,22 @@ jobs:
           # read in the cluster and where dct's file lock applies
           # (products/dashboards/profiles.yml). Writing the files out makes this
           # job exercise the same path.
-          $u python -c "
+          $u python - <<'PY'
           from lagom_orchestration.lake import attach_lake
-          attach_lake().execute(\"CALL ducklake_flush_inlined_data('lake')\")"
+
+          attach_lake().execute("CALL ducklake_flush_inlined_data('lake')")
+          PY
           # The manifest dct resolves ref() against. `dbt build` writes one too;
           # this is the command the cluster step will run.
           $u dbt parse --target lake \
             --project-dir platform/warehouse --profiles-dir platform/warehouse
+          # Everything from here runs in a time zone 13 hours from UTC. The
+          # fixture has earthquakes between 11:00 and 24:00 UTC, so a day bucket
+          # or window cut in check_boards.py that follows the machine's zone and
+          # not UTC lands on another day, and the check fails. dct runs its
+          # queries in UTC whatever the zone, so this does not test the board's
+          # own `at time zone 'UTC'` (products/dashboards/README.md).
+          export TZ=Pacific/Auckland
           # --strict: a warning fails. --warehouse: the SQL is described against
           # the lake, which catches a column that does not exist. It does not
           # read data, so the render below is what catches the rest.
@@ -276,9 +291,19 @@ jobs:
               --output "${out}/{stem}.${format}"
           done
           ls -l "$out"
-          # The published page must load nothing from outside.
-          if grep -E '<(script|link|img|iframe|source)[^>]*(src|href)=' "$out"/*.html; then
-            echo "::error::a rendered page references an external resource"
-            exit 1
-          fi
           $u python products/dashboards/check_boards.py "$out"/*.data
+      # The published page is one file that loads nothing from outside: no
+      # script, stylesheet, image or frame by address, no CSS @import, and no
+      # url() to another host. A link a reader clicks (<a href>) is not a load,
+      # and url(#id) points inside the page. `test -s` first: a page that is
+      # missing or empty must fail, not pass the search for what is in it.
+      - name: the rendered pages load nothing from outside
+        run: |
+          set -euo pipefail
+          for page in "$RUNNER_TEMP"/dashboards/*.html; do
+            test -s "$page"
+            if grep -n -E "<(script|link|img|iframe|source)[^>]*(src|href)=|@import|url\([[:space:]]*['\"]?(https?:)?//" "$page"; then
+              echo "::error::$page references an external resource"
+              exit 1
+            fi
+          done
