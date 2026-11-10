@@ -198,3 +198,114 @@ jobs:
           LAGOM_R2_ACCESS_KEY_ID: ci-placeholder
           LAGOM_R2_SECRET_ACCESS_KEY: ci-placeholder
           LAGOM_R2_ENDPOINT: https://ci-placeholder.invalid
+
+  dashboards:
+    # What this proves: the boards under products/dashboards validate, render
+    # against a lake built as the `warehouse` job builds it (gold in Parquet
+    # files, as in the cluster), no query is empty, and every column of every
+    # query a board draws equals what gold holds over the same window
+    # (check_boards.py: the one thing it leaves out is a constant label). The
+    # render exits 0 on a query that returns nothing; the check does not. The
+    # fixture holds an earthquake a second inside the 30-day window and one a
+    # second outside it, and the render and the check run in a time zone far
+    # from UTC, so a window that is wrong, or a check that follows the
+    # machine's zone, fails.
+    # What it does not prove: anything about real data, how the page looks in a
+    # browser, or publishing: nothing is uploaded and no secret is used.
+    name: dashboards (render)
+    runs-on: ubuntu-latest
+    env:
+      # dct sends usage statistics to dbt Labs unless told not to
+      # (docs/adr/0040-dbt-charts-for-the-dashboards.md).
+      DO_NOT_TRACK: "1"
+      # check_boards.py and its tests import the code location's lake module.
+      PYTHONPATH: products/dashboards:platform/orchestration
+      # The variables the `lake` target requires. The R2 values are
+      # placeholders; the lake is a directory on the runner.
+      LAGOM_LAKE_METADATA_SCHEMA: main
+      LAGOM_R2_ACCESS_KEY_ID: ci-placeholder
+      LAGOM_R2_SECRET_ACCESS_KEY: ci-placeholder
+      LAGOM_R2_ENDPOINT: https://ci-placeholder.invalid
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # The check's own code, with the orchestration project's settings. ruff
+      # finds its config from the file's directory, so it is named; mypy runs
+      # from the project, as the `services` job does, so the lake module
+      # resolves.
+      - name: check_boards (lint, types, tests)
+        run: |
+          set -euo pipefail
+          p=platform/orchestration
+          uv run --project $p --locked ruff format --check --config $p/pyproject.toml products/dashboards
+          uv run --project $p --locked ruff check --config $p/pyproject.toml products/dashboards
+          (cd $p && uv run --locked mypy lagom_orchestration ../../products/dashboards)
+          uv run --project $p --locked pytest products/dashboards/tests
+      - name: build the fixture lake, then validate and render the boards
+        run: |
+          set -euo pipefail
+          lake="$(mktemp -d)"
+          out="$RUNNER_TEMP/dashboards"
+          mkdir -p "$out"
+          export LAGOM_LAKE_CATALOG="ducklake:${lake}/catalog.ducklake"
+          export LAGOM_LAKE_DATA_PATH="${lake}/data/"
+          u="uv run --project platform/orchestration --locked --group dashboards"
+          # As the `warehouse` job.
+          $u python platform/warehouse/ci/load_fixture.py
+          $u dbt build --target lake --no-partial-parse \
+            --project-dir platform/warehouse --profiles-dir platform/warehouse
+          # DuckLake keeps a table of up to 10 rows in its catalog and writes no
+          # file. Gold would then never be read from Parquet, which is how it is
+          # read in the cluster and where dct's file lock applies
+          # (products/dashboards/profiles.yml). Writing the files out makes this
+          # job exercise the same path.
+          $u python - <<'PY'
+          from lagom_orchestration.lake import attach_lake
+
+          attach_lake().execute("CALL ducklake_flush_inlined_data('lake')")
+          PY
+          # The manifest dct resolves ref() against. `dbt build` writes one too;
+          # this is the command the cluster step will run.
+          $u dbt parse --target lake \
+            --project-dir platform/warehouse --profiles-dir platform/warehouse
+          # Everything from here runs in a time zone 13 hours from UTC. The
+          # fixture has earthquakes between 11:00 and 24:00 UTC, so a day bucket
+          # or a displayed time in check_boards.py that follows the machine's
+          # zone and not UTC lands on another day, and the check fails. Not
+          # covered: the window's anchor (the latest earthquake is at 00:00 UTC,
+          # the same calendar day in this zone), and the board's own
+          # `at time zone 'UTC'`, since dct runs its queries in UTC whatever the
+          # zone (products/dashboards/README.md).
+          export TZ=Pacific/Auckland
+          # --strict: a warning fails. --warehouse: the SQL is described against
+          # the lake, which catches a column that does not exist. It does not
+          # read data, so the render below is what catches the rest.
+          $u dct validate --strict --warehouse products/dashboards/charts \
+            --project-dir products/dashboards
+          # --no-cache: a cached result is not a render of this lake. A class
+          # that no earthquake in the window belongs to is expected, and is not
+          # worth a warning.
+          for format in html data; do
+            $u dct render products/dashboards/charts/*.yml --project-dir products/dashboards \
+              --no-cache --ignore-warning WARN-CATEGORY-COLOR-PIN-UNSEEN --format $format \
+              --output "${out}/{stem}.${format}"
+          done
+          ls -l "$out"
+          $u python products/dashboards/check_boards.py "$out"/*.data
+      # The published page is one file that loads nothing from outside: no
+      # script, stylesheet, image or frame by address, no CSS @import, and no
+      # url() to another host. A link a reader clicks (<a href>) is not a load,
+      # and url(#id) points inside the page. `test -s` first: a page that is
+      # missing or empty must fail, not pass the search for what is in it.
+      - name: the rendered pages load nothing from outside
+        run: |
+          set -euo pipefail
+          for page in "$RUNNER_TEMP"/dashboards/*.html; do
+            test -s "$page"
+            if grep -n -E "<(script|link|img|iframe|source)[^>]*(src|href)=|@import|url\([[:space:]]*['\"]?(https?:)?//" "$page"; then
+              echo "::error::$page references an external resource"
+              exit 1
+            fi
+          done

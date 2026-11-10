@@ -41,8 +41,8 @@ decision, consequences, and how to reverse it.
 | [0019](0019-postgres-backup-deferred.md) | Postgres backup deferred until the node holds state no source can rebuild | Accepted |
 | [0020](0020-move-to-the-8-gb-node.md) | Move to the 8 GB node (CAX21) for M3, pending Hetzner capacity | Accepted |
 | [0021](0021-k3s-packaged-components-under-git.md) | Traefik and servicelb disabled; local-path and metrics-server managed by Argo CD | Accepted |
-| [0022](0022-platform-as-a-portfolio-of-architectures.md) | The platform as a portfolio of data architectures, shown on getlagom.app | Accepted, domain superseded by 0030; the site's home amended by 0039 |
-| [0023](0023-sme-stack-duckdb-on-ducklake.md) | The SME stack: DuckDB on DuckLake, Postgres as catalog, data on R2 | Proposed |
+| [0022](0022-platform-as-a-portfolio-of-architectures.md) | The platform as a portfolio of data architectures, shown on getlagom.app | Accepted, domain superseded by 0030; the site's home amended by 0039; the dashboards' tool amended by 0040 |
+| [0023](0023-sme-stack-duckdb-on-ducklake.md) | The SME stack: DuckDB on DuckLake, Postgres as catalog, data on R2 | Proposed; the dashboards' tool amended by 0040 |
 | [0024](0024-ci-ceiling-on-the-8-gb-node.md) | CI ceiling raised to 5.5 GB, measured on the 8 GB node | Accepted |
 | [0025](0025-postgres-backup-barman-cloud-to-r2.md) | Postgres backup: the Barman Cloud plugin to Cloudflare R2, staging first | Accepted; retention checked 2026-11-05; RPO and prod retention superseded by 0027 |
 | [0026](0026-dagster-one-instance-per-environment.md) | Dagster, one instance per environment, running USGS on DuckLake | Accepted, UI access superseded by 0028, then 0030; heartbeat and CronJob retirement amended by 0033 |
@@ -58,4 +58,5 @@ decision, consequences, and how to reverse it.
 | [0036](0036-the-reviewer-as-a-required-check.md) | The reviewer runs in CI as a required check | Accepted; Decision 6 amended by 0037; Decisions 1, 2 and 4 by 0038 |
 | [0037](0037-the-reviewer-runs-on-sonnet.md) | The reviewer runs on Sonnet, to spend less of the subscription | Accepted |
 | [0038](0038-leaner-agent-gates.md) | Leaner agent gates: the guarded list is the security core, and the reviewer runs less and blocks less | Accepted |
-| [0039](0039-the-site-in-its-own-repository.md) | The site at ofantini.com lives in its own repository | Accepted |
+| [0039](0039-the-site-in-its-own-repository.md) | The site at ofantini.com lives in its own repository | Accepted; decision 2's tool amended by 0040 |
+| [0040](0040-dbt-charts-for-the-dashboards.md) | The dashboards are written in dbt Charts, not Evidence | Proposed |

@@ -7,6 +7,9 @@
 --   ev_upper  status in capitals, as network pt sends it
 --   ev_d    'Fiji region', a place with no comma: the region is the whole place
 --   ev_late   after midnight UTC: a second day in the daily aggregate
+--   ev_win_in, ev_win_out   the first second of the day 29 days before ev_late's
+--             day, and the last second of the day before it: the edge of the
+--             dashboards' 30-day window (products/dashboards), a day in, a day out
 create schema if not exists bronze;
 
 create or replace table bronze.usgs_events (
@@ -52,4 +55,8 @@ insert into bronze.usgs_events values
     ('ev_upper', 'earthquake', 2.5, 'ml', '8 km W of Town, Portugal', 1760009000000, 1760009000000,
         '[-9.0, 38.0, 15.0]', 'REVIEWED', 0, 90, null, null, 'pt', 'https://example.test/ev_upper', 'M 2.5 - Portugal'),
     ('ev_late', 'earthquake', 4.0, 'mb', '7 km S of Town, Alaska', 1760054400000, 1760054400000,
-        '[-150.2, 61.2, 12.0]', 'automatic', 0, 250, 1, null, 'ak', 'https://example.test/ev_late', 'M 4.0 - Alaska');
+        '[-150.2, 61.2, 12.0]', 'automatic', 0, 250, 1, null, 'ak', 'https://example.test/ev_late', 'M 4.0 - Alaska'),
+    ('ev_win_in', 'earthquake', 1.0, 'ml', '3 km W of Town, Oregon', 1757548800000, 1757548800000,
+        '[-123.0, 44.0, 8.0]', 'reviewed', 0, 15, null, null, 'uw', 'https://example.test/ev_win_in', 'M 1.0 - Oregon'),
+    ('ev_win_out', 'earthquake', 1.2, 'ml', '4 km E of Town, Oregon', 1757548799000, 1757548799000,
+        '[-122.9, 44.1, 9.0]', 'reviewed', 0, 17, null, null, 'uw', 'https://example.test/ev_win_out', 'M 1.2 - Oregon');

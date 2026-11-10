@@ -138,3 +138,7 @@ without rewriting it.
   "Terraform with the move" and Terraform's timing in the supersession list
   above no longer apply; the trigger is in the
   [roadmap](../roadmap.md#trigger-table).
+- **2026-11-10 — Evidence is replaced by dbt Charts.** What the spike must
+  show, item 2, no longer applies: the dashboards read the lake through
+  `dct`, on the warehouse's `lake` target
+  ([ADR-0040](0040-dbt-charts-for-the-dashboards.md), proposed).

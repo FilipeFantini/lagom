@@ -35,6 +35,8 @@ lagom:
     # and dlt honours it only for a SQL catalog, so a local file uses "main".
     # The R2 values come from the environment's sealed token; DuckDB wants the
     # endpoint's host, so the scheme is cut off.
+    # products/dashboards/profiles.yml is a copy of this target plus one `scope`
+    # line; a test there fails if the two drift, so change both together.
     lake:
       type: duckdb
       path: ":memory:"
