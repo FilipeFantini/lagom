@@ -272,10 +272,12 @@ jobs:
             --project-dir platform/warehouse --profiles-dir platform/warehouse
           # Everything from here runs in a time zone 13 hours from UTC. The
           # fixture has earthquakes between 11:00 and 24:00 UTC, so a day bucket
-          # or window cut in check_boards.py that follows the machine's zone and
-          # not UTC lands on another day, and the check fails. dct runs its
-          # queries in UTC whatever the zone, so this does not test the board's
-          # own `at time zone 'UTC'` (products/dashboards/README.md).
+          # or a displayed time in check_boards.py that follows the machine's
+          # zone and not UTC lands on another day, and the check fails. Not
+          # covered: the window's anchor (the latest earthquake is at 00:00 UTC,
+          # the same calendar day in this zone), and the board's own
+          # `at time zone 'UTC'`, since dct runs its queries in UTC whatever the
+          # zone (products/dashboards/README.md).
           export TZ=Pacific/Auckland
           # --strict: a warning fails. --warehouse: the SQL is described against
           # the lake, which catches a column that does not exist. It does not

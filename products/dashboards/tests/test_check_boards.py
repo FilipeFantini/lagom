@@ -437,3 +437,11 @@ def test_the_dashboards_profile_is_the_warehouses_lake_target_plus_a_scope() -> 
     assert scopes == ["{{ env_var('LAGOM_LAKE_DATA_PATH') }}"]
     assert copy_ == lake
     assert dashboards["lagom_dashboards"]["target"] == "lake"
+
+
+def test_a_column_the_board_lacks_fails_even_when_gold_holds_null() -> None:
+    # `.get` would read the missing column as None and call it equal to the null.
+    from check_boards import _differs_rows
+
+    failures = _differs_rows("map", [{"a": 1}], [{"a": 1, "place": None}])
+    assert failures == ["map: row 1: the board has no column place"]

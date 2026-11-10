@@ -240,12 +240,13 @@ The node that M3 needs, and the orchestration every showcase uses.
       when an attach fails ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)),
       and the only protection is pattern-based redaction
       (`lagom_orchestration/lake.py`, `redact.py`). This weakness exists today,
-      before the dashboards; dbt's `lake` target and dlt's destination read the
-      same string. Target: the string carries no password and libpq reads it
-      from the environment or a password file, for lake maintenance, dbt, dlt
-      and the dashboards' render step, verified in staging first; redaction
-      stays as the safety net. The order of defences is in
-      [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)
+      before the dashboards; dbt's `lake` target reads the same variable, and
+      dlt's destination takes the catalog in a variable of its own
+      (`DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG`), to be checked for the
+      same embedding. Open: apply the first defence listed in
+      [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md) to lake
+      maintenance, dbt, dlt and the dashboards' render step, verified in
+      staging first
 - [x] Measure the new node's overhead and set its CI ceiling, as ADR-0016 did —
       1,687 MiB outside Kubernetes, ceiling 5.5 GB
       ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)); re-measured after

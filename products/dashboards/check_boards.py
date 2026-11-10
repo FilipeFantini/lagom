@@ -203,8 +203,13 @@ def _differs_rows(what: str, shown: Rows, gold: Rows) -> list[str]:
     if len(shown) != len(gold):
         return [f"{what}: the board has {len(shown)} rows, gold has {len(gold)}"]
     for index, (board_row, gold_row) in enumerate(zip(shown, gold, strict=True)):
+        # A column gold has and the board lacks is a failure even when gold's
+        # value is null: `.get` would read the missing column as that null.
+        absent = sorted(set(gold_row) - set(board_row))
+        if absent:
+            return [f"{what}: row {index + 1}: the board has no column {', '.join(absent)}"]
         # The board may carry columns gold has no figure for (a constant label).
-        trimmed = {column: board_row.get(column) for column in gold_row}
+        trimmed = {column: board_row[column] for column in gold_row}
         if trimmed != gold_row:
             return [f"{what}: row {index + 1}: the board has {trimmed!r}, gold has {gold_row!r}"]
     return []
