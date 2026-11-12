@@ -136,8 +136,10 @@ declaration, and every security property is ours to write for each one.
    built separately, open source, and Lagom consumes it as a pinned image, like
    any upstream component. Its design document comes before its code and holds
    its requirements, what it will not do, its threat model and the criterion
-   for abandoning it; this ADR does not restate them. The repository is named
-   when it is created, and this ADR is amended with the link.
+   for abandoning it; this ADR does not restate them. The repository is
+   [`FilipeFantini/enlightenviz`](https://github.com/FilipeFantini/enlightenviz),
+   created on 2026-11-12 with that document alone, and private until the
+   operator opens it.
 7. **Until that tool serves the earthquakes board with a filter, nothing is
    published,** and the dbt Charts project stays as it is: the board, the CI
    check, decisions 1, 2, 4 and 5 of ADR-0040. If the tool is abandoned, the
