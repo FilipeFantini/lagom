@@ -7,7 +7,12 @@ plain SQL over the warehouse's gold tables plus a description of the charts;
 `dct` runs the SQL against the lake and draws the page.
 
 This is the first slice of M4: the project and the gate that keeps a wrong page
-from passing CI. Nothing publishes yet, and nothing in the cluster runs it.
+from passing CI. Nothing publishes it, and nothing in the cluster runs it.
+Since 2026-11-12 it is the **fallback**: the dashboards are to be served from a
+serving layer in Postgres by a server of their own, and this project is
+published only if that server is abandoned
+([ADR-0041](../../docs/adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md),
+proposed).
 
 | Path | What it is |
 |---|---|

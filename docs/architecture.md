@@ -293,6 +293,18 @@ engine for every layer** ([ADR-0008](adr/0008-postgres-for-all-layers.md)).
 Afterwards it returns to holding only the small final result, with raw history
 in the table format.
 
+**The `serving` database** (decided, not built:
+[ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md),
+proposed). The dashboards read a database named `serving` in the environment's
+cluster and nothing else: not the DuckLake catalog, not R2. A step of each run
+publishes the gold tables a board needs into it and fails the run if they
+differ from gold; streaming events will land in it directly and be archived to
+the lake. Each theme reads through its own read-only role, with a connection
+limit and a statement timeout. It is never a source: it can be dropped and
+published again from the lake. It shares the cluster with the catalog and
+Dagster's metadata until public reads disturb a run; then it gets a cluster of
+its own.
+
 **PgBouncer** — deferred with a trigger: it enters with the first external BI
 consumer. Each Postgres connection costs 5–10 MB, and BI tools open them
 freely; without pooling a 300 MB Postgres becomes 1 GB. It comes as a
@@ -300,28 +312,40 @@ CloudNativePG `Pooler` object, not a separate install.
 
 ## 9. Visualization
 
-The public face is static: nothing on the node serves it
-([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)).
+The site is static: nothing on the node serves it
+([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). The
+dashboards will be served from the node, by a small server that reads the
+`serving` database of §8; it is being designed in its own repository and is
+not deployed
+([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md),
+proposed).
 
 | Tool | Role | RAM on the node | Enters when |
 |---|---|---|---|
 | **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
-| **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check exist in `products/dashboards/`; the Dagster step that renders and publishes them in the cluster does not yet ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)) | 0 resident (an ephemeral render job; about 0.7 GB at its peak on the CI fixture, to be measured on real data and budgeted) | M4 |
+| **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check exist in `products/dashboards/`. **Nothing publishes them:** the static page is now the fallback, kept until the dashboards' own server shows the earthquakes board ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), amended by [ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)) | 0 resident (a render is about 0.7 GB at its peak on the CI fixture) | M4, as the fallback |
+| **The dashboards' server** | serves boards written as code, with filters, over the `serving` database; batch and streaming. Built in its own repository, design first ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), proposed) | **not built: not in §11.** Measured and budgeted before it is deployed | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
 
-How a dashboard is published (the design; only the first two steps exist): a
-Dagster step after each run reads gold through `dct`, renders each board to one
-HTML file and deploys the files to Cloudflare Pages, an outbound connection,
-so the site follows the data ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)).
-A visitor never reaches the cluster.
+How a dashboard will reach a visitor (the design of ADR-0041; none of it is
+built): each run publishes gold into `serving`; the dashboards' server answers
+a visitor's request by running a query the board declares, as a read-only role,
+and the visitor's browser never sends SQL (§10, *Why the API, not the database,
+is the public channel*). `dct serve`, the server inside dbt Charts, was tried
+for this on 2026-11-12 and not deployed: it leaves a Postgres connection open
+at each render and does not fit the budget (ADR-0041).
+
+The fallback, if that server is abandoned, is ADR-0040's path: a Dagster step
+after each run reads gold through `dct`, renders each board to one HTML file
+and deploys the files to Cloudflare Pages, an outbound connection.
 
 dbt Charts is Apache-2.0 with no per-seat cost, and beta: its syntax is
 pre-1.0 and it is pinned. It replaced Evidence on 2026-11-10 after a trial
 (frozen npm release, a DuckDB that cannot read the lake, a Node toolchain
 beside the Python one). It is built for reviewed reports, not ad-hoc
-exploration, and the page it makes is static: no in-page filters, search or map
-zoom. Its render exits 0 on a query that returns nothing, so CI checks every
+exploration, and the page `dct render` makes is static: no in-page filters,
+search or map zoom. Its render exits 0 on a query that returns nothing, so CI checks every
 column of every query a board draws against gold ([`products/dashboards/`](../products/dashboards/README.md)).
 
 Two cautions: the data is **embedded in the page**, and the page has **no
