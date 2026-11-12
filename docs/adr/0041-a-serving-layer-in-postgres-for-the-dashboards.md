@@ -138,8 +138,8 @@ declaration, and every security property is ours to write for each one.
    its requirements, what it will not do, its threat model and the criterion
    for abandoning it; this ADR does not restate them. The repository is
    [`FilipeFantini/enlightenviz`](https://github.com/FilipeFantini/enlightenviz),
-   created on 2026-11-12 with that document alone, and private until the
-   operator opens it.
+   open source under Apache-2.0, created on 2026-11-12 with that document
+   alone.
 7. **Until that tool serves the earthquakes board with a filter, nothing is
    published,** and the dbt Charts project stays as it is: the board, the CI
    check, decisions 1, 2, 4 and 5 of ADR-0040. If the tool is abandoned, the
