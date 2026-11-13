@@ -11,8 +11,7 @@ from passing CI. Nothing publishes it, and nothing in the cluster runs it.
 Since 2026-11-12 it is the **fallback**: the dashboards are to be served from a
 serving layer in Postgres by a server of their own, and this project is
 published only if that server is abandoned
-([ADR-0041](../../docs/adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md),
-proposed).
+([ADR-0041](../../docs/adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)).
 
 | Path | What it is |
 |---|---|

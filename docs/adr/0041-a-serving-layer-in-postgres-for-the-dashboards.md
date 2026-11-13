@@ -1,7 +1,6 @@
 # ADR-0041 — The dashboards read a serving layer in Postgres; their server is built in its own repository
 
-- **Status:** Proposed — accepted by the operator's approval of the pull
-  request that adds it
+- **Status:** Accepted, by the operator in conversation on 2026-11-13
 - **Date:** 2026-11-12
 - **Decided by:** the operator, in conversation on 2026-11-12, after a spike of
   the same day on serving the boards with `dct serve`.

@@ -146,5 +146,4 @@ without rewriting it.
   it" in *The SME stack* and the section *Dashboards are built in the cluster*
   no longer apply: gold is published to a serving layer in Postgres, and the
   dashboards read only that
-  ([ADR-0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md),
-  proposed).
+  ([ADR-0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md)).

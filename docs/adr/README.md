@@ -60,4 +60,4 @@ decision, consequences, and how to reverse it.
 | [0038](0038-leaner-agent-gates.md) | Leaner agent gates: the guarded list is the security core, and the reviewer runs less and blocks less | Accepted |
 | [0039](0039-the-site-in-its-own-repository.md) | The site at ofantini.com lives in its own repository | Accepted; decision 2's tool amended by 0040, and where the server of the dashboards lives by 0041 |
 | [0040](0040-dbt-charts-for-the-dashboards.md) | The dashboards are written in dbt Charts, not Evidence | Accepted; decision 3 and the publishing path amended by 0041 |
-| [0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md) | The dashboards read a serving layer in Postgres; their server is built in its own repository | Proposed |
+| [0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md) | The dashboards read a serving layer in Postgres; their server is built in its own repository | Accepted |

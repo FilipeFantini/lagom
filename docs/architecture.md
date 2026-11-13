@@ -294,8 +294,7 @@ Afterwards it returns to holding only the small final result, with raw history
 in the table format.
 
 **The `serving` database** (decided, not built:
-[ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md),
-proposed). The dashboards read a database named `serving` in the environment's
+[ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)). The dashboards read a database named `serving` in the environment's
 cluster and nothing else: not the DuckLake catalog, not R2. A step of each run
 publishes the gold tables a board needs into it and fails the run if they
 differ from gold; streaming events will land in it directly and be archived to
@@ -317,14 +316,13 @@ The site is static: nothing on the node serves it
 dashboards will be served from the node, by a small server that reads the
 `serving` database of §8; it is being designed in its own repository and is
 not deployed
-([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md),
-proposed).
+([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)).
 
 | Tool | Role | RAM on the node | Enters when |
 |---|---|---|---|
 | **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
 | **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check exist in `products/dashboards/`. **Nothing publishes them:** the static page is now the fallback, kept until the dashboards' own server shows the earthquakes board ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), amended by [ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)) | 0 resident (a render is about 0.7 GB at its peak on the CI fixture) | M4, as the fallback |
-| **The dashboards' server** | serves boards written as code, with filters, over the `serving` database; batch and streaming. Built in its own repository, design first ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), proposed) | **not built: not in §11.** Measured and budgeted before it is deployed | M4 |
+| **The dashboards' server** | serves boards written as code, with filters, over the `serving` database; batch and streaming. Built in its own repository, design first ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)) | **not built: not in §11.** Measured and budgeted before it is deployed | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
 
