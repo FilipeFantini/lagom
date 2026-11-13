@@ -157,4 +157,8 @@ without rewriting it.
   of the row (static output, built in the cluster, published to Cloudflare
   Pages) stands; the exit named above was checked and the Observable Framework
   had no commit since May 2026
-  ([ADR-0040](0040-dbt-charts-for-the-dashboards.md), proposed).
+  ([ADR-0040](0040-dbt-charts-for-the-dashboards.md)).
+- **2026-11-12 — the dashboards get a server.** The site stays static. The
+  dashboards read a serving layer in Postgres through a small resident server,
+  built in its own repository; the static page becomes the fallback
+  ([ADR-0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md)).

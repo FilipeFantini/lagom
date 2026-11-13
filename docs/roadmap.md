@@ -28,7 +28,8 @@ dbt, Postgres, Dagster.
 | DuckDB and DuckLake (the SME stack) | the spike in M3; the warehouse moves from Postgres when it passes ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed; until then [ADR-0008](adr/0008-postgres-for-all-layers.md)). USGS already runs on DuckLake under Dagster ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), and the Postgres CronJobs were retired with Dagster's alarm on 2026-11-07, before the spike closes ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)); if the spike fails, ADR-0023's reversal applies |
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
-| dbt Charts (the dashboards) | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)); replaced Evidence on 2026-11-10 ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), proposed) |
+| dbt Charts (the dashboards) | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)); replaced Evidence on 2026-11-10 ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)). Its static page is the fallback since 2026-11-12 ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)) |
+| The `serving` database and the dashboards' server | M4 — the first board served with a filter. The server is built in its own repository, design first; `serving` is separated into its own cluster when public reads disturb a run ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)) |
 | Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `ops.ofantini.com/<tool>` ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
 | NATS | second consumer of the same stream, or a replay requirement |
 | Streamlit | an interactive app a static page cannot serve |
@@ -315,15 +316,25 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
       ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)). Live since
       2026-11-08 on Cloudflare Pages; its deployment and its gates are in that
       repository's README and ADR-0001
-- [ ] dbt Charts dashboards built in the cluster by a Dagster step after each
-      run and published to Cloudflare Pages, shown as a gallery of cards on the
-      site ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed;
-      [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), proposed)
-  - [x] The project and its CI gate: `products/dashboards/`, the first board
-        (earthquakes), and a check that fails a render that disagrees with gold
-  - [ ] The Dagster step that renders the boards after each run, its memory
-        measured on real data and budgeted, and its output redacted
-  - [ ] Publishing: the Cloudflare Pages project and hostname, and the token
+- [ ] Dashboards served from a serving layer in Postgres, with filters, shown
+      as a gallery of cards on the site
+      ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md))
+  - [x] The dbt Charts project and its CI gate: `products/dashboards/`, the
+        first board (earthquakes), and a check that fails a render that
+        disagrees with gold ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)).
+        Kept as the fallback
+  - [ ] The design document of the dashboards' server, in its own repository:
+        requirements, what it will not do, threat model, the criterion for
+        abandoning it. No code before it is approved
+  - [ ] The `serving` database and its roles, in staging first
+  - [ ] The publish step: gold into `serving` after each run, compared with
+        gold, failing the run on a difference; its mechanism chosen by a spike
+  - [ ] The server deployed in staging: its memory measured and budgeted, the
+        tunnel's rule for a public hostname, the earthquakes board with a
+        filter
+  - [ ] **Only if the server is abandoned:** ADR-0040's static page — the
+        Dagster step that renders the boards, its memory measured and
+        budgeted, and the Cloudflare Pages project, hostname and token
 - [ ] **Showcase: the SME stack on USGS** — the pipeline, with its real numbers
       (rows, run time, memory)
 - [ ] **Showcase: the platform itself**, after the USGS showcase is live —
@@ -360,6 +371,9 @@ is only new configuration, the design worked.**
       the node's public IP and runs flannel on the public interface; a node
       joining over Tailscale needs flannel on `tailscale0` (`node-ip`,
       `flannel-iface`) — settle it here
+- [ ] The destination of the events: the `serving` database, archived to the
+      lake on a schedule — the direction set by
+      [ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md); this showcase's own ADR decides the detail
 - [ ] NATS **only if** there is a second consumer or a replay requirement
 
 > **Honest note:** if the source is GTFS-RT polled every 20 seconds, Redpanda

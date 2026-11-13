@@ -46,9 +46,10 @@ flowchart TB
 Data comes in through ingestion jobs that start, do their work, and exit. It
 is stored in layers (raw, cleaned, modelled) and transformed with dbt.
 Dagster is set to schedule the work from the outside. After each run the
-dashboards will be rebuilt and published as plain files: the numbers stay fresh,
-the pages are static (they show tooltips, not filters), and no visitor ever
-reaches the cluster. Argo CD keeps the cluster in sync
+tables a dashboard shows will be published to a small serving database, and a
+small server will draw the dashboards from it, with filters; a visitor never
+reaches the lake or its catalog. None of that is built yet
+([ADR-0041](docs/adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)). Argo CD keeps the cluster in sync
 with this repository, so changes arrive through Git, not by hand.
 
 ## The stack
@@ -59,7 +60,7 @@ with this repository, so changes arrive through Git, not by hand.
 | Storage | Postgres today; DuckLake on Cloudflare R2, with Postgres as its catalog, being tested ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
 | Transformation | dbt, on Postgres or DuckDB |
 | Orchestration | Dagster |
-| Dashboards | dbt Charts: boards in YAML over gold, to be rendered after each run and published on ofantini.com; the boards and their CI check exist, the publishing does not yet ([ADR-0040](docs/adr/0040-dbt-charts-for-the-dashboards.md)) |
+| Dashboards | Boards as code over a serving database in Postgres, drawn by a server built in its own repository; designed, not built ([ADR-0041](docs/adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md)). Until it shows the first board, the dbt Charts boards in YAML over gold and their CI check stay as the fallback, and nothing is published ([ADR-0040](docs/adr/0040-dbt-charts-for-the-dashboards.md)) |
 | Platform | k3s on a single ARM node, Argo CD, Sealed Secrets, CloudNativePG, Tailscale, Cloudflare Tunnel + Access |
 
 Each choice is written down with the alternatives it beat and the trade-offs it

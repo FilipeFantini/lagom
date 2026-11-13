@@ -141,4 +141,9 @@ without rewriting it.
 - **2026-11-10 — Evidence is replaced by dbt Charts.** What the spike must
   show, item 2, no longer applies: the dashboards read the lake through
   `dct`, on the warehouse's `lake` target
-  ([ADR-0040](0040-dbt-charts-for-the-dashboards.md), proposed).
+  ([ADR-0040](0040-dbt-charts-for-the-dashboards.md)).
+- **2026-11-12 — the dashboards do not read the lake.** "Dashboards query with
+  it" in *The SME stack* and the section *Dashboards are built in the cluster*
+  no longer apply: gold is published to a serving layer in Postgres, and the
+  dashboards read only that
+  ([ADR-0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md)).
