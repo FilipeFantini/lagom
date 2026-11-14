@@ -1579,22 +1579,31 @@ scope, or `r2.dev` left on, defeats the reason for the design.
 
 **Seal the two R2 tokens, one pair per namespace, before the change is
 rolled out.** Cloudflare shows a token's key and secret once, at creation. The
-command reads them without echoing them (`read -s`), seals them in one pipe, and
+command reads them without echoing them (`read -s`), refuses a value of the
+wrong shape before sealing it (an R2 key ID is 32 hex characters, its secret 64,
+the endpoint `https://<account-id>.r2.cloudflarestorage.com`: a value pasted into
+the wrong prompt is caught here, not by a failed run), seals them in one pipe, and
 writes through a temporary file that is renamed only when `kubeseal` succeeds, so
-a failed run leaves no empty file to commit. The endpoint is
-`https://<account-id>.r2.cloudflarestorage.com` (the step adds `https://` if it
-is missing). Run from the repository root, with the kubeconfig that
-reaches the node and Tailscale connected:
+a failed run leaves no empty file to commit. Run from the repository root (the
+paths are relative to it), with the kubeconfig that reaches the node and
+Tailscale connected:
 
 ```bash
 seal_r2() {  # seal_r2 <namespace> <secret name> <file name>
   local ns="$1" name="$2" f="platform/infra/postgres-$1/$3" key secret endpoint
-  read -rsp "$name access key ID ($ns): " key; echo
-  read -rsp "$name secret access key ($ns): " secret; echo
-  read -rp "$name endpoint ($ns, https://<account-id>.r2.cloudflarestorage.com): " endpoint
-  kubectl create secret generic "$name" -n "$ns" --from-literal=ACCESS_KEY_ID="$key" \
-    --from-literal=ACCESS_SECRET_KEY="$secret" --from-literal=ENDPOINT="$endpoint" \
-    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"
+  # printf, not `read -p`: in zsh, macOS's shell, -p reads from a coprocess.
+  printf '%s access key ID (%s): ' "$name" "$ns"; read -rs key; echo
+  printf '%s secret access key (%s): ' "$name" "$ns"; read -rs secret; echo
+  printf '%s endpoint (%s): ' "$name" "$ns"; read -rs endpoint; echo
+  if [[ $key =~ ^[0-9a-f]{32}$ && $secret =~ ^[0-9a-f]{64}$ &&
+        $endpoint =~ ^https://[0-9a-f]{32}\.r2\.cloudflarestorage\.com$ ]]; then
+    kubectl create secret generic "$name" -n "$ns" --from-literal=ACCESS_KEY_ID="$key" \
+      --from-literal=ACCESS_SECRET_KEY="$secret" --from-literal=ENDPOINT="$endpoint" \
+      --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" && echo "ok: $f" \
+      || { rm -f "$f.tmp"; echo "FAILED: $f"; }
+  else
+    echo "REJECTED $ns/$name: lengths ${#key} ${#secret} ${#endpoint}, expected 32 64 65"
+  fi
   unset key secret endpoint
 }
 for ns in staging prod; do

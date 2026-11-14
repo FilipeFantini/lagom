@@ -347,9 +347,9 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
         published to an R2 public bucket per environment on a custom domain
         (`lagom-staging.ofantini.com`, `lagom.ofantini.com`) with a
         bucket-scoped token, not to Cloudflare Pages, with dbt Charts telemetry
-        left on (ADR-0044, decisions 7 to 9). **Built;** open until the operator
-        seals `r2-lake-reader` and `r2-dashboards`, the digest is pinned in
-        staging and its checks pass: the run, the page at its hostname with its
+        left on (ADR-0044, decisions 7 to 9). **Built,** and `r2-lake-reader` and
+        `r2-dashboards` sealed for both namespaces (2026-11-14); open until the
+        digest is pinned in staging and its checks pass: the run, the page at its hostname with its
         watermark, a failed attach that leaks nothing, telemetry that never
         stalls a render, and the render's memory measured and budgeted from a
         run on real data (runbook: *The dashboards' publishing path*). Two
