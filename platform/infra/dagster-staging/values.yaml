@@ -105,10 +105,10 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at d958046 (PR #55,
-        # the alarm sensors of ADR-0033; the code location needs HEARTBEAT_URL,
-        # set below).
-        tag: "d958046ad9a8d329da2926751dd18d3521378a66@sha256:50e93f4d67e881a02a8272f332f10ee19d762f7e27267bc33cec3075903c880b"
+        # Pinned by digest (ADR-0015): built from main at 06355de (PR #80,
+        # each job's credentials in its own tag, ADR-0044; the code location
+        # needs HEARTBEAT_URL, set below).
+        tag: "06355de0e60ee65c52ce80e5526724673a7e5afc@sha256:9b114c93927e7e8cf30fbe9d6f9df23e4f973369489b7c9e5fad8f43cb7bd422"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
