@@ -1457,17 +1457,23 @@ visitor may read.
 password is generated and sealed in one pipe, so it is never printed, typed or
 kept in the shell history. It is a basic-auth Secret, the shape CloudNativePG
 reads for a role; the same Secret gives the render step its `PGPASSWORD` later.
-Run from the repository root, with the kubeconfig that reaches the node:
+Run from the repository root, with the kubeconfig that reaches the node and
+Tailscale connected, since `kubeseal` asks the cluster for the controller's
+public key:
 
 ```bash
 for ns in staging prod; do
+  f="platform/infra/postgres-$ns/lake-reader-credentials-sealed.yaml"
   openssl rand -hex 24 | { read -r PW && kubectl create secret generic lake-reader-credentials -n "$ns" \
     --type=kubernetes.io/basic-auth --from-literal=username=lake_reader --from-literal=password="$PW" \
-    --dry-run=client -o yaml | kubeseal --format yaml > "platform/infra/postgres-$ns/lake-reader-credentials-sealed.yaml"; unset PW; }
+    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset PW; }
 done
 ```
 
-Each namespace gets its own password. Commit the two `-sealed.yaml` files on the
+The output goes to a temporary file that is renamed only when `kubeseal`
+succeeds: a plain `>` creates the file before the command runs, so a failed run
+would leave an empty file that could be committed by mistake. Each namespace
+gets its own password. Commit the two `-sealed.yaml` files on the
 pull request's branch. `kubeseal` reads the controller's public key from the
 cluster, as for the other sealed Secrets.
 
