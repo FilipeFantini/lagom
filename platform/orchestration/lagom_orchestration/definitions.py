@@ -2,8 +2,10 @@
 
 Every service's assets plus the dbt project, whose models become assets
 downstream of the sources they read. One job loads and builds, every 30
-minutes; another keeps DuckLake compact, daily. Two sensors raise the alarm
-through Healthchecks.io (lagom_orchestration/alarm.py).
+minutes; another keeps DuckLake compact, daily; a third renders the
+dashboards and publishes them, after each successful pipeline run
+(lagom_orchestration/dashboards.py). Two sensors raise the alarm through
+Healthchecks.io (lagom_orchestration/alarm.py).
 
 Paths are relative to the repository layout, which the image keeps under /app.
 """
@@ -19,6 +21,7 @@ from dagster import (
     Definitions,
     OpExecutionContext,
     ScheduleDefinition,
+    asset,
     define_asset_job,
     in_process_executor,
     job,
@@ -28,6 +31,7 @@ from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from services.usgs.assets import usgs_events
 
 from lagom_orchestration.alarm import build_alarm_sensors
+from lagom_orchestration.dashboards import build_render_trigger, run_dashboards
 from lagom_orchestration.lake import attach_lake, grant_reader_access, run_maintenance
 
 REPO = Path(__file__).resolve().parents[3]
@@ -105,6 +109,57 @@ usgs_job = define_asset_job(
 )
 
 
+# What the dashboards' render holds (ADR-0044, decisions 7 to 9): read-only
+# credentials for the lake, and a write token for the dashboards bucket alone.
+# No owner's connection string, no write token for the lake, nothing from
+# `postgres-app` or `r2-lake`: tests/test_definitions.py reads the Pod's
+# environment and fails if one appears. Same variable names as the writers',
+# so `attach_lake` and the dbt `lake` target read them unchanged. The catalog
+# string has no password: libpq reads PGPASSWORD, so a failed attach cannot
+# repeat it. `postgres-rw` is CloudNativePG's read-write Service of the
+# cluster `postgres`, in the Pod's own namespace (the Dagster values name it
+# the same way). The dashboards bucket's name is not secret and differs by
+# environment, so it is LAGOM_DASHBOARDS_BUCKET in each environment's values.
+READER_ENV = [
+    _secret_env("PGPASSWORD", "lake-reader-credentials", "password"),
+    {
+        "name": "LAGOM_LAKE_CATALOG",
+        "value": (
+            "ducklake:postgres:host=postgres-rw port=5432 dbname=lagom "
+            "user=lake_reader sslmode=require"
+        ),
+    },
+    _secret_env("LAGOM_R2_ACCESS_KEY_ID", "r2-lake-reader", "ACCESS_KEY_ID"),
+    _secret_env("LAGOM_R2_SECRET_ACCESS_KEY", "r2-lake-reader", "ACCESS_SECRET_KEY"),
+    _secret_env("LAGOM_R2_ENDPOINT", "r2-lake-reader", "ENDPOINT"),
+    _secret_env("LAGOM_DASHBOARDS_ACCESS_KEY_ID", "r2-dashboards", "ACCESS_KEY_ID"),
+    _secret_env("LAGOM_DASHBOARDS_SECRET_ACCESS_KEY", "r2-dashboards", "ACCESS_SECRET_KEY"),
+    _secret_env("LAGOM_DASHBOARDS_ENDPOINT", "r2-dashboards", "ENDPOINT"),
+]
+# The same tag as the pipeline's jobs: the run queue then never runs the
+# render beside `usgs`, so the node's budget (one run's memory) is unchanged.
+DASHBOARDS_TAGS = {
+    **PIPELINE_TAG,
+    "dagster-k8s/config": {"container_config": {"resources": RUN_RESOURCES, "env": READER_ENV}},
+}
+
+
+# No `deps` on gold: an asset downstream of `usgs/events` would be selected by
+# the `usgs` job (`.downstream()` above) and run with the writers' credentials.
+# The key is `dashboards/pages` because an asset and a job cannot share a name
+# in one repository, and the job is `dashboards`.
+@asset(key_prefix="dashboards", group_name="dashboards")
+def pages(context: AssetExecutionContext) -> None:
+    """The boards, rendered against the lake, checked, and published to the bucket."""
+    published = run_dashboards(REPO)
+    context.log.info(f"published {len(published)} page(s): {', '.join(published)}")
+
+
+dashboards_job = define_asset_job(
+    "dashboards", selection=AssetSelection.groups("dashboards"), tags=DASHBOARDS_TAGS
+)
+
+
 @op
 def compact_lake(context: OpExecutionContext) -> None:
     connection = attach_lake()
@@ -131,13 +186,13 @@ def lake_maintenance() -> None:
 
 
 defs = Definitions(
-    assets=[usgs_events, warehouse],
+    assets=[usgs_events, warehouse, pages],
     # Every step in the run's own process. The default executor starts each
     # step in a new Python process beside the run's, which holds Dagster, dlt
     # and dbt's imports a second time. The steps run one after the other
     # anyway, so nothing is lost. dbt still runs as its own process.
     executor=in_process_executor,
-    jobs=[usgs_job, lake_maintenance],
+    jobs=[usgs_job, lake_maintenance, dashboards_job],
     schedules=[
         # Every 30 minutes, as the CronJob: USGS publishes ~9 events an hour.
         ScheduleDefinition(
@@ -158,6 +213,6 @@ defs = Definitions(
     # (ADR-0033). It is the one variable the code location needs to load, so
     # it stays in the code server's environment, which every run inherits:
     # run Pods import this module too.
-    sensors=build_alarm_sensors(usgs_job),
+    sensors=[*build_alarm_sensors(usgs_job), build_render_trigger(usgs_job, dashboards_job)],
     resources={"dbt": DbtCliResource(project_dir=warehouse_project)},
 )

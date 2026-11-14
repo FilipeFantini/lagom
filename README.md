@@ -46,9 +46,11 @@ flowchart TB
 Data comes in through ingestion jobs that start, do their work, and exit. It
 is stored in layers (raw, cleaned, modelled) and transformed with dbt.
 Dagster is set to schedule the work from the outside. After each run the
-dashboards are to be rendered to a static page with dbt Charts and published;
-a visitor never reaches the lake or its catalog. None of that is built yet
-([ADR-0042](docs/adr/0042-the-dashboards-return-to-dbt-charts.md)). Argo CD keeps the cluster in sync
+dashboards are rendered to a static page with dbt Charts and published to a
+bucket; a visitor never reaches the lake or its catalog. The job that does it is
+built and has not yet run in the cluster
+([ADR-0042](docs/adr/0042-the-dashboards-return-to-dbt-charts.md),
+[ADR-0044](docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)). Argo CD keeps the cluster in sync
 with this repository, so changes arrive through Git, not by hand.
 
 ## The stack
@@ -59,7 +61,7 @@ with this repository, so changes arrive through Git, not by hand.
 | Storage | Postgres today; DuckLake on Cloudflare R2, with Postgres as its catalog, being tested ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
 | Transformation | dbt, on Postgres or DuckDB |
 | Orchestration | Dagster |
-| Dashboards | dbt Charts: boards in YAML over gold, with a CI check, to be rendered to a static page after each run. The boards and the check exist; nothing is published yet ([ADR-0040](docs/adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](docs/adr/0042-the-dashboards-return-to-dbt-charts.md)) |
+| Dashboards | dbt Charts: boards in YAML over gold, with a CI check, to be rendered to a static page after each run. The boards and the check exist, and a Dagster job renders and publishes them to an R2 bucket after each pipeline run (built; not yet run in the cluster) ([ADR-0040](docs/adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](docs/adr/0042-the-dashboards-return-to-dbt-charts.md)) |
 | Platform | k3s on a single ARM node, Argo CD, Sealed Secrets, CloudNativePG, Tailscale, Cloudflare Tunnel + Access |
 
 Each choice is written down with the alternatives it beat and the trade-offs it

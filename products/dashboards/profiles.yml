@@ -13,6 +13,9 @@
 # warehouse's profile, and must be kept the same; the variables are in
 # platform/orchestration/README.md.
 #
+# The attach is read-only. Both the render and `check_boards.py` read the lake
+# and write nothing, and the cluster's role for them could not write anyway.
+#
 # Read by dct only (dbt_charts.yml names it). dbt never reads this file: it
 # parses and builds with the warehouse's own.
 lagom_dashboards:
@@ -33,6 +36,11 @@ lagom_dashboards:
       attach:
         - path: "{{ env_var('LAGOM_LAKE_CATALOG') }}"
           alias: lake
+          # DuckLake's READ_ONLY attach option (dbt-duckdb adds it to the
+          # ATTACH): the boards write nothing to the catalog or the data,
+          # whatever the credentials allow (ADR-0044). In the cluster the
+          # catalog role has no write privilege either; this is the second lock.
+          read_only: true
           options:
             data_path: "{{ env_var('LAGOM_LAKE_DATA_PATH') }}"
             metadata_schema: "{{ env_var('LAGOM_LAKE_METADATA_SCHEMA') }}"

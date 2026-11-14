@@ -63,4 +63,4 @@ decision, consequences, and how to reverse it.
 | [0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md) | The dashboards read a serving layer in Postgres; their server is built in its own repository | Accepted; decisions 6 and 7 superseded, and 1, 3 and 8 amended, by 0042 |
 | [0042](0042-the-dashboards-return-to-dbt-charts.md) | The dashboards return to dbt Charts; the server of our own is stopped | Accepted |
 | [0043](0043-the-dashboards-filter-in-the-browser.md) | The dashboards filter in the visitor's browser: a static page drawn with Vega-Lite | Rejected; its spike's measurements stand |
-| [0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md) | Credentials per job, and the path the dashboards take to be published | Accepted |
+| [0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md) | Credentials per job, and the path the dashboards take to be published | Accepted; decisions 1 to 6 built in #80, 7 to 9 in the dashboards' render |

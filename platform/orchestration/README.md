@@ -7,8 +7,9 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
 |---|---|
 | `lagom_orchestration/definitions.py` | The `Definitions`: each service's assets, the dbt project as assets, the jobs and their schedules |
 | `lagom_orchestration/alarm.py` | The two sensors that raise the alarm through Healthchecks.io ([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)) |
+| `lagom_orchestration/dashboards.py` | The `dashboards` job's step (render, check, watermark, upload to R2) and the sensor that starts it after each `usgs` run ([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) |
 | `lagom_orchestration/lake.py` | Attaching the environment's DuckLake (read-only on request), its daily maintenance, and the grants of the catalog's read-only role |
-| `Dockerfile` | Built from the repository root: it bundles `services/*/ingestion`, `services/*/assets` and `platform/warehouse` |
+| `Dockerfile` | Built from the repository root: it bundles `services/*/ingestion`, `services/*/assets`, `platform/warehouse` and the dashboards' boards (`products/dashboards`), and installs dbt Charts |
 | `tests/` | The code location loads, and its graph, schedules and alarm sensors are the intended ones |
 
 **Jobs.**
@@ -21,8 +22,20 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
   DuckLake schema. The step fails if the role does not exist
   ([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
 
-Both carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
-run at a time, and a `dagster-k8s/config` tag with the memory of the run's Pod
+- `dashboards`, after each successful `usgs` run (the sensor
+  `render_dashboards_after_usgs`): the asset `dashboards/pages` renders the
+  boards of `products/dashboards` against the lake **read-only**, checks them,
+  stamps each page `Page built at <UTC time>`, and uploads the pages to the
+  environment's dashboards bucket (R2, public, on a custom domain). It holds
+  `lake_reader`'s password, a read-only R2 token and the bucket's token
+  (`READER_ENV`), and none of the owner's or the lake's write token. In order:
+  `dct validate --strict --warehouse`, `dct render`, `check_boards.py`, the
+  watermark check, the upload, then the removal of pages no longer boards.
+  Every command has a timeout, and `dct` runs with the lake's variables only.
+  A failed run is covered by `run_failure_alarm`.
+
+All three carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
+run at a time (so the render waits for the pipeline, and the budget does not change), and a `dagster-k8s/config` tag with the memory of the run's Pod
 (`RUN_RESOURCES`) and the Secrets it gets (`WRITER_ENV`, below). Without it a run would inherit the code server's, which is
 about half of what a run needs. Each environment's Application declares
 the same request for the budget check, and the tests fail if they differ.
@@ -70,9 +83,15 @@ its own tag, and a run's Pod gets the two lists together
 | `DESTINATION__DUCKLAKE__CREDENTIALS__*` (`DUCKLAKE_NAME`, `METADATA_SCHEMA`, `STORAGE__BUCKET_URL`, `REGION_NAME`) | the environment's values | dlt's DuckLake destination: what is not secret |
 | `LAGOM_LAKE_DATA_PATH`, `LAGOM_LAKE_METADATA_SCHEMA`, `PGSSLMODE` | the environment's values | the lake's bucket and schema, for dbt and maintenance |
 | `HEARTBEAT_URL` | the environment's values, from the Secret `pipeline-heartbeat` | the check's ping URL (a secret): required by the code location, so every run Pod holds it (ADR-0033 decision 5, still true) |
+| `LAGOM_DASHBOARDS_BUCKET` | the environment's values | the bucket the pages are published to (`lagom-<env>-dashboards`) |
 | `PG_URI` | each job's tag (`WRITER_ENV`), from `postgres-app` | the catalog owner's connection string |
 | `LAGOM_R2_ACCESS_KEY_ID`, `LAGOM_R2_SECRET_ACCESS_KEY`, `LAGOM_R2_ENDPOINT` | each job's tag, from `r2-lake` | the environment's R2 write token |
 | `DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG` and `…__STORAGE__CREDENTIALS__*`, `LAGOM_LAKE_CATALOG` | each job's tag | composed from the Secrets above with `$(NAME)`, so they sit below them in the tag |
+
+| `PGPASSWORD` | the `dashboards` job's tag (`READER_ENV`), from `lake-reader-credentials` | the read-only role's password, read by libpq: the catalog string has none |
+| `LAGOM_LAKE_CATALOG` | the `dashboards` job's tag | the catalog as `lake_reader`, host `postgres-rw`, no password |
+| `LAGOM_R2_*` | the `dashboards` job's tag, from `r2-lake-reader` | a read-only R2 token on the lake (same names as the writers') |
+| `LAGOM_DASHBOARDS_ACCESS_KEY_ID`, `…_SECRET_ACCESS_KEY`, `…_ENDPOINT` | the `dashboards` job's tag, from `r2-dashboards` | a token for the dashboards bucket only; `dct` never sees it |
 
 A run that belongs to no job of ours (the implicit asset job, from the asset
 catalog) has no tag and so no credentials. `attach_lake(read_only=True)` is for
@@ -108,8 +127,10 @@ which dlt 1.31 calls.
 **The `dashboards` dependency group** holds `dbt-charts` (`dct`), the renderer
 of [`products/dashboards/`](../../products/dashboards/README.md)
 ([ADR-0040](../../docs/adr/0040-dbt-charts-for-the-dashboards.md)). It is not in
-`dependencies`: the image installs with `uv sync --locked --no-dev`, which
-leaves out every group that is not a default one, so the image does not grow
-until the step that renders the boards exists. CI and a local render ask for it
-with `--group dashboards`. It adds 18 packages to the lock and changes none;
-DuckDB stays at 1.5.6.
+`dependencies`, so a test run does not install it; the image asks for it
+(`uv sync --locked --no-dev --group dashboards`) because the `dashboards` job
+renders in it, and CI and a local render ask with `--group dashboards`. It
+added 18 packages to the lock and changed none; DuckDB stays at 1.5.6. The
+image grew by about 237 MiB unpacked (1,376 to 1,612 MiB, measured locally on
+2026-11-14). `botocore`, for the upload, is declared in `dependencies`: dlt's
+s3 extra already brought it, so it adds nothing.

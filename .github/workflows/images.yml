@@ -10,6 +10,7 @@ on:
       - "services/**"
       - "platform/warehouse/**"
       - "platform/orchestration/**"
+      - "products/dashboards/**"
       - ".github/workflows/images.yml"
   push:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - "services/**"
       - "platform/warehouse/**"
       - "platform/orchestration/**"
+      - "products/dashboards/**"
       - ".github/workflows/images.yml"
 
 permissions:
@@ -45,13 +47,15 @@ jobs:
           # It has no entrypoint (the chart passes the whole command), so its
           # smoke test loads the definitions, as the code server does: first
           # without HEARTBEAT_URL, which must fail (ADR-0033), then with a
-          # placeholder that is never called, which must load.
+          # placeholder that is never called, which must load; then dbt Charts
+          # (`dct`, for the `dashboards` job) must run.
           - name: orchestration
             context: .
             file: platform/orchestration/Dockerfile
             smoke: >-
               ! python -c 'import lagom_orchestration.definitions' 2>/dev/null &&
-              HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions'
+              HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions' &&
+              dct --version
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -110,13 +114,15 @@ jobs:
           # It has no entrypoint (the chart passes the whole command), so its
           # smoke test loads the definitions, as the code server does: first
           # without HEARTBEAT_URL, which must fail (ADR-0033), then with a
-          # placeholder that is never called, which must load.
+          # placeholder that is never called, which must load; then dbt Charts
+          # (`dct`, for the `dashboards` job) must run.
           - name: orchestration
             context: .
             file: platform/orchestration/Dockerfile
             smoke: >-
               ! python -c 'import lagom_orchestration.definitions' 2>/dev/null &&
-              HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions'
+              HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions' &&
+              dct --version
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

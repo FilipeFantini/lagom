@@ -176,6 +176,12 @@ dagster-user-deployments:
           value: s3://lagom-prod-lake/
         - name: LAGOM_LAKE_METADATA_SCHEMA
           value: ducklake
+        # The bucket the dashboards' pages are published to (public, on the
+        # custom domain lagom.ofantini.com). Not secret. Its write
+        # token comes from the dashboards job's tag (READER_ENV in
+        # lagom_orchestration/definitions.py), like the lake's read-only ones.
+        - name: LAGOM_DASHBOARDS_BUCKET
+          value: lagom-prod-dashboards
         # The alarm's ping URL (ADR-0033): prod's Healthchecks.io check,
         # sealed in postgres-prod/pipeline-heartbeat-sealed.yaml, the
         # CronJob's until it was retired. The code location does not load

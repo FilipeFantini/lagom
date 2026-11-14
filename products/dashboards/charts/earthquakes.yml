@@ -13,11 +13,15 @@ title: Earthquakes in the last 30 days (UTC)
 source: lake
 
 style:
-  # The default footer stamp is "Data as of <time>" and that time is when the
-  # page was rendered, not the data's. The data's own freshness is the first
-  # line of the page, from the data itself.
+  # The stamp is the render's clock, not the data's: the data's own freshness
+  # is the first line of the page, from the data itself. The label is the
+  # watermark the cluster step looks for, once per page
+  # (lagom_orchestration/dashboards.py, WATERMARK): change one, change both.
+  # Printed in the board's time zone, UTC. At the top, above the title, where
+  # a reader sees it before the data's times.
   timestamp:
-    visible: false
+    position: top
+    format: 'Page built at %Y-%m-%d %H:%M %Z'
   text:
     column: {max_number: 1}
   charts:

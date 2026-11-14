@@ -6,9 +6,12 @@ The platform's dashboards, written as YAML for [dbt Charts](https://docs.dbtchar
 plain SQL over the warehouse's gold tables plus a description of the charts;
 `dct` runs the SQL against the lake and draws the page.
 
-This is the first slice of M4: the project and the gate that keeps a wrong page
-from passing CI. Nothing publishes it, and nothing in the cluster runs it.
-It is the path the dashboards take: a server of our own was designed between
+This is M4's first slice, and its publishing path: the project, the gate that
+keeps a wrong page from passing CI, and the Dagster job `dashboards` that renders
+the boards against the real lake after each pipeline run and uploads them to an
+R2 bucket ([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md);
+the job's code is `platform/orchestration/lagom_orchestration/dashboards.py`).
+The job is built and has not yet run in the cluster. It is the path the dashboards take: a server of our own was designed between
 2026-11-12 and 2026-11-14 and then stopped
 ([ADR-0042](../../docs/adr/0042-the-dashboards-return-to-dbt-charts.md)).
 
@@ -16,7 +19,7 @@ It is the path the dashboards take: a server of our own was designed between
 |---|---|
 | `charts/earthquakes.yml` | The first board: the earthquakes of the last 30 UTC days |
 | `dbt_charts.yml` | The project: the source the boards read, `lake`, through the dbt `lake` target |
-| `profiles.yml` | The connection `dct` uses: the warehouse's `lake` target plus the secret's `scope` ([why](#known-limits)) |
+| `profiles.yml` | The connection `dct` uses: the warehouse's `lake` target plus the secret's `scope` ([why](#known-limits)), attached read-only |
 | `check_boards.py` | The gate: compares a render with gold, and fails where `dct render` does not |
 | `tests/` | The gate's tests, and a real render of the CI fixture as their fixture |
 
@@ -59,6 +62,31 @@ gold in the lake → dbt parse → dct validate → dct render → check_boards.
    from the board's: the last 30 UTC days up to the latest earthquake in gold.
    The reviewed share is compared to 1e-9, because the board and the check divide
    in different types.
+
+## In the cluster
+
+The image `lagom-orchestration` carries `charts/`, `dbt_charts.yml`, `profiles.yml`
+and `check_boards.py`, and `dct`. The job `dashboards` runs the same commands as
+CI, against the cluster's lake:
+
+1. `dct validate --strict --warehouse`, `dct render` (HTML and rows) and
+   `check_boards.py`, as above. The lake is attached **read-only** (`read_only:
+   true` in `profiles.yml`, and `attach_lake(read_only=True)` in the check) as the
+   catalog role `lake_reader`, whose password is `PGPASSWORD` and not part of the
+   connection string. The dbt manifest is the one the image's build wrote.
+2. The **watermark**: the board's `style.timestamp` prints `Page built at <UTC
+   time>` above the title. The step fails a page that has the marker zero or
+   twice, or a time more than 15 minutes from now. If you change the format in a
+   board, change `WATERMARK` in `dashboards.py`; a test keeps them together.
+3. The **upload** of each page to the environment's bucket, `Content-Type:
+   text/html; charset=utf-8` and `Cache-Control: public, max-age=300`, then the
+   removal of `.html` objects that are no longer boards. A page is one file that
+   loads nothing from outside, so nothing else is uploaded.
+
+`dct` runs with the lake's variables and nothing else: not the bucket's token,
+not the ping URL. Telemetry is on there (below); every command has a timeout.
+What the step proves and what is still to verify in staging are in
+[`architecture.md`](../../docs/architecture.md#the-dashboards-publishing-path).
 
 ## Run it locally
 
@@ -122,7 +150,8 @@ as a picture without a browser, render `--format png` the same way.
 Against a real lake, set `LAGOM_LAKE_CATALOG`, `LAGOM_LAKE_DATA_PATH` and the
 `LAGOM_R2_*` variables to its values instead (the table in
 [`platform/orchestration/README.md`](../../platform/orchestration/README.md)),
-and skip the first three commands. The R2 case is not tested yet.
+and skip the first three commands. The R2 case is tested only by the job's first
+run in staging.
 
 ## Add a board
 
@@ -159,7 +188,8 @@ Does not prove:
   line for it yet.
 - **How the page looks** in a browser. CI draws no picture; the legend, the
   labels and the map are reviewed by eye.
-- **Publishing.** Nothing here sends a page anywhere.
+- **Publishing.** CI uploads nothing and uses no secret. The upload is tested
+  against botocore's stubber (parameters, order, failures), not against R2.
 - **The R2 path.** The secret's scope is the lake's data path, which in the
   cluster is a bucket. Tested with a directory only.
 - **A comparison that is not written.** The check covers what the earthquakes
@@ -180,7 +210,9 @@ in gold, so a stalled pipeline shows its last 30 days, not an empty page).
 Adding interactivity means another tool ([ADR-0040](../../docs/adr/0040-dbt-charts-for-the-dashboards.md)).
 
 The default footer stamp, "Data as of <time>", is the render's clock, not the
-data's, so it is switched off (`style.timestamp.visible: false`). The page's
+data's. It is replaced by the watermark `Page built at <UTC time>`
+(`style.timestamp`, at the top of the page), which says when the page was built
+and, because the job checks it, that the page is not a stale one. The page's
 first line gives the times of the data itself: the latest earthquake and the
 latest USGS revision, in UTC. The footer's "made with dbt Charts" stays.
 
@@ -195,6 +227,15 @@ It is on by default and was seen to send two requests per command in the spike;
 with `DO_NOT_TRACK=1` it sent none, and the user file is not created. The CI job
 and the commands above set it, as the orchestration image does. The setting
 belongs to the shell, not to the project: set it wherever `dct` runs.
+
+**In the cluster it is on, by the operator's choice**
+([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
+decision 9): the job starts `dct` without `DO_NOT_TRACK`, whatever the image sets
+for the other tools, and gives every command a timeout, so a telemetry request
+that never answers kills the command and fails the run with its name instead of
+hanging it. Whether the node's network lets it through, and how long it takes,
+is read from the first staging run; if it ever fails or stalls a render,
+`DO_NOT_TRACK=1` goes back.
 
 ## Known limits
 
@@ -216,10 +257,12 @@ belongs to the shell, not to the project: set it wherever `dct` runs.
   at the fixture's 10-row gold, which DuckLake keeps in the catalog, had not
   shown it.
 - **A failed attach prints the catalog's connection string,** password
-  included. Seen in the spike. What the cluster step must do about it is in
-  [ADR-0040](../../docs/adr/0040-dbt-charts-for-the-dashboards.md) (a password
-  the tool cannot echo, a read-only role, redaction as the safety net, rotation);
-  none of it exists yet. The check goes through `attach_lake`, which redacts.
+  included. Seen in the spike. The cluster step has the defences of
+  [ADR-0040](../../docs/adr/0040-dbt-charts-for-the-dashboards.md): the password is
+  not in the string (`PGPASSWORD`; a failed attach against a real Postgres printed
+  neither the right nor the wrong password, 2026-11-14), the role is read-only, the
+  step's errors go through `redact_secrets`, and the password can be rotated (runbook).
+  The check goes through `attach_lake`, which redacts.
 - **Legends cannot be ordered on stacked bars and maps.** `style.legend.values`
   orders the legend of a plain bar chart and has no effect on a stacked one or
   on a map. A stacked bar's legend follows the stack, top to bottom: great first,

@@ -52,6 +52,11 @@ def explodes() -> None:
     boom()
 
 
+@job(name="dashboards")
+def render_explodes() -> None:
+    boom()
+
+
 @job
 def explodes_long() -> None:
     boom_long()
@@ -149,6 +154,18 @@ def test_failure_calls_fail_with_the_job_the_run_and_the_error(sensors) -> None:
     assert "job: explodes" in request.text
     assert f"run: {context.dagster_run.run_id}" in request.text
     assert "ValueError: the load failed: unexpected field" in request.text
+
+
+def test_a_failed_dashboards_run_raises_the_alarm_like_a_failed_pipeline(sensors) -> None:  # type: ignore[no-untyped-def]
+    """The failure sensor has no job filter, so the render needs no sensor of its own."""
+    context = failed_context(render_explodes)
+    with requests_mock.Mocker() as mock:
+        mock.post(FAIL_URL, text="OK")
+        sensors["run_failure_alarm"](context)
+    assert mock.call_count == 1
+    assert "job: dashboards" in mock.last_request.text
+    # And a dashboards success never pings the pipeline's heartbeat: that sensor
+    # is declared for `usgs` alone (test_the_success_sensor_watches_only_the_usgs_job).
 
 
 def test_a_huge_failure_reaches_the_check_within_the_limit(sensors) -> None:  # type: ignore[no-untyped-def]
