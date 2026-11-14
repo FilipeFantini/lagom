@@ -8,7 +8,6 @@
   publishing pull request* (the Pages project and token) and decision 5
   (telemetry) amended by
   [ADR-0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md)
-  (Proposed)
 - **Date:** 2026-11-10
 - **Decided by:** the operator, in conversation on 2026-11-10, after a spike
   of the same day: the tool is dbt Charts, and the page gives up in-page

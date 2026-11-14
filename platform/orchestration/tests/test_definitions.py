@@ -247,6 +247,81 @@ def test_a_pod_built_from_the_code_servers_environment_alone_has_no_credentials(
     assert "LAGOM_LAKE_CATALOG" not in env
 
 
+INFRA = Path(__file__).resolve().parents[2] / "infra"
+# Every variable a pipeline Pod had before the credentials moved to the jobs.
+PIPELINE_ENV_NAMES = {
+    "PG_URI",
+    "PGSSLMODE",
+    "LAGOM_R2_ACCESS_KEY_ID",
+    "LAGOM_R2_SECRET_ACCESS_KEY",
+    "LAGOM_R2_ENDPOINT",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__DUCKLAKE_NAME",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__METADATA_SCHEMA",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__AWS_ACCESS_KEY_ID",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__AWS_SECRET_ACCESS_KEY",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__ENDPOINT_URL",
+    "DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__REGION_NAME",
+    "LAGOM_LAKE_CATALOG",
+    "LAGOM_LAKE_DATA_PATH",
+    "LAGOM_LAKE_METADATA_SCHEMA",
+    "HEARTBEAT_URL",
+}
+
+
+def _code_server_env(environment: str):  # type: ignore[no-untyped-def]
+    import yaml
+
+    values = yaml.safe_load((INFRA / f"dagster-{environment}" / "values.yaml").read_text())
+    deployment = values["dagster-user-deployments"]["deployments"][0]
+    assert deployment["includeConfigInLaunchedRuns"]["enabled"] is True
+    return deployment["env"]
+
+
+# Prod joins this list in the pull request that promotes staging's digest to
+# prod: until then prod runs the image without tags, so its values still hold
+# the credentials (runbook, "The catalog's read-only role", rollout order).
+@pytest.mark.parametrize("environment", ["staging"])
+def test_the_code_server_holds_no_credential_but_the_ping_url(defs, environment) -> None:  # type: ignore[no-untyped-def]
+    """The real values of each environment, merged with the real tags (ADR-0044)."""
+    code_server = _code_server_env(environment)
+    secrets = {
+        e["name"]: e["valueFrom"]["secretKeyRef"]["name"] for e in code_server if "valueFrom" in e
+    }
+    assert secrets == {"HEARTBEAT_URL": "pipeline-heartbeat"}
+    assert not any("$(" in e.get("value", "") for e in code_server)
+
+    # A Pod from the code server's environment alone: no owner, no R2 token.
+    only_the_code_server = [e["name"] for e in code_server]
+    assert not {"PG_URI", "LAGOM_LAKE_CATALOG"} & set(only_the_code_server)
+    assert not any("R2" in name or "AWS" in name for name in only_the_code_server)
+    from dagster import define_asset_job
+
+    untagged = define_asset_job("untagged", selection="*").resolve(
+        asset_graph=defs.resolve_asset_graph()
+    )
+    alone = {e.name for e in _run_pod_env(untagged, code_server)}
+    assert not alone & {"PG_URI", "LAGOM_R2_ACCESS_KEY_ID", "LAGOM_R2_SECRET_ACCESS_KEY"}
+    assert not any(name.endswith(("CATALOG", "AWS_SECRET_ACCESS_KEY")) for name in alone)
+
+    bucket = f"lagom-{environment}-lake"
+    for job in defs.resolve_all_job_defs():
+        if job.name not in {"usgs", "lake_maintenance"}:
+            continue
+        pod = _run_pod_env(job, code_server)
+        names = [e.name for e in pod]
+        assert len(names) == len(set(names)), job.name
+        assert PIPELINE_ENV_NAMES <= set(names), (job.name, PIPELINE_ENV_NAMES - set(names))
+        values = {e.name: e.value for e in pod}
+        assert values["DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL"] == f"s3://{bucket}"
+        assert values["LAGOM_LAKE_DATA_PATH"] == f"s3://{bucket}/"
+        # Every $(NAME) reads a variable defined above it, across both lists.
+        for index, (name, value) in enumerate(values.items()):
+            for reference in re.findall(r"\$\((\w+)\)", value or ""):
+                assert reference in names[:index], (job.name, name, reference)
+
+
 def test_budget_declares_the_runs_request(defs) -> None:  # type: ignore[no-untyped-def]
     """The budget check counts a run by its Application's annotation.
 

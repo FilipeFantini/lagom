@@ -1,8 +1,8 @@
 # ADR-0044 — Credentials per job, and the path the dashboards take to be published
 
-- **Status:** Proposed. The operator accepts it by approving the pull request
-  that adds it. Decisions 1 to 6 are built in that pull request; decisions 7
-  to 9 are the operator's, taken on 2026-11-14, and are built in the next one.
+- **Status:** Accepted, by the operator approving its pull request (#80) on
+  2026-11-14. Decisions 1 to 6 are built in that pull request; decisions 7 to
+  9 are the operator's, taken on 2026-11-14, and are built in the next one.
 - **Date:** 2026-11-14
 - **Decided by:** the operator, in conversation on 2026-11-14: the dashboards'
   render runs as a Dagster step in a job of its own, with credentials of its
