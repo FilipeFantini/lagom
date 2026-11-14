@@ -331,12 +331,14 @@ step after each run reads gold through `dct`, renders each board to one HTML
 file and deploys the files to Cloudflare Pages, an outbound connection.
 
 `dct serve`, the server inside dbt Charts, was tried on 2026-11-12 against the
-lake and not deployed: it left a Postgres connection open at each render and
-did not fit the budget (ADR-0041). Its documentation presents it as a local
-preview server. One spike, before the publishing pull request, measures it
-against Postgres behind Cloudflare Access and compares it with the static
-page; Lightdash is tried locally in the same spike (ADR-0042, decisions 3
-and 4).
+lake (ADR-0041) and on 2026-11-14 against Postgres, and is not deployed: about
+400 MiB resident, filter values rendered into SQL as text, a cache that serves
+stale numbers, and data routes no setting turns off. Lightdash was tried
+locally the same day: about 1.1 GiB at rest and login-only in its open-source
+version. A static page that filters in the visitor's browser, drawn with
+Vega-Lite, is proposed in its place
+([ADR-0043](adr/0043-the-dashboards-filter-in-the-browser.md), proposed); until
+the operator decides, the target stays the `dct render` page.
 
 dbt Charts is Apache-2.0 with no per-seat cost, and beta: its syntax is
 pre-1.0 and it is pinned. It replaced Evidence on 2026-11-10 after a trial
