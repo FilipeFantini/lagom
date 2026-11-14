@@ -1476,7 +1476,7 @@ the image comes before the removal of the same variables from the values:
 
 1. Merge the pull request that adds the tags, the role and the sealed Secrets.
    CI builds the image for that commit. The values still hold the credentials,
-   so runs are unchanged, and the tags' copies are dropped as duplicates.
+   so runs are unchanged: the tags' copies are identical and kept once.
 2. In staging, pin that digest and remove the credentials from
    `dagster-staging/values.yaml` in one pull request (the variables the code
    server keeps are in ADR-0044, decision 2). Check a `usgs` run succeeds.

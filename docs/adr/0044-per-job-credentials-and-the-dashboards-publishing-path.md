@@ -98,8 +98,10 @@ not a control, and the password is rated high risk.
 
 4. **The merge is proven offline.** dagster-k8s 0.29.27 merges a run's tag
    over the code location's context with the default `DEEP` behaviour: a list
-   is the code location's followed by the tag's, without duplicates, and a
-   scalar is replaced. A test builds the Job for each job with the launcher's
+   is the code location's followed by the tag's, with identical entries kept
+   once, and a scalar is replaced. The de-duplication compares whole entries,
+   not names: a variable defined in both places with different values is
+   defined twice, and Kubernetes keeps the last one, the tag's. A test builds the Job for each job with the launcher's
    own `get_container_context_for_run` and `construct_dagster_k8s_job`, and
    asserts that the Pod of `usgs` and of `lake_maintenance` has the owner's and
    the write token's Secrets, and that a Pod built from the code location alone
@@ -229,8 +231,8 @@ before an image with the tags is running leaves every run without them. The
 order is in the runbook.
 
 Reversal: put the removed variables back in the environment's `values.yaml` and
-the pipeline reads them from the code server again (the tags' copies are
-dropped as duplicates). The role goes with `ensure: absent` in the clusters'
+the pipeline reads them from the code server again (the tags' identical
+copies are kept once; a copy that differs would win, as decision 4 says). The role goes with `ensure: absent` in the clusters'
 `managed.roles`; removing it from the list alone would leave it in Postgres.
 
 **Reconsider when** the render needs a second credential, a second reader
