@@ -7,7 +7,7 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
 |---|---|
 | `lagom_orchestration/definitions.py` | The `Definitions`: each service's assets, the dbt project as assets, the jobs and their schedules |
 | `lagom_orchestration/alarm.py` | The two sensors that raise the alarm through Healthchecks.io ([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)) |
-| `lagom_orchestration/lake.py` | Attaching the environment's DuckLake, and its daily maintenance |
+| `lagom_orchestration/lake.py` | Attaching the environment's DuckLake (read-only on request), its daily maintenance, and the grants of the catalog's read-only role |
 | `Dockerfile` | Built from the repository root: it bundles `services/*/ingestion`, `services/*/assets` and `platform/warehouse` |
 | `tests/` | The code location loads, and its graph, schedules and alarm sensors are the intended ones |
 
@@ -16,11 +16,14 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
 - `usgs`, every 30 minutes: `usgs/events` (dlt into DuckLake), then `dbt build`
   on the warehouse's `lake` target.
 - `lake_maintenance`, daily at 04:15 UTC: merge small files, expire snapshots
-  older than 7 days, and delete the files nothing references.
+  older than 7 days, and delete the files nothing references; and, as a step of
+  its own, grant the catalog's read-only role `lake_reader` `SELECT` on the
+  DuckLake schema. The step fails if the role does not exist
+  ([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
 
 Both carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
 run at a time, and a `dagster-k8s/config` tag with the memory of the run's Pod
-(`RUN_RESOURCES`). Without it a run would inherit the code server's, which is
+(`RUN_RESOURCES`) and the Secrets it gets (`WRITER_ENV`, below). Without it a run would inherit the code server's, which is
 about half of what a run needs. Each environment's Application declares
 the same request for the budget check, and the tests fail if they differ.
 Steps run in the run's own process (`in_process_executor`); dbt is still a
@@ -56,15 +59,25 @@ Run Pods import this same module, so they too refuse to load without the
 variable. They receive it with the rest of the code server's environment, as
 ADR-0033 decision 5 records.
 
-**Configuration** comes from the environment, set on the code server and on
-every run Pod:
+**Configuration** comes from the environment. The code server's, which every
+run Pod inherits, holds what is not secret and differs by environment, plus the
+ping URL. The credentials are not there: each job names the Secrets it needs in
+its own tag, and a run's Pod gets the two lists together
+([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
 
-| Variable | For |
-|---|---|
-| `DESTINATION__DUCKLAKE__CREDENTIALS__*` | dlt's DuckLake destination: catalog, storage, R2 keys, metadata schema |
-| `LAGOM_LAKE_CATALOG`, `LAGOM_LAKE_DATA_PATH`, `LAGOM_LAKE_METADATA_SCHEMA` | the same lake, for dbt and maintenance |
-| `LAGOM_R2_ACCESS_KEY_ID`, `LAGOM_R2_SECRET_ACCESS_KEY`, `LAGOM_R2_ENDPOINT` | the environment's R2 token |
-| `HEARTBEAT_URL` | the check's ping URL (a secret): required by the code location; run Pods inherit it (ADR-0033 decision 5) |
+| Variable | Set by | For |
+|---|---|---|
+| `DESTINATION__DUCKLAKE__CREDENTIALS__*` (`DUCKLAKE_NAME`, `METADATA_SCHEMA`, `STORAGE__BUCKET_URL`, `REGION_NAME`) | the environment's values | dlt's DuckLake destination: what is not secret |
+| `LAGOM_LAKE_DATA_PATH`, `LAGOM_LAKE_METADATA_SCHEMA`, `PGSSLMODE` | the environment's values | the lake's bucket and schema, for dbt and maintenance |
+| `HEARTBEAT_URL` | the environment's values, from the Secret `pipeline-heartbeat` | the check's ping URL (a secret): required by the code location, so every run Pod holds it (ADR-0033 decision 5, still true) |
+| `PG_URI` | each job's tag (`WRITER_ENV`), from `postgres-app` | the catalog owner's connection string |
+| `LAGOM_R2_ACCESS_KEY_ID`, `LAGOM_R2_SECRET_ACCESS_KEY`, `LAGOM_R2_ENDPOINT` | each job's tag, from `r2-lake` | the environment's R2 write token |
+| `DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG` and `…__STORAGE__CREDENTIALS__*`, `LAGOM_LAKE_CATALOG` | each job's tag | composed from the Secrets above with `$(NAME)`, so they sit below them in the tag |
+
+A run that belongs to no job of ours (the implicit asset job, from the asset
+catalog) has no tag and so no credentials. `attach_lake(read_only=True)` is for
+a reader: its catalog string may leave the password out and let libpq read
+`PGPASSWORD`.
 
 **Run it locally** against a DuckLake on disk, with no R2 and no secret. dlt
 honours a metadata schema only for a SQL catalog, so a local file uses

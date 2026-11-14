@@ -1,6 +1,13 @@
+import psycopg
 import pytest
 
-from lagom_orchestration.lake import _execute, _literal, maintenance_statements
+from lagom_orchestration.lake import (
+    _execute,
+    _literal,
+    grant_reader_access,
+    maintenance_statements,
+    reader_grant_statements,
+)
 
 
 def test_maintenance_runs_merge_then_expiry_then_cleanup() -> None:
@@ -95,3 +102,147 @@ def test_a_failed_attach_does_not_keep_the_catalog_password(tmp_path, monkeypatc
     assert "AKIAtestkey" not in text
     assert "127.0.0.1" in text
     assert raised.value.__cause__ is None
+
+
+def test_reader_grants_cover_what_exists_and_what_is_created_later() -> None:
+    assert reader_grant_statements("ducklake") == [
+        'GRANT USAGE ON SCHEMA "ducklake" TO "lake_reader"',
+        'GRANT SELECT ON ALL TABLES IN SCHEMA "ducklake" TO "lake_reader"',
+        'ALTER DEFAULT PRIVILEGES IN SCHEMA "ducklake" GRANT SELECT ON TABLES TO "lake_reader"',
+    ]
+
+
+def test_reader_grants_quote_their_identifiers() -> None:
+    assert 'SCHEMA "a""b"' in reader_grant_statements('a"b')[0]
+
+
+class _Postgres:
+    """Stands in for psycopg.connect: records statements, fails on request."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.statements: list[str] = []
+        self.uri = ""
+
+    def connect(self, uri: str) -> "_Postgres":
+        self.uri = uri
+        return self
+
+    def __enter__(self) -> "_Postgres":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def execute(self, statement: str) -> None:
+        if self.error:
+            raise self.error
+        self.statements.append(statement)
+
+
+@pytest.fixture
+def postgres(monkeypatch) -> _Postgres:  # type: ignore[no-untyped-def]
+    fake = _Postgres()
+    monkeypatch.setattr("lagom_orchestration.lake.psycopg.connect", fake.connect)
+    monkeypatch.setenv("PG_URI", "postgresql://lagom:s3cret-password@postgres-rw:5432/lagom")
+    monkeypatch.setenv("LAGOM_LAKE_METADATA_SCHEMA", "ducklake")
+    return fake
+
+
+def test_grant_reader_access_runs_the_grants_as_the_owner(postgres: _Postgres) -> None:
+    grant_reader_access()
+    assert postgres.uri.startswith("postgresql://lagom:")
+    assert postgres.statements == reader_grant_statements("ducklake")
+
+
+def test_grant_reader_access_fails_loudly_when_the_role_does_not_exist(
+    postgres: _Postgres,
+) -> None:
+    postgres.error = psycopg.errors.UndefinedObject('role "lake_reader" does not exist')
+    with pytest.raises(RuntimeError, match="lake_reader does not exist.*lake-reader-credentials"):
+        grant_reader_access()
+
+
+def test_grant_reader_access_does_not_swallow_other_errors(postgres: _Postgres) -> None:
+    postgres.error = psycopg.errors.InvalidSchemaName('schema "ducklake" does not exist')
+    with pytest.raises(RuntimeError, match='schema "ducklake" does not exist'):
+        grant_reader_access()
+
+
+def test_grant_reader_access_keeps_the_password_out_of_an_error(postgres: _Postgres) -> None:
+    postgres.error = psycopg.OperationalError(
+        'connection failed for "postgresql://lagom:s3cret-password@postgres-rw:5432/lagom"'
+    )
+    with pytest.raises(RuntimeError, match="postgres-rw") as raised:
+        grant_reader_access()
+    assert "s3cret-password" not in str(raised.value)
+    assert raised.value.__cause__ is None
+
+
+def test_grant_reader_access_needs_the_owner_uri(postgres: _Postgres, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.delenv("PG_URI")
+    with pytest.raises(RuntimeError, match="PG_URI is not set"):
+        grant_reader_access()
+
+
+class _Recorder:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def execute(self, statement: str) -> None:
+        self.statements.append(statement)
+
+    def close(self) -> None:
+        return None
+
+
+def _lake_env(monkeypatch, catalog: str) -> None:  # type: ignore[no-untyped-def]
+    for name, value in {
+        "LAGOM_LAKE_CATALOG": catalog,
+        "LAGOM_LAKE_DATA_PATH": "data/",
+        "LAGOM_LAKE_METADATA_SCHEMA": "ducklake",
+        "LAGOM_R2_ACCESS_KEY_ID": "test",
+        "LAGOM_R2_SECRET_ACCESS_KEY": "test",
+        "LAGOM_R2_ENDPOINT": "https://test.invalid",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+
+@pytest.mark.parametrize(("read_only", "option"), [(False, False), (True, True)])
+def test_attach_adds_the_read_only_option_only_when_asked(  # type: ignore[no-untyped-def]
+    monkeypatch, read_only: bool, option: bool
+) -> None:
+    recorder = _Recorder()
+    monkeypatch.setattr("lagom_orchestration.lake.duckdb.connect", lambda: recorder)
+    # No password in the string: libpq reads PGPASSWORD (ADR-0044).
+    _lake_env(monkeypatch, "ducklake:postgres:host=postgres-rw dbname=lagom user=lake_reader")
+    from lagom_orchestration.lake import attach_lake
+
+    attach_lake(read_only=read_only)
+    attach = recorder.statements[-1]
+    assert attach.startswith("ATTACH 'ducklake:postgres:host=postgres-rw dbname=lagom")
+    assert attach.endswith(", READ_ONLY)") is option
+    assert "password" not in attach.lower()
+
+
+def test_a_read_only_attach_cannot_write(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """On a real DuckLake: the first session creates it, the second only reads."""
+    import duckdb
+
+    from lagom_orchestration.lake import attach_lake
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _lake_env(monkeypatch, f"ducklake:{tmp_path / 'catalog.ducklake'}")
+    monkeypatch.setenv("LAGOM_LAKE_DATA_PATH", f"{tmp_path / 'data'}/")
+    monkeypatch.setenv("LAGOM_LAKE_METADATA_SCHEMA", "main")
+    writer = attach_lake()
+    writer.execute("CREATE TABLE lake.main.t (v INTEGER)")
+    writer.execute("INSERT INTO lake.main.t VALUES (1)")
+    writer.close()
+    reader = attach_lake(read_only=True)
+    assert reader.execute("SELECT count(*) FROM lake.main.t").fetchone() == (1,)
+    with pytest.raises(duckdb.Error):
+        reader.execute("INSERT INTO lake.main.t VALUES (2)")
+    with pytest.raises(duckdb.Error):
+        reader.execute("CREATE TABLE lake.main.u (v INTEGER)")
+    reader.close()

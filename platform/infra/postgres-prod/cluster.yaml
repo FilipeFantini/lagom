@@ -121,6 +121,27 @@ spec:
         createdb: false
         passwordSecret:
           name: dagster-db
+      # The catalog's read-only login (ADR-0044): the dashboards' render step
+      # reads DuckLake's metadata tables as this role and can write nothing.
+      # No superuser, no CREATEDB, no CREATEROLE, and at most 3 connections, so
+      # a reader cannot take the connections a run needs (max_connections is 25).
+      # Its privileges are SELECT on the `ducklake` schema, given by the
+      # `lake_maintenance` job as the catalog's owner
+      # (lagom_orchestration/lake.py), because the tables DuckLake creates later
+      # belong to the owner. Its password is random, generated and sealed by the
+      # operator in lake-reader-credentials-sealed.yaml (runbook: *The catalog's
+      # read-only role*), a basic-auth Secret; the render step reads it from the
+      # same Secret as PGPASSWORD.
+      - name: lake_reader
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        connectionLimit: 3
+        comment: read-only on the DuckLake catalog; granted by lake_maintenance
+        passwordSecret:
+          name: lake-reader-credentials
 
   # No monitoring or pooler yet: PgBouncer waits for the first external BI
   # consumer (ADR-0012, architecture.md §8). A disabled block would read as

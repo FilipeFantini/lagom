@@ -4,7 +4,11 @@
   added it (2026-11-10); decision 3 and *Open, for the publishing pull
   request* amended by
   [ADR-0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md): the static page is the fallback, not the target; made the target again by
-  [ADR-0042](0042-the-dashboards-return-to-dbt-charts.md)
+  [ADR-0042](0042-the-dashboards-return-to-dbt-charts.md); *Open, for the
+  publishing pull request* (the Pages project and token) and decision 5
+  (telemetry) amended by
+  [ADR-0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md)
+  (Proposed)
 - **Date:** 2026-11-10
 - **Decided by:** the operator, in conversation on 2026-11-10, after a spike
   of the same day: the tool is dbt Charts, and the page gives up in-page
