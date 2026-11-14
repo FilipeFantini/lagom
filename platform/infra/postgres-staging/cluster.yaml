@@ -3,8 +3,9 @@
 # destination (apps/postgres-staging.yaml) sets it.
 #
 # Staging mirrors prod's configuration on purpose, so it tests what prod runs:
-# everything from `imageName` to `bootstrap`, and the `gold_reader` role, is
-# identical to postgres-prod/cluster.yaml, and a change to one is made to both.
+# everything from `imageName` to `bootstrap`, and the `gold_reader` and
+# `lake_reader` roles, is identical to postgres-prod/cluster.yaml, and a change
+# to one is made to both.
 # The only additions are `pg_hba` and the `lagom_dev` role, for the developer
 # (ADR-0014).
 # The reasoning behind each shared setting is written once, in the prod file.
@@ -110,3 +111,14 @@ spec:
         createdb: false
         passwordSecret:
           name: dagster-db
+      # Same as prod; the reasoning is in postgres-prod/cluster.yaml.
+      - name: lake_reader
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        connectionLimit: 3
+        comment: read-only on the DuckLake catalog; granted by lake_maintenance
+        passwordSecret:
+          name: lake-reader-credentials

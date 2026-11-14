@@ -247,6 +247,21 @@ retired** (2026-11-07: removed from Git, then deleted by hand, since the
 `postgres-<env>`*). The check is the one the CronJob pinged
 ([ADR-0018](adr/0018-pipeline-heartbeat.md); runbook: *Pipeline heartbeat*).
 
+**Each job declares the Secrets its run Pod gets**
+([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
+proposed; amends ADR-0033 decision 5). The chart copies the code server's whole
+environment into every run Pod, so that environment holds only what loading
+the definitions needs (`HEARTBEAT_URL`) and the settings that are not secret
+(the bucket, the schema). The catalog owner's connection string and the R2
+write token are named in each job's `dagster-k8s/config` tag
+(`WRITER_ENV` in [`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)),
+which dagster-k8s adds to the code server's variables when it builds the Pod.
+A Secret is per namespace, so the same name gives staging's value in staging and
+prod's in prod. `usgs` and `lake_maintenance` hold the same credentials as before; a
+job that needs fewer (the dashboards' render, next) names fewer. A read-only
+catalog login, `lake_reader`, exists for it (runbook: *The catalog's read-only
+role*).
+
 **The UI has no login**, so reaching it is the access control. Each
 environment's UI is at a path of `ops.ofantini.com` behind a Cloudflare Access
 login, served through an outbound-only tunnel
@@ -316,7 +331,7 @@ CloudNativePG `Pooler` object, not a separate install.
 The site is static: nothing on the node serves it
 ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). The
 dashboards are static too: dbt Charts renders them inside a run and the page
-is published to Cloudflare Pages. A server of our own was designed and stopped
+is published as files. A server of our own was designed and stopped
 ([ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)).
 
 | Tool | Role | RAM on the node | Enters when |
@@ -326,9 +341,17 @@ is published to Cloudflare Pages. A server of our own was designed and stopped
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
 
-How a dashboard will reach a visitor (ADR-0040's path; not built): a Dagster
-step after each run reads gold through `dct`, renders each board to one HTML
-file and deploys the files to Cloudflare Pages, an outbound connection.
+How a dashboard will reach a visitor (the operator's decisions of 2026-11-14,
+[ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
+proposed; not built): a Dagster asset in a job of its own reads gold through
+`dct` with read-only credentials (the catalog role `lake_reader`, a read-only R2
+token), renders each board to one HTML file and uploads the files to an R2
+public bucket per environment, served on a custom domain. The upload token is
+scoped to that bucket; Cloudflare Pages is not used because, as far as is known,
+its API token is account-wide (to be confirmed in the Cloudflare dashboard).
+The step leaves dbt Charts telemetry on, a choice to verify in staging. The
+parts that exist: per-job credentials, the role, and a read-only attach
+without a password in the connection string.
 
 `dct serve`, the server inside dbt Charts, was tried on 2026-11-12 against the
 lake (ADR-0041) and on 2026-11-14 against Postgres, and is not deployed: about
@@ -515,7 +538,11 @@ replaces; a missing role fails the build. The CronJobs that built gold on
 Postgres were retired on 2026-11-07, so the grants stay on the last tables
 they built and are not renewed; on DuckLake, read access takes the form
 [ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md) gives it (a read-only R2
-token and a read-only catalog role). A data test checks the outcome in the
+token and a read-only catalog role). The catalog role exists:
+`lake_reader`, a login with at most 3 connections and `SELECT` on the schema
+`ducklake`, whose grants the `lake_maintenance` job keeps
+([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
+The read-only R2 token comes with the dashboards' render. A data test checks the outcome in the
 catalogue: gold readable, bronze and silver not, nothing writable
 ([warehouse README](../platform/warehouse/README.md)). A consumer gets its own login role inside that group
 (`inRoles: [gold_reader]` in the `Cluster`, with its own sealed password), so
@@ -1415,6 +1442,78 @@ with it:
 kubectl -n <namespace> delete cronjob usgs-pipeline
 ```
 
+#### The catalog's read-only role
+
+The login `lake_reader` reads DuckLake's metadata tables and writes nothing
+([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
+Think of the catalog's owner as the key-holder of a filing room and
+`lake_reader` as a visitor with a pass to look at the index cards: CloudNativePG
+makes the pass from the `Cluster`'s `managed.roles` (`postgres-<env>/cluster.yaml`),
+and the pass needs a password, which is a sealed Secret, `lake-reader-credentials`,
+per namespace. The job `lake_maintenance` then tells Postgres which cards the
+visitor may read.
+
+**Seal the password, one per namespace, before the change is merged.** The
+password is generated and sealed in one pipe, so it is never printed, typed or
+kept in the shell history. It is a basic-auth Secret, the shape CloudNativePG
+reads for a role; the same Secret gives the render step its `PGPASSWORD` later.
+Run from the repository root, with the kubeconfig that reaches the node and
+Tailscale connected, since `kubeseal` asks the cluster for the controller's
+public key:
+
+```bash
+for ns in staging prod; do
+  f="platform/infra/postgres-$ns/lake-reader-credentials-sealed.yaml"
+  openssl rand -hex 24 | { read -r PW && kubectl create secret generic lake-reader-credentials -n "$ns" \
+    --type=kubernetes.io/basic-auth --from-literal=username=lake_reader --from-literal=password="$PW" \
+    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset PW; }
+done
+```
+
+The output goes to a temporary file that is renamed only when `kubeseal`
+succeeds: a plain `>` creates the file before the command runs, so a failed run
+would leave an empty file that could be committed by mistake. Each namespace
+gets its own password. Commit the two `-sealed.yaml` files on the
+pull request's branch. `kubeseal` reads the controller's public key from the
+cluster, as for the other sealed Secrets.
+
+**Rollout order.** The tags that give each job its Secrets are in the image, so
+the image comes before the removal of the same variables from the values:
+
+1. Merge the pull request that adds the tags, the role and the sealed Secrets.
+   CI builds the image for that commit. The values still hold the credentials,
+   so runs are unchanged: the tags' copies are identical and kept once.
+2. In staging, pin that digest and remove the credentials from
+   `dagster-staging/values.yaml` in one pull request (the variables the code
+   server keeps are in ADR-0044, decision 2). Check a `usgs` run succeeds.
+3. After the checks below pass in staging, the same for prod, with staging's
+   digest (the promotion check enforces it).
+
+**Check it in staging** (replace `staging` with `prod` after):
+
+```bash
+# 1. CloudNativePG created the role: it is listed as reconciled, with no password shown
+kubectl --context <node-name> -n staging get cluster postgres -o jsonpath='{.status.managedRolesStatus.byStatus}'
+# 2. Start lake_maintenance (Jobs -> lake_maintenance -> Launchpad); its step grant_lake_reader succeeds.
+#    Then read the privileges from inside Postgres (local socket, no password):
+kubectl --context <node-name> -n staging exec postgres-1 -c postgres -- psql -d lagom -At -c \
+  "select has_schema_privilege('lake_reader','ducklake','USAGE'), has_database_privilege('lake_reader','lagom','CONNECT'), \
+   (select count(*) from information_schema.tables t where t.table_schema='ducklake' and not has_table_privilege('lake_reader', format('%I.%I', t.table_schema, t.table_name), 'SELECT'))"
+# expected: t|t|0  (usage, connect, and no table in the schema without SELECT)
+# 3. The role can read and cannot write: an attach with read_only=True and no password in the
+#    string (PGPASSWORD from the Secret) lists the tables and refuses an INSERT. Not scripted here:
+#    the render step's pull request adds the job that does it, and its staging run is this check.
+```
+
+If `lake_maintenance` fails with `the role lake_reader does not exist`, the
+Secret is not sealed in that namespace yet or CloudNativePG has not reconciled
+it: step 1 shows which. The daily job fails and e-mails until then, by design
+(ADR-0044, decision 6); compaction still runs.
+
+**Rotate the password:** seal a new one with the command above for that
+namespace only, commit, and let Argo CD apply it; CloudNativePG changes the
+role's password to match. A reader holding the old one must restart.
+
 ### Operator UIs behind Cloudflare Access (M3)
 
 The operator's tools share one HTTPS address, one path per tool, behind a
@@ -1759,7 +1858,7 @@ Each environment runs its own Dagster in its namespace
 
 A **run** is not one of them. For each run the daemon creates a Kubernetes
 Job named `dagster-run-<run id>`, whose Pod uses the code server's image and
-environment; its memory is in §11. The Job and its Pod are deleted an hour after they
+environment plus the Secrets its job names (§7); its memory is in §11. The Job and its Pod are deleted an hour after they
 finish. The run's history stays in the database `dagster` of the same
 environment's Postgres.
 
@@ -1829,8 +1928,9 @@ it waits as *Queued*. Exercised on 2026-11-05: a `usgs` run started at
 Start runs from the job's page, not from *Catalog* or the asset graph. A run
 started there belongs to Dagster's implicit asset job, which has none of the
 jobs' tags: the queue does not hold it back from a scheduled run, so two
-loads can overlap on dlt's cursor, and it takes the code server's memory
-instead of the run's (§11).
+loads can overlap on dlt's cursor, it takes the code server's memory
+instead of the run's (§11), and it has no credentials (§7), so it fails at its
+first asset with a missing variable.
 
 **Pitfalls hit on the way in** (staging, 2026-10-28). Each made the code
 server or the first runs fail:

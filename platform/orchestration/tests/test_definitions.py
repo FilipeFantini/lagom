@@ -1,12 +1,13 @@
 """The code location loads, and its graph is the one the ADR describes."""
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-from dagster import AssetKey, DefaultSensorStatus
+from dagster import AssetKey, DagsterRun, DefaultSensorStatus
 
 WAREHOUSE = Path(__file__).resolve().parents[2] / "warehouse"
 # `dbt parse` reads the profile but opens no connection: placeholders suffice.
@@ -83,6 +84,28 @@ def test_the_code_location_does_not_load_without_the_ping_url(defs) -> None:  # 
     assert "HEARTBEAT_URL is not set or is empty" in done.stderr
 
 
+def test_the_code_location_loads_with_only_the_ping_url(defs, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """What the code server and an untagged run hold is enough to import the module.
+
+    The credentials are not in the code server's environment (ADR-0044), so the
+    module must not read one when it loads. The process gets the ping URL and
+    nothing else of the platform's: no catalog, no R2 key, no dlt variable.
+    """
+    env = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(tmp_path),
+        "PYTHONPATH": os.pathsep.join(sys.path),
+        "HEARTBEAT_URL": "https://hc-ping.invalid/test",
+    }
+    done = subprocess.run(
+        [sys.executable, "-c", "import lagom_orchestration.definitions"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode == 0, done.stderr
+
+
 def test_steps_run_in_the_runs_process(defs) -> None:  # type: ignore[no-untyped-def]
     for job in defs.resolve_all_job_defs():
         if job.name in {"usgs", "lake_maintenance"}:
@@ -111,6 +134,117 @@ def test_run_resources_override_the_code_servers(defs) -> None:  # type: ignore[
             K8sContainerContext(run_k8s_config=get_user_defined_k8s_config(job.tags))
         )
         assert run.run_k8s_config.container_config["resources"] == RUN_RESOURCES, job.name
+
+
+def _run_pod_env(job, code_location_env):  # type: ignore[no-untyped-def]
+    """The environment of the container a run of `job` gets, as the daemon builds it.
+
+    The code location's environment travels as the run's container context
+    (the chart's `includeConfigInLaunchedRuns`); the job's tags are merged over
+    it by the launcher's own `get_container_context_for_run`, and the Job
+    comes out of `construct_dagster_k8s_job`, the function the launcher calls.
+    Only the launcher's start-up is replaced: it would open a kubeconfig.
+    """
+    from unittest.mock import MagicMock
+
+    from dagster._core.code_pointer import ModuleCodePointer
+    from dagster._core.origin import JobPythonOrigin, RepositoryPythonOrigin
+    from dagster_k8s import K8sRunLauncher
+    from dagster_k8s.job import construct_dagster_k8s_job
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("dagster_k8s.launcher.load_kubernetes_config", MagicMock())
+        launcher = K8sRunLauncher(
+            dagster_home="/opt/dagster/dagster_home",
+            instance_config_map="dagster-instance",
+            postgres_password_secret="dagster-db",
+            service_account_name="dagster",
+            job_image="example.invalid/lagom-orchestration:test",
+            job_namespace="staging",
+            k8s_client_batch_api=MagicMock(),
+            k8s_client_core_api=MagicMock(),
+        )
+    repository = RepositoryPythonOrigin(
+        executable_path="python",
+        code_pointer=ModuleCodePointer("lagom_orchestration.definitions", "defs"),
+        container_image="example.invalid/lagom-orchestration:test",
+        container_context={"k8s": {"env": code_location_env, "namespace": "staging"}},
+    )
+    run = DagsterRun(
+        job_name=job.name,
+        tags=job.tags,
+        job_code_origin=JobPythonOrigin(job.name, repository),
+    )
+    context = launcher.get_container_context_for_run(run)
+    kubernetes_job = construct_dagster_k8s_job(
+        job_config=context.get_k8s_job_config(repository.container_image, launcher),
+        args=["dagster", "api", "execute_run"],
+        job_name="dagster-run-test",
+        user_defined_k8s_config=context.run_k8s_config,
+    )
+    return list(kubernetes_job.spec.template.spec.containers[0].env)
+
+
+# What the code server holds: what it needs to load, which a run's process needs too.
+LOADING_ENV = [
+    {
+        "name": "HEARTBEAT_URL",
+        "valueFrom": {"secretKeyRef": {"name": "pipeline-heartbeat", "key": "url"}},
+    }
+]
+WRITER_SECRETS = {
+    "PG_URI": ("postgres-app", "uri"),
+    "LAGOM_R2_ACCESS_KEY_ID": ("r2-lake", "ACCESS_KEY_ID"),
+    "LAGOM_R2_SECRET_ACCESS_KEY": ("r2-lake", "ACCESS_SECRET_KEY"),
+    "LAGOM_R2_ENDPOINT": ("r2-lake", "ENDPOINT"),
+}
+
+
+def test_the_writing_jobs_pods_get_the_owner_and_write_credentials(defs) -> None:  # type: ignore[no-untyped-def]
+    """The tag adds to the code server's environment; it does not replace it."""
+    for job in defs.resolve_all_job_defs():
+        if job.name not in {"usgs", "lake_maintenance"}:
+            continue
+        env = {e.name: e for e in _run_pod_env(job, LOADING_ENV)}
+        for name, (secret, key) in WRITER_SECRETS.items():
+            ref = env[name].value_from.secret_key_ref
+            assert (ref.name, ref.key) == (secret, key), (job.name, name)
+        # The code server's own variable is still there, and the composed
+        # variables follow the Secrets they read: Kubernetes expands $(NAME)
+        # only from variables defined above it.
+        assert env["HEARTBEAT_URL"].value_from.secret_key_ref.name == "pipeline-heartbeat"
+        names = list(env)
+        for name, value in {k: v.value for k, v in env.items() if v.value}.items():
+            for reference in re.findall(r"\$\((\w+)\)", value):
+                assert names.index(reference) < names.index(name), (job.name, name)
+
+
+def test_a_code_server_that_still_holds_the_credentials_adds_no_duplicates(defs) -> None:  # type: ignore[no-untyped-def]
+    """The rollout's first step (runbook): the image has the tags, the values still the variables.
+
+    The two lists name the same variables with the same values; the merge must
+    keep one of each, or the Pod's environment would define a name twice.
+    """
+    from lagom_orchestration.definitions import WRITER_ENV
+
+    for job in defs.resolve_all_job_defs():
+        if job.name not in {"usgs", "lake_maintenance"}:
+            continue
+        names = [e.name for e in _run_pod_env(job, [*WRITER_ENV, *LOADING_ENV])]
+        assert len(names) == len(set(names)), job.name
+
+
+def test_a_pod_built_from_the_code_servers_environment_alone_has_no_credentials(defs) -> None:  # type: ignore[no-untyped-def]
+    """An implicit asset job has no tags: its Pod holds only the code server's variables."""
+    from dagster import define_asset_job
+
+    untagged = define_asset_job("untagged", selection="*").resolve(
+        asset_graph=defs.resolve_asset_graph()
+    )
+    env = {e.name: e for e in _run_pod_env(untagged, LOADING_ENV)}
+    assert not set(WRITER_SECRETS) & set(env)
+    assert not any(name.startswith("DESTINATION__") for name in env)
+    assert "LAGOM_LAKE_CATALOG" not in env
 
 
 def test_budget_declares_the_runs_request(defs) -> None:  # type: ignore[no-untyped-def]
