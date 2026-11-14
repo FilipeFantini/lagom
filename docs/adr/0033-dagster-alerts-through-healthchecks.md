@@ -1,9 +1,8 @@
 # ADR-0033 — Dagster raises the alarm: a failure sensor and a heartbeat, both through Healthchecks.io
 
 - **Status:** Accepted; decision 5 amended by
-  [ADR-0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md)
-  (Proposed): a job declares its own Secrets, and the ping URL is the one left
-  shared
+  [ADR-0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md):
+  a job declares its own Secrets, and the ping URL is the one left shared
 - **Date:** 2026-11-07
 - **Decided by:** the operator, on 2026-11-07: retire the CronJobs now, with
   the alarm, and accept the ping URL in run Pods (decision 5).

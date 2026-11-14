@@ -105,10 +105,10 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at d958046 (PR #55,
-        # the alarm sensors of ADR-0033; the code location needs HEARTBEAT_URL,
-        # set below).
-        tag: "d958046ad9a8d329da2926751dd18d3521378a66@sha256:50e93f4d67e881a02a8272f332f10ee19d762f7e27267bc33cec3075903c880b"
+        # Pinned by digest (ADR-0015): built from main at 06355de (PR #80,
+        # each job's credentials in its own tag, ADR-0044; the code location
+        # needs HEARTBEAT_URL, set below).
+        tag: "06355de0e60ee65c52ce80e5526724673a7e5afc@sha256:9b114c93927e7e8cf30fbe9d6f9df23e4f973369489b7c9e5fad8f43cb7bd422"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
@@ -116,14 +116,15 @@ dagster-user-deployments:
       # security context, in this namespace. The container security context
       # is set for runs in runLauncher above. Their resources are not these:
       # a tag on each job in the code location sets them (RUN_RESOURCES in
-      # lagom_orchestration/definitions.py), and wins.
+      # lagom_orchestration/definitions.py), and wins. The same tag adds the
+      # job's Secrets to the environment below (ADR-0044).
       includeConfigInLaunchedRuns:
         enabled: true
       # The code server alone: measured 203-291 MiB. The limit stays at 1Gi
       # for one case: a run launched from the asset catalog instead of a job
       # belongs to Dagster's implicit asset job, which has no RUN_RESOURCES
-      # tag, so it takes these figures. With 1Gi it has room for a run's peak
-      # instead of being OOM-killed. Start runs from the job page instead.
+      # tag, so it takes these figures. Since ADR-0044 it has no credentials
+      # either and fails at its first asset. Start runs from the job page.
       resources:
         requests: {cpu: 50m, memory: 320Mi}
         limits: {memory: 1Gi}
@@ -143,41 +144,28 @@ dagster-user-deployments:
       volumeMounts:
         - name: tmp
           mountPath: /tmp
-      # Kubernetes expands $(NAME) from variables defined above it in the list.
+      # The code server's environment, which every run Pod inherits
+      # (includeConfigInLaunchedRuns). It holds the settings that are not
+      # secret, which differ by environment, and the variable the code
+      # location needs to load. It holds no credential: each job names the
+      # Secrets its Pod gets in its own tag (WRITER_ENV in
+      # lagom_orchestration/definitions.py, ADR-0044), and dagster-k8s adds
+      # them to this list. The tag's variables read none of these, and these
+      # read none of the tag's: no $(NAME) crosses the two lists.
       env:
-        # The DuckLake catalog: staging's `lagom` database, as its owner, from
-        # the Secret CloudNativePG generates. TLS required.
-        - name: PG_URI
-          valueFrom: {secretKeyRef: {name: postgres-app, key: uri}}
         - name: PGSSLMODE
           value: require
-        # The R2 token for lagom-staging-lake, sealed in r2-lake-sealed.yaml.
-        - name: LAGOM_R2_ACCESS_KEY_ID
-          valueFrom: {secretKeyRef: {name: r2-lake, key: ACCESS_KEY_ID}}
-        - name: LAGOM_R2_SECRET_ACCESS_KEY
-          valueFrom: {secretKeyRef: {name: r2-lake, key: ACCESS_SECRET_KEY}}
-        - name: LAGOM_R2_ENDPOINT
-          valueFrom: {secretKeyRef: {name: r2-lake, key: ENDPOINT}}
-        # dlt's DuckLake destination.
-        - name: DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG
-          value: "$(PG_URI)"
+        # dlt's DuckLake destination, without its credentials.
         - name: DESTINATION__DUCKLAKE__CREDENTIALS__DUCKLAKE_NAME
           value: lagom
         - name: DESTINATION__DUCKLAKE__CREDENTIALS__METADATA_SCHEMA
           value: ducklake
         - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL
           value: s3://lagom-staging-lake
-        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__AWS_ACCESS_KEY_ID
-          value: "$(LAGOM_R2_ACCESS_KEY_ID)"
-        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__AWS_SECRET_ACCESS_KEY
-          value: "$(LAGOM_R2_SECRET_ACCESS_KEY)"
-        - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__ENDPOINT_URL
-          value: "$(LAGOM_R2_ENDPOINT)"
         - name: DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__CREDENTIALS__REGION_NAME
           value: auto
-        # The same lake for dbt's `lake` target and the maintenance job.
-        - name: LAGOM_LAKE_CATALOG
-          value: "ducklake:postgres:$(PG_URI)?sslmode=require"
+        # The same lake for dbt's `lake` target and the maintenance job; the
+        # catalog and the R2 token come from the job's tag.
         - name: LAGOM_LAKE_DATA_PATH
           value: s3://lagom-staging-lake/
         - name: LAGOM_LAKE_METADATA_SCHEMA
@@ -185,6 +173,7 @@ dagster-user-deployments:
         # The alarm's ping URL (ADR-0033): staging's Healthchecks.io check,
         # sealed in postgres-staging/pipeline-heartbeat-sealed.yaml, the
         # CronJob's until it was retired. The code location does not load
-        # without it. Run Pods inherit it with the rest (decision 5).
+        # without it. Run Pods inherit it because they import the same module
+        # (ADR-0033, decision 5).
         - name: HEARTBEAT_URL
           valueFrom: {secretKeyRef: {name: pipeline-heartbeat, key: url}}
