@@ -160,7 +160,7 @@ gold, read with the board's own `base` SQL through `attach_lake`.
 | Cache | none | unbounded, stale | commercial only | none (CDN) |
 | Exposed surface | static files on a CDN | a server, debug routes, `/data` | a server, its database, MinIO | static files on a CDN |
 
-## Decision (proposed)
+## Decision (proposed, rejected)
 
 1. **The batch dashboards become static pages that filter in the visitor's
    browser,** drawn with Vega-Lite from a specification kept in Git beside the
@@ -220,13 +220,11 @@ means restoring its YAML, which stays in Git history.
 **Reconsider when** a board's rows outgrow the page, or a board needs data a
 visitor must not download in full.
 
-## Open, for the operator
+## Outcome
 
-- Accept, change or reject this proposal. If rejected, the next pull request
-  is ADR-0040's publishing pull request, as ADR-0042 planned.
-- If accepted, the next pull request replaces the earthquakes board with a
-  Vega-Lite board under `products/dashboards/`, with its gate in CI; the
-  publishing pull request follows it.
+Rejected by the operator on 2026-11-14. The next pull request is ADR-0040's
+publishing pull request, as ADR-0042 planned
+([roadmap, M4](../roadmap.md#m4--ofantinicom)).
 
 Sources checked on 2026-11-14: the installed `dbt-charts` 0.11.1 package
 (paths above are inside it); Lightdash's repository at tag 3.116.0 and its
