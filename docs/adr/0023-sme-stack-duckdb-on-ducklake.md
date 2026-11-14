@@ -147,3 +147,7 @@ without rewriting it.
   no longer apply: gold is published to a serving layer in Postgres, and the
   dashboards read only that
   ([ADR-0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md)).
+- **2026-11-14 — a static page reads gold again.** The serving layer is for a
+  server resident on the node; the page `dct render` makes inside a run reads
+  gold through `dct`, as ADR-0040 describes
+  ([ADR-0042](0042-the-dashboards-return-to-dbt-charts.md)).

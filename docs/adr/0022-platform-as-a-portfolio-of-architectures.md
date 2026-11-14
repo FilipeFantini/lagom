@@ -162,3 +162,6 @@ without rewriting it.
   dashboards read a serving layer in Postgres through a small resident server,
   built in its own repository; the static page becomes the fallback
   ([ADR-0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md)).
+- **2026-11-14 — the server is stopped.** The dashboards return to dbt Charts
+  and its static page; streaming gets a tool of its own
+  ([ADR-0042](0042-the-dashboards-return-to-dbt-charts.md)).
