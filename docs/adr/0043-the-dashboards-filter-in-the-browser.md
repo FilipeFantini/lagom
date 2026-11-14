@@ -64,7 +64,8 @@ font files and its live-reload stream, read from the page's template.
   100 KB, reaches SQL.
 - **The role's `statement_timeout` does not hold:** `dct` sends
   `SET statement_timeout = '120s'` on every connection
-  (`core/dialects/postgres.py:51`). Only the role's connection limit is a
+  (`core/dialects/postgres.py:51`; the 120 s default from
+  `core/compile/config.py`, seen in the Postgres log). Only the role's connection limit is a
   ceiling; at the limit every view is an error page, and the next view after
   the limit is lifted succeeds.
 - **The cache is keyed by the URL's values, has no size limit, and serves
@@ -100,7 +101,7 @@ row. Memory by `docker stats` and `/proc` RSS.
 
 - **The image is amd64 only;** the node is arm64. It ran emulated, so its
   memory here is indicative.
-- **Memory:** about 1.1 GiB at rest (app, its own Postgres, MinIO), 2.05 GiB
+- **Memory:** about 1.1 GiB at rest (app, its own Postgres, MinIO), 2,054 MiB
   after 300 dashboard views, 1.1 GiB again three minutes later. The headless
   browser, needed only for exports, adds 563 MiB. Images: 14.4 GiB for the app.
 - **Connections:** one per query, closed after it; 7 at most with 8 viewers.
