@@ -279,10 +279,7 @@ def _code_server_env(environment: str):  # type: ignore[no-untyped-def]
     return deployment["env"]
 
 
-# Prod joins this list in the pull request that promotes staging's digest to
-# prod: until then prod runs the image without tags, so its values still hold
-# the credentials (runbook, "The catalog's read-only role", rollout order).
-@pytest.mark.parametrize("environment", ["staging"])
+@pytest.mark.parametrize("environment", ["staging", "prod"])
 def test_the_code_server_holds_no_credential_but_the_ping_url(defs, environment) -> None:  # type: ignore[no-untyped-def]
     """The real values of each environment, merged with the real tags (ADR-0044)."""
     code_server = _code_server_env(environment)
