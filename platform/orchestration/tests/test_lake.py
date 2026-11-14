@@ -163,6 +163,13 @@ def test_grant_reader_access_fails_loudly_when_the_role_does_not_exist(
         grant_reader_access()
 
 
+def test_grant_reader_access_blames_the_role_only_when_it_is_missing(postgres: _Postgres) -> None:
+    postgres.error = psycopg.errors.UndefinedObject('type "ducklake_thing" does not exist')
+    with pytest.raises(RuntimeError, match='type "ducklake_thing" does not exist') as raised:
+        grant_reader_access()
+    assert "lake-reader-credentials" not in str(raised.value)
+
+
 def test_grant_reader_access_does_not_swallow_other_errors(postgres: _Postgres) -> None:
     postgres.error = psycopg.errors.InvalidSchemaName('schema "ducklake" does not exist')
     with pytest.raises(RuntimeError, match='schema "ducklake" does not exist'):

@@ -91,7 +91,11 @@ def grant_reader_access() -> None:
         with psycopg.connect(uri) as connection:
             for statement in statements:
                 connection.execute(statement)
-    except psycopg.errors.UndefinedObject:
+    except psycopg.errors.UndefinedObject as error:
+        # The same error class names any missing object, so the hint is given
+        # only when Postgres says the missing one is this role.
+        if f'role "{READER_ROLE}" does not exist' not in str(error):
+            raise RuntimeError(redact_secrets(str(error))) from None
         raise RuntimeError(
             f"the role {READER_ROLE} does not exist in the catalog's Postgres: seal its "
             "Secret lake-reader-credentials so CloudNativePG creates it (ADR-0044)"
