@@ -328,13 +328,21 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
         page against `dct serve` on Postgres behind Cloudflare Access, and
         Lightdash tried locally (ADR-0042, decisions 3 and 4), plus a static
         page that filters in the browser. Done 2026-11-14; the measurements and
-        the proposal are in [ADR-0043](adr/0043-the-dashboards-filter-in-the-browser.md)
-  - [ ] The operator decides ADR-0043 (proposed). Accepted: the next pull
-        request replaces the earthquakes board with a Vega-Lite board and its
-        gate, then publishing follows. Rejected: publishing follows directly
-  - [ ] The publishing pull request: the Dagster step that renders the boards,
-        its memory measured and budgeted, and the Cloudflare Pages project,
-        hostname and token (ADR-0040, *Open, for the publishing pull request*)
+        the proposal are in [ADR-0043](adr/0043-the-dashboards-filter-in-the-browser.md),
+        which the operator rejected the same day: the target stays `dct
+        render`'s static page, designed with no filters
+  - [ ] The publishing pull request: the Dagster step that renders the boards
+        after each run, its memory measured and budgeted, and the Cloudflare
+        Pages project, hostname and token (ADR-0040, *Open, for the publishing
+        pull request*). Two requirements the operator added on 2026-11-14:
+    - **The catalog password is not exposed,** rated high risk: none of the
+      render step's output can carry it. ADR-0040's defences come first,
+      before any render runs in the cluster: the password out of the
+      connection string (`PGPASSWORD`, seen to work locally in ADR-0041's
+      spike), a read-only catalog role and a read-only R2 token, and
+      redaction as the safety net
+    - **The page says when it was built,** beside the data's own times, so a
+      page left in place by a failed run shows its age
 - [ ] **Showcase: the SME stack on USGS** — the pipeline, with its real numbers
       (rows, run time, memory)
 - [ ] **Showcase: the platform itself**, after the USGS showcase is live —

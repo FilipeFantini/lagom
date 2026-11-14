@@ -1,7 +1,10 @@
 # ADR-0043 — The dashboards filter in the visitor's browser: a static page drawn with Vega-Lite
 
-- **Status:** Proposed. The operator decides; until then ADR-0040's static
-  page drawn by `dct render` stays the target (ADR-0042, decision 2).
+- **Status:** Rejected, by the operator in conversation on 2026-11-14. The
+  batch dashboards stay ADR-0040's static page drawn by `dct render`
+  (ADR-0042, decision 2), designed with no filters; its hover tooltips are
+  enough. The spike's measurements below stay true and are the record of
+  why `dct serve` is not deployed. The section *Corrects* still holds.
 - **Date:** 2026-11-14
 - **Proposed by:** the architect, after the spike of ADR-0042's decisions 3
   and 4, and a fourth option the operator asked to prototype in the same spike.
