@@ -38,7 +38,7 @@ dbt, Postgres, Dagster.
 | Credentials per job, and short-lived ones (ingestion writes only bronze, dbt only the layers it builds; a secret store or workload identity in place of static secrets) | a real client, or a second team on the cluster. Today every run Pod holds the catalog owner's password, the R2 write token and the alarm's ping URL ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md), decision 5) |
 | Row Level Security | second consumer with segregated data |
 | PostgREST | first API requirement |
-| Metabase, Superset or Lightdash | a client needs ad-hoc, self-service exploration — behind login |
+| Metabase, Superset or Lightdash | a client needs ad-hoc, self-service exploration — behind login. Lightdash 3.116.0 measured locally on 2026-11-14: about 1.1 GiB at rest, an amd64-only image, embedding under a commercial licence ([ADR-0043](adr/0043-the-dashboards-filter-in-the-browser.md)) |
 | 8 GB node | **decided 2026-10-27** for M3 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)); obtained 2026-10-28 as a new node in another location, `lagom-shared-02`, and the platform moved to it the same day |
 | Big-data stack (Apache Iceberg, Spark or Trino, Airflow) | later, as the comparison that shows where the SME stack stops; infrastructure sized for it and its own ADR ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed) |
 | In-cluster policy engine (Kyverno, Gatekeeper) | a second writer to the cluster besides Argo CD — [ADR-0013](adr/0013-agent-driven-development-guardrails.md) |
@@ -324,11 +324,14 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
         disagrees with gold ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md))
   - [x] A server of our own, designed and stopped: two pull requests in
         `FilipeFantini/enlightenviz`, never deployed (ADR-0042, decision 1)
-  - [ ] One spike, written up before the publishing pull request: the static
-        page against `dct serve` on Postgres behind Cloudflare Access
-        (connections, memory after 1,000 views, routes, what Access costs a
-        public board), and Lightdash tried locally with its memory measured
-        (ADR-0042, decisions 3 and 4)
+  - [x] One spike, written up before the publishing pull request: the static
+        page against `dct serve` on Postgres behind Cloudflare Access, and
+        Lightdash tried locally (ADR-0042, decisions 3 and 4), plus a static
+        page that filters in the browser. Done 2026-11-14; the measurements and
+        the proposal are in [ADR-0043](adr/0043-the-dashboards-filter-in-the-browser.md)
+  - [ ] The operator decides ADR-0043 (proposed). Accepted: the next pull
+        request replaces the earthquakes board with a Vega-Lite board and its
+        gate, then publishing follows. Rejected: publishing follows directly
   - [ ] The publishing pull request: the Dagster step that renders the boards,
         its memory measured and budgeted, and the Cloudflare Pages project,
         hostname and token (ADR-0040, *Open, for the publishing pull request*)
