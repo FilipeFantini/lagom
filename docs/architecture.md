@@ -1489,6 +1489,16 @@ the image comes before the removal of the same variables from the values:
 3. After the checks below pass in staging, the same for prod, with staging's
    digest (the promotion check enforces it).
 
+**Reload the code location before a manual run.** After the image changes,
+Dagster's webserver can keep the job definitions it loaded from the old one.
+A run started from the Launchpad then carries the old tags, and with them the
+old `dagster-k8s/config`: in staging on 2026-11-14 that tag held only the
+resources, and `lake_maintenance` started with no credentials. The daemon,
+which starts scheduled runs, reloads by itself, so the scheduled `usgs` run
+had the new tags. In the UI, *Deployment → Code locations → lagom → Reload*,
+then check that the `dagster-k8s/config` tag shown in the Launchpad begins with
+`{"container_config": {"env": ...`.
+
 **Check it in staging** (replace `staging` with `prod` after):
 
 ```bash
