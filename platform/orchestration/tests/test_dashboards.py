@@ -157,11 +157,13 @@ def test_the_step_validates_renders_then_checks_in_that_order(repo: Path, tmp_pa
     ]
     validate = calls[0]["args"]
     assert validate[:3] == ["validate", "--strict", "--warehouse"]
-    # Fragments are not boards; every render is uncached.
+    # Fragments are not boards; every render is uncached and runs one query at
+    # a time, within the catalog role's connection limit.
     renders = [c["args"] for c in calls[1:3]]
     assert [args[args.index("--format") + 1] for args in renders] == ["html", "data"]
     for args in renders:
         assert "--no-cache" in args
+        assert args[args.index("--max-workers") + 1] == "1"
         assert any(a.endswith("earthquakes.yml") for a in args)
         assert not any("_fragment" in a for a in args)
     assert calls[3]["args"][0].endswith("earthquakes.data")

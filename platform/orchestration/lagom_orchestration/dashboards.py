@@ -77,6 +77,13 @@ RENDER_TIMEOUT_SECONDS = 360
 CHECK_TIMEOUT_SECONDS = 120
 S3_CONNECT_TIMEOUT_SECONDS = 10
 S3_READ_TIMEOUT_SECONDS = 60
+# One query at a time. `dct render` runs 8 query workers by default, and each
+# attaches the lake on its own connection: the catalog role `lake_reader` is
+# limited to 3 connections (postgres-*/cluster.yaml), and the first staging run
+# failed with "too many connections for role" (2026-11-15). DuckDB serializes
+# the queries anyway (`dct render --help`), so one worker costs no time, and it
+# keeps the render's memory to one connection's.
+RENDER_MAX_WORKERS = 1
 # The tail of a failing command's output that goes into the error: what a
 # person needs, and little enough to e-mail.
 OUTPUT_TAIL_CHARS = 4000
@@ -196,6 +203,8 @@ def render_pages(
                 *[str(board) for board in boards],
                 *base,
                 "--no-cache",
+                "--max-workers",
+                str(RENDER_MAX_WORKERS),
                 "--ignore-warning",
                 "WARN-CATEGORY-COLOR-PIN-UNSEEN",
                 "--format",
