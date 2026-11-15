@@ -29,9 +29,9 @@ dbt, Postgres, Dagster.
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | dbt Charts (the dashboards) | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)); replaced Evidence on 2026-11-10 ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)). Its static page is the target again since 2026-11-14 ([ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)) |
-| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)) |
+| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). In M6 it is created only under the two-path fallback of [ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed) |
 | Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `ops.ofantini.com/<tool>` ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
-| NATS | second consumer of the same stream, or a replay requirement |
+| NATS | second consumer of the same stream, or a replay requirement. The streaming showcase (M6) meets it ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed) |
 | Streamlit | an interactive app a static page cannot serve |
 | Infrastructure observability (metrics and logs), shown on ofantini.com | the USGS showcase is live on ofantini.com (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
 | PgBouncer (CloudNativePG `Pooler`) | first external BI consumer |
@@ -391,24 +391,35 @@ Continuous events. Candidates in [`use-case-globe.md`](use-case-globe.md).
 This is where the platform proves it grows by composition: **if adding a source
 is only new configuration, the design worked.**
 
-- [ ] Redpanda Connect with the source — if the source does not keep its
-      history, the Postgres backup comes first
-      ([ADR-0019](adr/0019-postgres-backup-deferred.md))
-- [ ] Collector running on the Pi as an agent node. k3s currently advertises
-      the node's public IP and runs flannel on the public interface; a node
-      joining over Tailscale needs flannel on `tailscale0` (`node-ip`,
-      `flannel-iface`) — settle it here
-- [ ] The destination of the events: the `serving` database, archived to the
-      lake on a schedule — the direction set by
-      [ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md); this showcase's own ADR decides the detail,
-      and the tool that shows the events, with Grafana as the candidate
-      ([ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md), decision 6)
-- [ ] NATS **only if** there is a second consumer or a replay requirement
+The design is [ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed): a
+Raspberry Pi 3B+ at the operator's home is the source, outside the cluster,
+and NATS JetStream is the log. It replaces the earlier plan of joining the Pi
+to k3s as an agent node, which needed flannel moved to `tailscale0` on the
+node that carries prod.
 
-> **Honest note:** if the source is GTFS-RT polled every 20 seconds, Redpanda
-> Connect writes straight to the destination and NATS adds nothing functionally.
-> Worth doing as a conscious learning exercise, not as a technical necessity.
-> Knowing the difference is what prevents doing it to a real client.
+- [ ] Spike on the operator's machine: a NATS leaf node and a hub, the hub's
+      stream sourcing the leaf's, with the link cut and restored; nothing
+      lost, nothing duplicated
+- [ ] Spike: RisingWave against the criteria of the ADR's decision 6 (memory
+      over 24 hours, state on local disk, late events, licence). It decides
+      between one path and the two-path fallback, and the result is written
+      in the ADR
+- [ ] Measure before deploying: memory of NATS and Redpanda Connect on the Pi
+      and on the node, of Grafana on the node, the events' size per day in
+      the live store and in the lake, what the showcase adds to R2 (limit:
+      1 GB of the free tier's 10), bytes written per day to the Pi's SD card
+- [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
+      tailnet tag and ACL, and its runbook section
+- [ ] The hub and the processing the spike chose, in staging, then prod
+- [ ] Grafana behind Cloudflare Access, one panel per question of the ADR's
+      decision 5
+- [ ] Archive to the lake on a schedule, with the raw events' retention
+- [ ] The measurements of both designs written in the ADR, as the source for
+      an article on kappa against lambda on a small node. The article itself
+      is written in the site's repository
+      ([ADR-0039](adr/0039-the-site-in-its-own-repository.md))
+- [ ] What the site shows of this showcase: aggregates only, under the
+      ADR's privacy rule (decision 11) — not decided
 
 ## M7 — Two developers
 

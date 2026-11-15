@@ -1,6 +1,7 @@
 # ADR-0003 — Split ingestion: dlt for batch, Redpanda Connect for events
 
-- **Status:** Accepted
+- **Status:** Accepted; the deferral of NATS is amended by
+  [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed), whose showcase meets the trigger
 - **Date:** 2026-10-12
 
 ## Context and problem

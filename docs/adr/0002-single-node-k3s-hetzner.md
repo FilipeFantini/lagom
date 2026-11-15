@@ -1,7 +1,9 @@
 # ADR-0002 — Single-node k3s on a Hetzner CAX11
 
 - **Status:** Accepted — partially superseded by [ADR-0021](0021-k3s-packaged-components-under-git.md)
-  (Traefik, servicelb, local-path and metrics-server are no longer k3s defaults)
+  (Traefik, servicelb, local-path and metrics-server are no longer k3s defaults);
+  the Raspberry Pi joining as an agent node is superseded by
+  [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed)
 - **Date:** 2026-10-12
 
 ## Context and problem
