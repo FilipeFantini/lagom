@@ -117,6 +117,9 @@ Rules for keeping documentation alive:
 - **Checklist item, not a courtesy.** A task is incomplete until documentation
   is updated, or the report states explicitly that no document was affected and
   why.
+- **Improve and correct this file.** When you find something in it that is
+  wrong, or something very important or useful that it lacks, propose the fix
+  in a pull request. It is a guardrail path, so the operator approves it (§6).
 
 ## 6. Execution flow
 
