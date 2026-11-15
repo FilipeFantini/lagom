@@ -215,10 +215,18 @@ def _differs_rows(what: str, shown: Rows, gold: Rows) -> list[str]:
     return []
 
 
-def compare_earthquakes(queries: Queries, gold: Gold) -> list[str]:
-    """Failures of the earthquakes board against `gold`; empty when it is right."""
+def compare_earthquakes(queries: Queries, gold: Gold, *, with_table: bool = True) -> list[str]:
+    """Failures of an earthquakes board against `gold`; empty when it is right.
+
+    `with_table` is False for the short board, which draws every query of the
+    full one but the table of the largest earthquakes: that query must then be
+    absent, and every other is checked the same way.
+    """
     failures = empty_queries(queries)
-    missing = [name for name in EARTHQUAKES_QUERIES if name not in queries]
+    required = [name for name in EARTHQUAKES_QUERIES if with_table or name != "largest"]
+    missing = [name for name in required if name not in queries]
+    if not with_table and "largest" in queries:
+        failures.append("the short board draws the table of the largest earthquakes")
     if missing:
         return failures + [f"queries missing from the render: {', '.join(missing)}"]
     if gold.events == 0:
@@ -250,7 +258,8 @@ def compare_earthquakes(queries: Queries, gold: Gold) -> list[str]:
     failures += _differs_rows(
         "map", sorted(queries["on_map"], key=lambda row: row["event_id"]), gold.on_map
     )
-    failures += _differs_rows("table", queries["largest"], gold.largest)
+    if with_table:
+        failures += _differs_rows("table", queries["largest"], gold.largest)
     return failures
 
 
@@ -258,10 +267,17 @@ def check_earthquakes(queries: Queries, connection: duckdb.DuckDBPyConnection) -
     return compare_earthquakes(queries, read_gold(connection))
 
 
+def check_earthquakes_short(
+    queries: Queries, connection: duckdb.DuckDBPyConnection
+) -> list[str]:
+    return compare_earthquakes(queries, read_gold(connection), with_table=False)
+
+
 # One function per board, keyed by the board's id. A board with no entry fails
 # the check: a new board brings its own comparison.
 BOARD_CHECKS: dict[str, Callable[[Queries, duckdb.DuckDBPyConnection], list[str]]] = {
     "earthquakes": check_earthquakes,
+    "earthquakes_short": check_earthquakes_short,
 }
 
 

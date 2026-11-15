@@ -312,6 +312,19 @@ def test_a_stale_or_future_watermark_is_refused() -> None:
         check_watermark("p.html", future, NOW)
 
 
+def _timestamp_style(board: Path) -> dict[str, Any]:
+    """The board's `style.timestamp`, from the board or what it `extends`, nearest first."""
+    path = board
+    for _ in range(5):
+        document = yaml.safe_load(path.read_text())
+        stamp = document.get("style", {}).get("timestamp")
+        if stamp is not None:
+            return dict(stamp)
+        assert "extends" in document, f"{board.name}: no style.timestamp and nothing extended"
+        path = (path.parent / document["extends"]).resolve()
+    raise AssertionError(f"{board.name}: style.timestamp not found within five extends")
+
+
 def test_the_boards_print_the_text_the_step_looks_for() -> None:
     """The label is in two places, the board's format and WATERMARK: they must agree.
 
@@ -321,7 +334,7 @@ def test_the_boards_print_the_text_the_step_looks_for() -> None:
     boards = sorted((REPO / "products" / "dashboards" / "charts").glob("[!_]*.yml"))
     assert boards
     for board in boards:
-        stamp = yaml.safe_load(board.read_text())["style"]["timestamp"]
+        stamp = _timestamp_style(board)
         assert stamp.get("visible", True) is True, board.name
         assert stamp["format"].startswith(WATERMARK), board.name
         line = datetime(2026, 11, 14, 12, 29, tzinfo=UTC).strftime(stamp["format"])

@@ -1,0 +1,15 @@
+# Earthquakes, short, for an article on ofantini.com, which frames it and links
+# the full board: the charts of partials/earthquakes.yml without the table of
+# the largest earthquakes and the notes at the end. Only the layout is its own,
+# so a change to a chart or a query reaches both boards, and check_boards.py
+# checks both.
+extends: ../partials/earthquakes.yml
+id: earthquakes_short
+
+rows:
+  - text: "Latest earthquake in the data: **{{ queries.kpis.one.last_event }} UTC**. Latest USGS revision of these earthquakes: **{{ queries.kpis.one.last_revision }} UTC**. Both times come from the data, not from when this page was built."
+  - cols: [k_events, k_largest, k_m4, k_reviewed]
+  - per_day
+  - map
+  - cols: [by_class, by_depth]
+  - top_regions
