@@ -42,6 +42,15 @@ style:
     caption: {family: "'Inter Variable'", color: '#4b5b5f'}
     numeral: {family: "'Inter Variable'", weight: 800, color: '#17252b'}
   charts:
+    # Wide enough for the longest line a card holds (a place such as "South
+    # Sandwich Islands region" beside its label): at dct's default width a
+    # long place squeezed every number row, and the decimals fell to the next
+    # line (seen on the staging map, 2026-11-15). The paper, ink and square
+    # corners are the site's.
+    tooltip:
+      max_width: 460
+      background: '#f8f1dd'
+      border: {color: '#17252b', width: 1, radius: 0}
     # One colour per class on every chart. Fixed here because the colours
     # follow the class, not its position in a chart: the site's gold to its
     # red to a deep brown for magnitude, its tan to its teal for depth.
@@ -113,10 +122,14 @@ queries:
       from {{ queries.base }} group by 1 order by 2 desc, 1 limit 15
   # Every earthquake of magnitude 4.0 or more in the window: the same set as
   # the KPI, so the map drops none of them.
+  # Positions to a tenth of a degree, about 11 km, which a world map cannot
+  # show: dct puts both coordinates in every circle's card, twice (as the
+  # map's channels and as columns), and four decimals there are noise.
   on_map:
     sql: |
-      select event_id, place, latitude, longitude, magnitude, magnitude_class,
-             depth_km, event_utc, url, power(magnitude - 3, 2) as circle_size
+      select event_id, place, round(latitude, 1) as latitude, round(longitude, 1) as longitude,
+             magnitude, magnitude_class, depth_km, event_utc, url,
+             power(magnitude - 3, 2) as circle_size
       from {{ queries.base }} where magnitude >= 4 order by magnitude desc
 
 charts:
@@ -186,10 +199,12 @@ charts:
     # 2026-11-15). `circle_size`, (magnitude - 3) squared, is 1 at magnitude 4
     # and 16 at 7: the circle's area follows it, so its width grows about
     # fourfold. dct 0.11.1 draws the size legend even with `legend.visible:
-    # false`, so the legend is named for what it shows and the subtitle reads
-    # it back into magnitudes; each circle's tooltip has the magnitude.
+    # false`, so the legend is named for what it shows, the circle's area, and
+    # the subtitle reads it back into magnitudes; each circle's card has the
+    # magnitude. (A label with a minus loses it: dct's cards turn `-` into a
+    # space.)
     size: circle_size
-    field_labels: {circle_size: '(magnitude - 3)²'}
+    field_labels: {circle_size: Circle area}
     geo_source: world-countries
     # One colour, no class legend: dct draws a map's legend in alphabetical
     # order and `legend.values` has no effect on it, and the size already

@@ -170,7 +170,8 @@ def read_gold(connection: duckdb.DuckDBPyConnection) -> Gold:
         ),
         on_map=_rows(
             connection,
-            f"select event_id, place, latitude, longitude, magnitude, magnitude_class, "
+            f"select event_id, place, round(latitude, 1) as latitude, "
+            f"round(longitude, 1) as longitude, magnitude, magnitude_class, "
             f"depth_km, {event_utc} as event_utc, url, power(magnitude - 3, 2) as circle_size "
             f"from {FCT} where {in_fct} and magnitude >= 4 order by event_id",
         ),
