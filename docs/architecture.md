@@ -1662,9 +1662,12 @@ below; prod takes staging's digest after they pass.
    `wrong-password-for-test`. The run fails at `dct validate`. Read the run's log
    and the failure e-mail: neither the test string nor the real password may
    appear. The test string is not a secret; it is what the check looks for.
-7. **Memory.** While the run is going, `kubectl --context <node-name> -n staging top pod`
-   in a loop (the kubelet refreshes every ~10 s), or the Pod's peak in Grafana
-   when it exists. The request is 768 MiB and the limit 1 GiB; the fixture peaked
+7. **Memory.** The run's log ends with "memory peak of the run's container", read
+   from the container's cgroup (`/sys/fs/cgroup/memory.peak`): the run's process
+   and every command it started. `kubectl top` does not do: the render's Pod
+   lives less than a minute and metrics-server samples once a minute, so the
+   first staging runs never showed in it (2026-11-15). The request is 768 MiB
+   and the limit 1 GiB; the fixture peaked
    at 540 MiB. Record the peak here and in §11; if it comes within 100 MiB of the
    limit, raise the job's own resources, not `usgs`'s.
 8. **The alarm still works for it.** After the above, a failed run in step 6 must

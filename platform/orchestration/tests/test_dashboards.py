@@ -36,6 +36,7 @@ from lagom_orchestration.dashboards import (
     WATERMARK,
     build_render_trigger,
     check_watermark,
+    memory_peak_mib,
     publish,
     render_pages,
     run_command,
@@ -482,3 +483,16 @@ def test_a_successful_usgs_run_requests_one_dashboards_run() -> None:
     assert isinstance(request, RunRequest)
     # The usgs run's ID: the same success asked twice requests one run.
     assert request.run_key == result.dagster_run.run_id
+
+
+def test_the_memory_peak_is_read_from_the_cgroup_in_mib(tmp_path: Path) -> None:
+    peak = tmp_path / "memory.peak"
+    peak.write_text("805306368\n")
+    assert memory_peak_mib(peak) == 768.0
+
+
+def test_a_kernel_without_the_memory_peak_gives_none(tmp_path: Path) -> None:
+    assert memory_peak_mib(tmp_path / "missing") is None
+    garbled = tmp_path / "memory.peak"
+    garbled.write_text("max\n")
+    assert memory_peak_mib(garbled) is None
