@@ -272,9 +272,12 @@ is read from the first staging run; if it ever fails or stalls a render,
   class legend; the size says the magnitude. The class and depth charts name
   each bar on the axis and have no legend.
 - **The map's size legend cannot be hidden.** dct 0.11.1 draws it even with
-  `legend.visible: false`. It is titled `(magnitude - 3)²`, the column the
-  circles are sized by, and the map's subtitle reads those values back into
-  magnitudes.
+  `legend.visible: false`. It is titled "Circle area", the column the circles
+  are sized by, (magnitude - 3) squared, and the map's subtitle reads those
+  values back into magnitudes.
+- **A map circle's card shows its coordinates twice,** as the map's channels
+  and as columns; dct 0.11.1 offers no way to leave them out of a map's card.
+  They are rounded to a tenth of a degree, so they read short.
 - **The site's look, not its fonts.** The board takes ofantini.com's paper, ink
   and accent colours. Its fonts (Archivo, IBM Plex Mono) are not embedded: a
   page that loads nothing can only use the fonts dct ships, so the board uses
