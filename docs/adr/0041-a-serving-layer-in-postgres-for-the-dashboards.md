@@ -3,7 +3,8 @@
 - **Status:** Accepted, by the operator in conversation on 2026-11-13;
   decisions 6 and 7 superseded, and decisions 1, 3 and 8 amended, by
   [ADR-0042](0042-the-dashboards-return-to-dbt-charts.md): the server of our
-  own is stopped and the dashboards return to dbt Charts
+  own is stopped and the dashboards return to dbt Charts; decision 4
+  amended by [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed)
 - **Date:** 2026-11-12
 - **Decided by:** the operator, in conversation on 2026-11-12, after a spike of
   the same day on serving the boards with `dct serve`.

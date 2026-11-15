@@ -62,7 +62,7 @@ through it.
 |---|---|
 | Hetzner CAX21 (4 ARM vCPU, 8 GB), `lagom-shared-02` in `fsn1` | control plane and main node; hosts the prod and staging namespaces since 2026-10-28 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)) |
 | Hetzner CAX11 (2 ARM vCPU, 4 GB), `lagom-shared-01` in `nbg1` | the previous node, deleted on 2026-11-07 by the checklist in the runbook (*Disaster recovery*) |
-| Raspberry Pi 3B (1 GB) | edge agent node, streaming collector |
+| Raspberry Pi 3B+ (1 GB), at the operator's home | an external source for the streaming showcase, outside the cluster: it produces events and forwards them over the tailnet ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed) |
 | `ofantini.com` domain, registered and served by Cloudflare | public entry: the site at the apex (M4), the operator's tools at `ops.ofantini.com`. It replaced `getlagom.app` on 2026-11-07 ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)) |
 
 Cost: the CAX11 was EUR 7.37/month, as shown in the Hetzner Console on
@@ -150,13 +150,37 @@ Go binary, roughly 80 MB resident. Declarative YAML: input, pipeline, output.
 Connectors for most transports, including MQTT, which matters for future IoT
 sources.
 
-### NATS JetStream — deferred
+### NATS JetStream — the log of the streaming showcase
 
-CNCF, roughly 40 MB, with persistence, replay, and consumer groups. **Deferred
-with a trigger:** if a source is polled every 20 seconds, Redpanda Connect can
-write straight to the destination and NATS adds nothing functionally. It earns
-its place with multiple consumers or a replay requirement. Building it earlier
-is a deliberate learning exercise, labelled as such — not a technical necessity.
+CNCF, roughly 40 MB (an estimate, not measured), with persistence, replay, and
+consumer groups. It was deferred with a trigger: multiple consumers or a
+replay requirement. If a source is polled every 20 seconds, Redpanda Connect
+can write straight to the destination and NATS adds nothing functionally.
+
+**The streaming showcase meets the trigger** ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md),
+proposed; not built). Its source is a Raspberry Pi outside the cluster:
+
+```
+Pi:    sensors, ping -> Redpanda Connect -> NATS leaf node (stream on disk)
+                                                 |  tailnet, outbound only
+node:  NATS hub (stream sources the Pi's) -> processing -> Grafana (operator)
+                                                 |
+                                         Dagster -> lake (history)
+```
+
+NATS stores; Redpanda Connect reads and writes. The leaf node keeps events
+while the home link is down and the hub copies them when it returns, hours
+late. How those late events are processed is the choice the ADR measures:
+
+- **One path (kappa), the first candidate:** RisingWave, a streaming
+  database, keeps views up to date as each event arrives, late ones included.
+  The views are dbt models, so a metric is defined once.
+- **Two paths (lambda), the fallback:** Redpanda Connect writes events to
+  `serving` and aggregates them live, approximately; dbt on the lake rebuilds
+  the correct aggregates in batch. A metric is defined twice.
+
+The criteria RisingWave must pass, what is collected, the questions it
+answers, the limit on R2 and the privacy rule are in the ADR.
 
 ## 5. Storage — Postgres now, open table format by trigger
 
@@ -344,7 +368,7 @@ is published as files. A server of our own was designed and stopped
 | **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
 | **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check are in `products/dashboards/`; the job `dashboards` renders and publishes them, built but not yet run in the cluster ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md), [ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) | 0 resident (a render is about 0.5 GiB at its peak on the CI fixture, in the built image, 2026-11-14) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
-| **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
+| **Grafana** | time series, pipeline health, alerting — for the operator, behind Cloudflare Access ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)) | 150 MB (an estimate, not measured) | with the streaming showcase, reading its live store ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed), or with infrastructure observability, whichever comes first ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
 
 **How a dashboard reaches a visitor**
 ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
@@ -748,7 +772,10 @@ the node allows, not a budget to fill (§1).
 - **No high availability.** A single node; maintenance takes everything down.
   Acceptable at this stage, but it is a choice, not an oversight.
 - **The Pi's SD card is a worse bottleneck than its RAM.** No USB3, and constant
-  writes kill cards in months. Local disk is never a hot layer.
+  writes kill cards in months. Local disk is never a hot layer. The one
+  exception proposed is the NATS leaf stream of the streaming showcase, small
+  and capped by size, its write volume measured before it is deployed
+  ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md)).
 - **Swap is a trap.** With swap on SD the system does not die, it becomes slow
   enough to look dead — harder to debug. Better to cap pod memory and let the
   OOM killer act quickly and explicitly.

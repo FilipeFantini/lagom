@@ -21,8 +21,8 @@ decision, consequences, and how to reverse it.
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-use-adrs.md) | Record architecture decisions in ADRs | Accepted; the Obsidian vault's role amended by 0034 |
-| [0002](0002-single-node-k3s-hetzner.md) | Single-node k3s on a Hetzner CAX11 | Accepted, partially superseded by 0021 |
-| [0003](0003-ingestion-split-dlt-benthos.md) | Split ingestion: dlt for batch, Redpanda Connect for events | Accepted |
+| [0002](0002-single-node-k3s-hetzner.md) | Single-node k3s on a Hetzner CAX11 | Accepted, partially superseded by 0021; the Pi as an agent node superseded by 0045 (proposed) |
+| [0003](0003-ingestion-split-dlt-benthos.md) | Split ingestion: dlt for batch, Redpanda Connect for events | Accepted; NATS's deferral amended by 0045 (proposed) |
 | [0004](0004-table-format.md) | Open table format: Iceberg preferred, Delta as fallback | Proposed, deferred by 0008 |
 | [0005](0005-duckdb-and-postgres-roles.md) | DuckDB as compute engine, Postgres as operational spine | Accepted, partially superseded by 0008 |
 | [0006](0006-monorepo-layout.md) | Monorepo layout: platform, services, products | Accepted |
@@ -60,7 +60,8 @@ decision, consequences, and how to reverse it.
 | [0038](0038-leaner-agent-gates.md) | Leaner agent gates: the guarded list is the security core, and the reviewer runs less and blocks less | Accepted |
 | [0039](0039-the-site-in-its-own-repository.md) | The site at ofantini.com lives in its own repository | Accepted; decision 2's tool amended by 0040, and where the server of the dashboards lives by 0041 |
 | [0040](0040-dbt-charts-for-the-dashboards.md) | The dashboards are written in dbt Charts, not Evidence | Accepted; decision 3 and the publishing path amended by 0041; the static page is the target again by 0042; the publishing path and decision 5 amended by 0044 |
-| [0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md) | The dashboards read a serving layer in Postgres; their server is built in its own repository | Accepted; decisions 6 and 7 superseded, and 1, 3 and 8 amended, by 0042 |
-| [0042](0042-the-dashboards-return-to-dbt-charts.md) | The dashboards return to dbt Charts; the server of our own is stopped | Accepted |
+| [0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md) | The dashboards read a serving layer in Postgres; their server is built in its own repository | Accepted; decisions 6 and 7 superseded, and 1, 3 and 8 amended, by 0042; decision 4 amended by 0045 (proposed) |
+| [0042](0042-the-dashboards-return-to-dbt-charts.md) | The dashboards return to dbt Charts; the server of our own is stopped | Accepted; decision 6 settled by 0045 (proposed) |
 | [0043](0043-the-dashboards-filter-in-the-browser.md) | The dashboards filter in the visitor's browser: a static page drawn with Vega-Lite | Rejected; its spike's measurements stand |
 | [0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md) | Credentials per job, and the path the dashboards take to be published | Accepted; decisions 1 to 6 built in #80, 7 to 9 in the dashboards' render |
+| [0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) | The streaming showcase: a Raspberry Pi outside the cluster, NATS JetStream as the log, RisingWave measured first | Proposed |
