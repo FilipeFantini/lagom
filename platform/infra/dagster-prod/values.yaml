@@ -109,12 +109,13 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at 06355de (PR #80,
-        # each job's credentials in its own tag, ADR-0044; the code location
-        # needs HEARTBEAT_URL, set below). Staging ran it from 2026-11-14: a
-        # scheduled usgs run and a lake_maintenance run, with its
-        # grant_lake_reader step, succeeded with these values.
-        tag: "06355de0e60ee65c52ce80e5526724673a7e5afc@sha256:9b114c93927e7e8cf30fbe9d6f9df23e4f973369489b7c9e5fad8f43cb7bd422"
+        # Pinned by digest (ADR-0015): built from main at 587c03a (the
+        # `dashboards` job, ADR-0044: PR #83, with PRs #86, #88 and #90; the
+        # code location needs HEARTBEAT_URL, set below). Staging ran it from
+        # 2026-11-15: the usgs runs and the dashboards run after each
+        # succeeded, the page was published with its watermark, and the
+        # render peaked at 804 MiB of its 1 GiB limit.
+        tag: "587c03a76821a41ab944967f2867c4b8c17480f0@sha256:3b1fbe169c04abdafe9f32391797d4648d7052b368167d56e30e8f40eac3ebe2"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
