@@ -11,13 +11,15 @@ keeps a wrong page from passing CI, and the Dagster job `dashboards` that render
 the boards against the real lake after each pipeline run and uploads them to an
 R2 bucket ([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md);
 the job's code is `platform/orchestration/lagom_orchestration/dashboards.py`).
-The job is built and has not yet run in the cluster. It is the path the dashboards take: a server of our own was designed between
+The job runs in staging and prod since 2026-11-15, after each pipeline run. It is the path the dashboards take: a server of our own was designed between
 2026-11-12 and 2026-11-14 and then stopped
 ([ADR-0042](../../docs/adr/0042-the-dashboards-return-to-dbt-charts.md)).
 
 | Path | What it is |
 |---|---|
-| `charts/earthquakes.yml` | The first board: the earthquakes of the last 30 UTC days |
+| `partials/earthquakes.yml` | What the earthquakes boards share: the look, the queries and the charts. Not a board: it is outside `charts/`, so nothing renders it on its own |
+| `charts/earthquakes.yml` | The first board: the earthquakes of the last 30 UTC days, the partial plus the table of the largest and the notes on the numbers |
+| `charts/earthquakes_short.yml` | The same board without the table and the notes, for an article on ofantini.com to frame; its own layout over the same partial, checked like the full one |
 | `dbt_charts.yml` | The project: the source the boards read, `lake`, through the dbt `lake` target |
 | `profiles.yml` | The connection `dct` uses: the warehouse's `lake` target plus the secret's `scope` ([why](#known-limits)), attached read-only |
 | `check_boards.py` | The gate: compares a render with gold, and fails where `dct render` does not |
@@ -65,7 +67,7 @@ gold in the lake → dbt parse → dct validate → dct render → check_boards.
 
 ## In the cluster
 
-The image `lagom-orchestration` carries `charts/`, `dbt_charts.yml`, `profiles.yml`
+The image `lagom-orchestration` carries `charts/`, `partials/`, `dbt_charts.yml`, `profiles.yml`
 and `check_boards.py`, and `dct`. The job `dashboards` runs the same commands as
 CI, against the cluster's lake:
 

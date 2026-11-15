@@ -39,6 +39,7 @@ COPY platform/warehouse/tests/ platform/warehouse/tests/
 # The dashboards' boards and the check that proves them (the `dashboards` job).
 COPY products/dashboards/dbt_charts.yml products/dashboards/profiles.yml products/dashboards/check_boards.py products/dashboards/
 COPY products/dashboards/charts/ products/dashboards/charts/
+COPY products/dashboards/partials/ products/dashboards/partials/
 # The root filesystem is read-only at run time; every writer goes to /tmp
 # (an emptyDir): dlt's working files, dbt's logs and target, DuckDB's
 # extensions (installed per run, under HOME).

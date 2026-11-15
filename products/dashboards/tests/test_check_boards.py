@@ -460,3 +460,29 @@ def test_a_column_the_board_lacks_fails_even_when_gold_holds_null() -> None:
 
     failures = _differs_rows("map", [{"a": 1}], [{"a": 1, "place": None}])
     assert failures == ["map: row 1: the board has no column place"]
+
+
+def test_the_short_board_passes_without_the_table(gold: Gold) -> None:
+    queries = good_queries()
+    del queries["largest"]
+    assert compare_earthquakes(queries, gold, with_table=False) == []
+
+
+def test_the_short_board_is_checked_like_the_full_one(gold: Gold) -> None:
+    queries = good_queries()
+    del queries["largest"]
+    queries["on_map"][1]["latitude"] = 62.0
+    assert any(
+        f.startswith("map: row") for f in compare_earthquakes(queries, gold, with_table=False)
+    )
+
+
+def test_the_short_board_must_not_draw_the_table(gold: Gold) -> None:
+    failures = compare_earthquakes(good_queries(), gold, with_table=False)
+    assert "the short board draws the table of the largest earthquakes" in failures
+
+
+def test_the_full_board_still_needs_the_table(gold: Gold) -> None:
+    queries = good_queries()
+    del queries["largest"]
+    assert failures_of(queries, gold) == ["queries missing from the render: largest"]
