@@ -22,15 +22,18 @@ dependencies = [
     # The alarm sensors' HTTP client (alarm.py): already in the image through
     # dagster and dlt, declared because the code imports it.
     "requests>=2.32",
+    # The dashboards' upload to R2 (dashboards.py). Already in the image through
+    # dlt's s3 extra (aiobotocore pins it); declared because the code imports it.
+    "botocore>=1.43",
 ]
 
 [dependency-groups]
 dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.6", "types-pyyaml>=6", "requests-mock>=1.12"]
-# The dashboards' renderer (ADR-0040). A group of its own, not a dependency:
-# the image installs with `uv sync --locked --no-dev`, which leaves out every
-# group that is not a default one, so the image does not grow until the
-# Dagster step that renders the boards exists. CI and a local render ask for it
-# with `--group dashboards`. Exact pin: the syntax is pre-1.0 (`dct migrate`
+# The dashboards' renderer (ADR-0040). A group of its own, not a dependency, so
+# a test run does not install it; the image asks for it
+# (`uv sync --locked --no-dev --group dashboards`, Dockerfile) because the
+# `dashboards` job renders in it, and so do CI and a local render
+# (`--group dashboards`). Exact pin: the syntax is pre-1.0 (`dct migrate`
 # rewrites older boards). It leaves duckdb unpinned; the bound above holds.
 dashboards = ["dbt-charts==0.11.1"]
 

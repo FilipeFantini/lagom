@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.13.*"
 
 [[package]]
@@ -1186,6 +1186,7 @@ name = "lagom-orchestration"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "botocore" },
     { name = "dagster" },
     { name = "dagster-dbt" },
     { name = "dagster-k8s" },
@@ -1213,6 +1214,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "botocore", specifier = ">=1.43" },
     { name = "dagster", specifier = "==1.13.27" },
     { name = "dagster-dbt", specifier = "==0.29.27" },
     { name = "dagster-k8s", specifier = "==0.29.27" },

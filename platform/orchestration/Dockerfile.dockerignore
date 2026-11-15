@@ -10,4 +10,8 @@
 !platform/warehouse/macros/
 !platform/warehouse/models/
 !platform/warehouse/tests/
+!products/dashboards/dbt_charts.yml
+!products/dashboards/profiles.yml
+!products/dashboards/check_boards.py
+!products/dashboards/charts/
 **/__pycache__

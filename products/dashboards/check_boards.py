@@ -292,7 +292,7 @@ def run(paths: Sequence[Path], connection: duckdb.DuckDBPyConnection) -> int:
 
 def main(argv: Sequence[str]) -> int:
     try:
-        return run([Path(arg) for arg in argv], attach_lake())
+        return run([Path(arg) for arg in argv], attach_lake(read_only=True))
     except CheckError as error:
         print(f"check_boards: {error}", file=sys.stderr)
         return 1

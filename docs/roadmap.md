@@ -35,7 +35,7 @@ dbt, Postgres, Dagster.
 | Streamlit | an interactive app a static page cannot serve |
 | Infrastructure observability (metrics and logs), shown on ofantini.com | the USGS showcase is live on ofantini.com (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
 | PgBouncer (CloudNativePG `Pooler`) | first external BI consumer |
-| Credentials per job, and short-lived ones (ingestion writes only bronze, dbt only the layers it builds; a secret store or workload identity in place of static secrets) | a real client, or a second team on the cluster. **Entered early and in part, on 2026-11-14,** by the operator's decision, for the dashboards' render ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)): each job declares the Secrets its Pod gets, and a read-only catalog role exists. Still open: `usgs` and `lake_maintenance` hold the catalog owner's password and the R2 write token (not split into bronze-only and dbt-only), every run Pod still holds the alarm's ping URL, and the credentials are static |
+| Credentials per job, and short-lived ones (ingestion writes only bronze, dbt only the layers it builds; a secret store or workload identity in place of static secrets) | a real client, or a second team on the cluster. **Entered early and in part, on 2026-11-14,** by the operator's decision, for the dashboards' render ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)): each job declares the Secrets its Pod gets, a read-only catalog role exists, and the dashboards' render holds only read-only credentials and its bucket's token. Still open: `usgs` and `lake_maintenance` hold the catalog owner's password and the R2 write token (not split into bronze-only and dbt-only), every run Pod still holds the alarm's ping URL and Dagster's own database password, and the credentials are static |
 | Row Level Security | second consumer with segregated data |
 | PostgREST | first API requirement |
 | Metabase, Superset or Lightdash | a client needs ad-hoc, self-service exploration — behind login. Lightdash 3.116.0 measured locally on 2026-11-14: about 1.1 GiB at rest, an amd64-only image, embedding under a commercial licence ([ADR-0043](adr/0043-the-dashboards-filter-in-the-browser.md)) |
@@ -247,9 +247,11 @@ The node that M3 needs, and the orchestration every showcase uses.
       same embedding. Open: apply the first defence listed in
       [ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md) to lake
       maintenance, dbt, dlt and the dashboards' render step, verified in
-      staging first. Started 2026-11-14 ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
-      proposed): `attach_lake(read_only=True)` and a catalog string without a
-      password exist for the readers; the writers still embed it
+      staging first. Started 2026-11-14 ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)):
+      the dashboards' render attaches read-only with a catalog string without a
+      password (`PGPASSWORD`, seen to work against a throwaway Postgres with the
+      role's real grants; staging is still to verify it on the cluster); the
+      writers still embed it
 - [x] Measure the new node's overhead and set its CI ceiling, as ADR-0016 did —
       1,687 MiB outside Kubernetes, ceiling 5.5 GB
       ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)); re-measured after
@@ -341,21 +343,25 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
         Secrets and the rollout has run in staging, then prod (runbook: *The
         catalog's read-only role*)
   - [ ] The publishing pull request: the Dagster asset that renders the boards
-        after each run, in a job of its own with read-only credentials, its
-        memory measured and budgeted, published to an R2 public bucket per
-        environment on a custom domain with a bucket-scoped token, not to
-        Cloudflare Pages (ADR-0044, decisions 7 and 8; the Cloudflare token's
-        scope is to be confirmed first), with dbt Charts telemetry left on
-        (decision 9, to verify in staging). Two requirements the operator added
-        on 2026-11-14:
+        after each `usgs` run, in a job of its own with read-only credentials,
+        published to an R2 public bucket per environment on a custom domain
+        (`lagom-staging.ofantini.com`, `lagom.ofantini.com`) with a
+        bucket-scoped token, not to Cloudflare Pages, with dbt Charts telemetry
+        left on (ADR-0044, decisions 7 to 9). **Built,** and `r2-lake-reader` and
+        `r2-dashboards` sealed for both namespaces (2026-11-14); open until the
+        digest is pinned in staging and its checks pass: the run, the page at its hostname with its
+        watermark, a failed attach that leaks nothing, telemetry that never
+        stalls a render, and the render's memory measured and budgeted from a
+        run on real data (runbook: *The dashboards' publishing path*). Two
+        requirements the operator added on 2026-11-14, both met in the code:
     - **The catalog password is not exposed,** rated high risk: none of the
-      render step's output can carry it. ADR-0040's defences come first,
-      before any render runs in the cluster: the password out of the
-      connection string (`PGPASSWORD`, seen to work locally in ADR-0041's
-      spike), a read-only catalog role and a read-only R2 token, and
-      redaction as the safety net
-    - **The page says when it was built,** beside the data's own times, so a
-      page left in place by a failed run shows its age
+      render step's output can carry it. ADR-0040's defences are in the step:
+      the password out of the connection string (`PGPASSWORD`), a read-only
+      catalog role and a read-only R2 token, and redaction as the safety net;
+      verified on the cluster in staging before prod
+    - **The page says when it was built,** above the data's own times
+      (`Page built at <UTC time>`, a dbt Charts setting the step checks on every
+      page), so a page left in place by a failed run shows its age
 - [ ] **Showcase: the SME stack on USGS** — the pipeline, with its real numbers
       (rows, run time, memory)
 - [ ] **Showcase: the platform itself**, after the USGS showcase is live —

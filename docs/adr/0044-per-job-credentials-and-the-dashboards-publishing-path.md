@@ -1,8 +1,9 @@
 # ADR-0044 — Credentials per job, and the path the dashboards take to be published
 
 - **Status:** Accepted, by the operator approving its pull request (#80) on
-  2026-11-14. Decisions 1 to 6 are built in that pull request; decisions 7 to
-  9 are the operator's, taken on 2026-11-14, and are built in the next one.
+  2026-11-14. Decisions 1 to 6 were built in that pull request; decisions 7 to
+  9 are the operator's, taken on 2026-11-14, and are built in the second one,
+  the dashboards' render (*What decisions 7 to 9 became*, below).
 - **Date:** 2026-11-14
 - **Decided by:** the operator, in conversation on 2026-11-14: the dashboards'
   render runs as a Dagster step in a job of its own, with credentials of its
@@ -145,12 +146,13 @@ not a control, and the password is rated high risk.
      asset graph for a grant would be structure for no gain.
 
 7. **The render is a Dagster asset in a job of its own,** with read-only
-   credentials: `lake_reader`'s password, and a read-only R2 token. Built in the
-   next pull request. This one adds the two parts it needs:
+   credentials: `lake_reader`'s password, and a read-only R2 token. The first
+   pull request added the two parts it needs:
    `attach_lake(read_only=True)` adds DuckLake's `READ_ONLY` attach option, and
    the catalog string may carry no password, which libpq then reads from
-   `PGPASSWORD` (seen locally in ADR-0041's spike; *to be verified in staging*
-   with the real role). No dashboards job exists yet.
+   `PGPASSWORD`. The second pull request adds the job (below). `PGPASSWORD`
+   with the role's grants was run against a real Postgres on 2026-11-14 (below);
+   *the real cluster's role and R2 are verified in staging*.
 
 8. **The pages are published to an R2 public bucket per environment, on a
    custom domain, with a token scoped to that bucket,** instead of Cloudflare
@@ -160,8 +162,8 @@ not a control, and the password is rated high risk.
    to one bucket. **To be confirmed in the Cloudflare dashboard** before the
    publishing pull request is written; if a Pages token can be scoped to one
    project, this decision is reconsidered. The hostnames and the bucket names
-   are chosen in that pull request. This amends ADR-0040's Pages project and the
-   token it lists as open.
+   are chosen in that pull request (below). This amends ADR-0040's Pages project
+   and the token it lists as open.
 
 9. **dbt Charts telemetry stays on** in the cluster step: the operator's choice
    of 2026-11-14, to help the dbt team, provided it costs nothing here. This
@@ -170,6 +172,97 @@ not a control, and the password is rated high risk.
    a blocked or a slow telemetry endpoint must never fail or stall a render. If
    it does, `DO_NOT_TRACK=1` goes back into the step. CI keeps it off: it runs
    on a fixture, and a gate that waits for a third party is not a gate.
+
+## What decisions 7 to 9 became
+
+Built in the second pull request. The names, so that the code, the Secrets and
+the Cloudflare setup can be checked against each other:
+
+| What | Staging | Prod |
+|---|---|---|
+| Bucket (public, in `LAGOM_DASHBOARDS_BUCKET` of the Dagster values) | `lagom-staging-dashboards` | `lagom-prod-dashboards` |
+| Hostname (a custom domain on the bucket) | `lagom-staging.ofantini.com` | `lagom.ofantini.com` |
+| Read-only token on the lake bucket: Secret `r2-lake-reader` | keys `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`, `ENDPOINT` | the same, in `prod` |
+| Token scoped to the dashboards bucket: Secret `r2-dashboards` | the same three keys | the same, in `prod` |
+| The role's password: Secret `lake-reader-credentials` (decision 6) | key `password` | the same, in `prod` |
+
+The Secrets are sealed by the operator in `platform/infra/postgres-<env>/`
+(runbook: *The dashboards' publishing path*); no placeholder is in the
+repository. The Cloudflare side, as the operator set it up: a public bucket per
+environment with a custom domain, minimum TLS 1.2, the `r2.dev` address off,
+and tokens limited to one bucket. Decision 8's check of the Pages token was not
+needed for the build: the bucket-scoped token is what is built.
+
+- **The job.** `dashboards`, with the one asset `dashboards/pages` in the group
+  `dashboards` (an asset and a job cannot share the name `dashboards`), defined
+  in `definitions.py` beside the writers' jobs. Its tag is the pipeline's
+  (`lagom/pipeline: usgs`), so the run queue never runs it beside `usgs` and the
+  memory budget does not change, and its `dagster-k8s/config` carries `READER_ENV`:
+  `PGPASSWORD`; the catalog string `ducklake:postgres:host=postgres-rw port=5432
+  dbname=lagom user=lake_reader sslmode=require`, with no password;
+  `LAGOM_R2_*` from `r2-lake-reader` (the writers' variable names, so
+  `attach_lake` and the dbt `lake` target read them unchanged); and
+  `LAGOM_DASHBOARDS_*` from `r2-dashboards`. `postgres-rw` is the Service
+  CloudNativePG makes for the cluster `postgres` in the Pod's own namespace.
+  Nothing from `postgres-app` or `r2-lake`: a test builds the Pod from each
+  environment's real values and fails if one appears. The asset has no
+  dependency on gold: an asset downstream of `usgs/events` would be selected by
+  the `usgs` job, which selects `.downstream()`, and would run with the writers'
+  credentials.
+- **The trigger.** A run-status sensor, `render_dashboards_after_usgs`, requests
+  one `dashboards` run after each successful `usgs` run, with the `usgs` run's
+  ID as the run key. The alarm needed no change: `run_failure_alarm` has no job
+  filter and already e-mails a failed run of any job in the location (a test
+  fails a job named `dashboards` and reads the call), and the heartbeat is
+  declared for `usgs` alone.
+- **The step**, in `lagom_orchestration/dashboards.py`, in this order and
+  failing at the first thing wrong: `dct validate --strict --warehouse`;
+  `dct render` to HTML and to the rows; `check_boards.py`; the watermark; the
+  upload. The attach is read-only twice over: the dct profile
+  (`products/dashboards/profiles.yml`, `read_only: true`) and `check_boards.py`
+  use DuckLake's `READ_ONLY` option, and the role could not write anyway. The
+  dbt manifest `dct` resolves `ref()` against is the one the image's build wrote
+  with `dbt parse`: the project is read-only at run time and the manifest is of
+  the same code, so the step does not parse again.
+- **The tool does not see what it does not need.** `dct` and the check run with
+  the lake's variables, `PGPASSWORD` and what a process needs, taken from a
+  list; the dashboards bucket's token, the ping URL and everything else of the
+  Pod's environment are left out. `DO_NOT_TRACK` is left out too, which is
+  decision 9: the image sets it for dlt and dbt, and the step's tool does not
+  inherit it. Every command has a timeout (180 s to validate, 360 s per render,
+  120 s to check; the Pod's deadline is 1,500 s), so a telemetry request that
+  never answers is a killed command with its name in the error and not a run
+  that hangs. Errors go through `redact_secrets`, are not chained to the
+  original exception, and never carry the environment.
+- **The watermark is a dbt Charts feature,** not post-processing:
+  `style.timestamp` with `position: top` and the format
+  `Page built at %Y-%m-%d %H:%M %Z`, in the board. It is the render's clock in the
+  board's zone, UTC, and sits above the title, over the line that gives the
+  data's own times. The step does not trust it: each page must contain the
+  marker text exactly once, and the whole line exactly once, and the time must be
+  within 15 minutes of now (2 minutes ahead), or the page is not uploaded. A test
+  keeps the board's format and the step's marker together.
+- **The upload** uses botocore (already in the image through dlt's s3 extra; now
+  declared) against R2's S3 endpoint, path style, with
+  `request_checksum_calculation: when_required` (newer botocore adds a checksum
+  header R2 does not accept on uploads), timeouts and three retries. Each page is
+  one file that loads nothing from outside (CI checks it), so there are no
+  assets to hash, cache for longer, or upload before the HTML; the pages get
+  `Content-Type: text/html; charset=utf-8` and `Cache-Control: public,
+  max-age=300`. Stale pages are deleted only after the last upload, and only
+  `.html` keys, so a failure part-way leaves the old set and never fewer pages
+  than before, and anything else in the bucket is left alone.
+- **Verified here,** against a real Postgres 17 in a container with the
+  role's real grants (`grant_reader_access`): the catalog string with no
+  password and `PGPASSWORD` attaches; the read-only session reads and refuses an
+  `INSERT` and a `CREATE`; a failed attach (wrong password) prints neither
+  password. Against the fixture lake in the built image, as the Pod runs
+  (user 10001, read-only root, 1 GiB limit): `dct validate`, both renders and
+  the check pass and the page carries its watermark. **Not verified:** real R2
+  (the upload, the checksum setting, the bucket-scoped token, the public
+  domain), `lake_reader` against the cluster's catalog, telemetry behaviour on
+  the node's network, and memory and time on real data. Staging's checks are in
+  the runbook.
 
 ## Consequences
 
@@ -201,6 +294,15 @@ not a control, and the password is rated high risk.
   environment with a new image, pinned by digest, staging first. The order of
   the rollout matters and is in the runbook: the new image first, and only then
   the removal of the credentials from the values.
+- **The render's Pod still holds two credentials it does not use.** The ping
+  URL (above), and `DAGSTER_PG_PASSWORD`: the run launcher puts the password of
+  Dagster's own metadata database in every run Pod, because the run's process
+  writes its events there. A leak from the render could therefore write Dagster's
+  history. It does not reach the lake, the catalog or the buckets. Not changed
+  here; the run's process needs it.
+- **The pages are public and the step publishes whatever gold holds.** The
+  check proves the page equals gold, not that gold is fit to publish; the
+  boards read public data only, as `architecture.md` §9 says.
 - **A run started from the asset catalog now fails** instead of taking the code
   server's memory (decision 5).
 - **`lake_reader` can reach other databases of the cluster.** Postgres grants
@@ -210,11 +312,11 @@ not a control, and the password is rated high risk.
 - **The default privileges cover tables the owner creates.** Another role
   creating a table in the schema would not be covered. DuckLake creates its
   tables as the user that attaches, which is the owner.
-- **Not proven offline:** the grants against a real Postgres, and a read-only
-  attach by the restricted role against a real DuckLake catalog. The unit
-  tests check the statements, the failure modes, the option, and a read-only
-  attach on a local DuckLake that cannot write. Verification in staging is in
-  the runbook.
+- **Not proven offline:** the grants and the role's read-only attach against
+  the cluster's Postgres and R2. The unit tests check the statements, the
+  failure modes, the option, and a read-only attach on a local DuckLake that
+  cannot write; the second pull request ran the grants and the attach once against
+  a throwaway Postgres (above). Verification in staging is in the runbook.
 
 ## Risks, cost, and reversal
 

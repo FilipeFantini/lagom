@@ -57,13 +57,21 @@ def test_silver_reads_the_dlt_asset(defs) -> None:  # type: ignore[no-untyped-de
 
 
 def test_jobs_and_schedules(defs) -> None:  # type: ignore[no-untyped-def]
-    assert {j.name for j in defs.resolve_all_job_defs()} >= {"usgs", "lake_maintenance"}
+    assert {j.name for j in defs.resolve_all_job_defs()} >= {
+        "usgs",
+        "lake_maintenance",
+        "dashboards",
+    }
     crons = {s.job_name: s.cron_schedule for s in defs.schedules}  # type: ignore[union-attr]
     assert crons == {"usgs": "*/30 * * * *", "lake_maintenance": "15 4 * * *"}
 
 
 def test_the_alarm_sensors_are_registered_and_running(defs) -> None:  # type: ignore[no-untyped-def]
-    assert {s.name for s in defs.sensors} == {"usgs_success_heartbeat", "run_failure_alarm"}
+    assert {s.name for s in defs.sensors} == {
+        "usgs_success_heartbeat",
+        "run_failure_alarm",
+        "render_dashboards_after_usgs",
+    }
     assert all(s.default_status == DefaultSensorStatus.RUNNING for s in defs.sensors)
 
 
@@ -108,7 +116,7 @@ def test_the_code_location_loads_with_only_the_ping_url(defs, tmp_path) -> None:
 
 def test_steps_run_in_the_runs_process(defs) -> None:  # type: ignore[no-untyped-def]
     for job in defs.resolve_all_job_defs():
-        if job.name in {"usgs", "lake_maintenance"}:
+        if job.name in {"usgs", "lake_maintenance", "dashboards"}:
             assert job.executor_def.name == "in_process", job.name
 
 
@@ -127,7 +135,7 @@ def test_run_resources_override_the_code_servers(defs) -> None:  # type: ignore[
         resources={"requests": {"cpu": "50m", "memory": "320Mi"}, "limits": {"memory": "512Mi"}}
     )
     for job in defs.resolve_all_job_defs():
-        if job.name not in {"usgs", "lake_maintenance"}:
+        if job.name not in {"usgs", "lake_maintenance", "dashboards"}:
             continue
         assert job.tags["lagom/pipeline"] == "usgs"
         run = code_location.merge(
@@ -336,3 +344,82 @@ def test_budget_declares_the_runs_request(defs) -> None:  # type: ignore[no-unty
         annotations = yaml.safe_load(app.read_text())["metadata"]["annotations"]
         declared = annotations["lagom.dev/ephemeral-memory-request"]
         assert declared == RUN_RESOURCES["requests"]["memory"], app.name
+
+
+# What the dashboards job's Pod may hold (ADR-0044, decisions 7 to 9), beyond
+# what every run Pod has (the ping URL, Dagster's own database password): the
+# read-only role's password, a read-only R2 token on the lake, and a token
+# scoped to the dashboards bucket.
+READER_SECRETS = {
+    "PGPASSWORD": ("lake-reader-credentials", "password"),
+    "LAGOM_R2_ACCESS_KEY_ID": ("r2-lake-reader", "ACCESS_KEY_ID"),
+    "LAGOM_R2_SECRET_ACCESS_KEY": ("r2-lake-reader", "ACCESS_SECRET_KEY"),
+    "LAGOM_R2_ENDPOINT": ("r2-lake-reader", "ENDPOINT"),
+    "LAGOM_DASHBOARDS_ACCESS_KEY_ID": ("r2-dashboards", "ACCESS_KEY_ID"),
+    "LAGOM_DASHBOARDS_SECRET_ACCESS_KEY": ("r2-dashboards", "ACCESS_SECRET_KEY"),
+    "LAGOM_DASHBOARDS_ENDPOINT": ("r2-dashboards", "ENDPOINT"),
+}
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_the_dashboards_pod_holds_the_readers_credentials_and_no_writers(  # type: ignore[no-untyped-def]
+    defs, environment
+) -> None:
+    """The real values of each environment, merged with the dashboards job's real tag."""
+    job = next(j for j in defs.resolve_all_job_defs() if j.name == "dashboards")
+    pod = _run_pod_env(job, _code_server_env(environment))
+    names = [e.name for e in pod]
+    assert len(names) == len(set(names))
+    env = {e.name: e for e in pod}
+
+    # Every Secret the Pod reads is one of these four: nothing from the
+    # catalog owner (postgres-app) or the lake's write token (r2-lake).
+    secrets = {
+        e.name: (e.value_from.secret_key_ref.name, e.value_from.secret_key_ref.key)
+        for e in pod
+        if e.value_from
+    }
+    # DAGSTER_PG_PASSWORD is the run launcher's own, in every run Pod: the
+    # run's process writes its events to Dagster's metadata database.
+    assert secrets == {
+        **READER_SECRETS,
+        "HEARTBEAT_URL": ("pipeline-heartbeat", "url"),
+        "DAGSTER_PG_PASSWORD": ("dagster-db", "postgresql-password"),
+    }
+    assert {name for name, _ in secrets.values()}.isdisjoint({"postgres-app", "r2-lake"})
+    # No variable of the writers' set: not the owner's string, not dlt's
+    # catalog or its storage keys.
+    assert "PG_URI" not in env
+    assert not [
+        n
+        for n in names
+        if n.startswith("DESTINATION__")
+        and n.endswith(("CATALOG", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "ENDPOINT_URL"))
+    ]
+
+    # The catalog string names the read-only role, the read-write Service of
+    # the cluster, and carries no password: libpq reads PGPASSWORD.
+    catalog = env["LAGOM_LAKE_CATALOG"].value
+    assert "user=lake_reader" in catalog and "host=postgres-rw" in catalog
+    assert "dbname=lagom" in catalog and "sslmode=require" in catalog
+    assert "password" not in catalog.lower() and "$(" not in catalog
+    assert not [e for e in pod if "$(" in (e.value or "")]
+
+    # The bucket is the environment's own, and not the lake's.
+    assert env["LAGOM_DASHBOARDS_BUCKET"].value == f"lagom-{environment}-dashboards"
+    assert env["LAGOM_LAKE_DATA_PATH"].value == f"s3://lagom-{environment}-lake/"
+
+
+def test_the_dashboards_job_is_queued_with_the_pipeline_and_in_its_own_group(defs) -> None:  # type: ignore[no-untyped-def]
+    """Same tag as `usgs`: the run queue never runs the render beside it."""
+    graph = defs.resolve_asset_graph()
+    key = AssetKey(["dashboards", "pages"])
+    assert graph.get(key).group_name == "dashboards"
+    # Not downstream of the pipeline: `usgs` selects `.downstream()` and would
+    # run the render with the writers' credentials.
+    assert not graph.get(key).parent_keys
+    usgs = next(j for j in defs.resolve_all_job_defs() if j.name == "usgs")
+    assert key not in usgs.asset_layer.executable_asset_keys
+    job = next(j for j in defs.resolve_all_job_defs() if j.name == "dashboards")
+    assert job.tags["lagom/pipeline"] == "usgs"
+    assert job.asset_layer.executable_asset_keys == {key}

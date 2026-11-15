@@ -232,7 +232,10 @@ read. Its first content is USGS on DuckLake:
 - the job `usgs` every 30 minutes: dlt loads into DuckLake, then `dbt build`
   runs on the `lake` target;
 - the job `lake_maintenance` once a day: it merges small files, expires
-  snapshots older than 7 days, and deletes the files nothing references.
+  snapshots older than 7 days, and deletes the files nothing references, then
+  gives the read-only catalog role its `SELECT` grants;
+- the job `dashboards` after each successful `usgs` run: it renders the boards
+  against the lake with read-only credentials and publishes them (§9).
 
 Dagster raises its own alarm through the same Healthchecks.io check
 ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)): a
@@ -249,7 +252,7 @@ retired** (2026-11-07: removed from Git, then deleted by hand, since the
 
 **Each job declares the Secrets its run Pod gets**
 ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
-proposed; amends ADR-0033 decision 5). The chart copies the code server's whole
+amends ADR-0033 decision 5). The chart copies the code server's whole
 environment into every run Pod, so that environment holds only what loading
 the definitions needs (`HEARTBEAT_URL`) and the settings that are not secret
 (the bucket, the schema). The catalog owner's connection string and the R2
@@ -258,9 +261,11 @@ write token are named in each job's `dagster-k8s/config` tag
 which dagster-k8s adds to the code server's variables when it builds the Pod.
 A Secret is per namespace, so the same name gives staging's value in staging and
 prod's in prod. `usgs` and `lake_maintenance` hold the same credentials as before; a
-job that needs fewer (the dashboards' render, next) names fewer. A read-only
-catalog login, `lake_reader`, exists for it (runbook: *The catalog's read-only
-role*).
+job that needs fewer names fewer: the dashboards' render holds `lake_reader`'s
+password, a read-only R2 token on the lake and a token for the dashboards
+bucket, and nothing of the owner's or the write token
+(`READER_ENV`; runbook: *The catalog's read-only role* and *The dashboards'
+publishing path*).
 
 **The UI has no login**, so reaching it is the access control. Each
 environment's UI is at a path of `ops.ofantini.com` behind a Cloudflare Access
@@ -337,21 +342,38 @@ is published as files. A server of our own was designed and stopped
 | Tool | Role | RAM on the node | Enters when |
 |---|---|---|---|
 | **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
-| **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check exist in `products/dashboards/`. **Nothing publishes them yet** ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)) | 0 resident (a render is about 0.7 GB at its peak on the CI fixture) | M4 |
+| **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check are in `products/dashboards/`; the job `dashboards` renders and publishes them, built but not yet run in the cluster ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md), [ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) | 0 resident (a render is about 0.5 GiB at its peak on the CI fixture, in the built image, 2026-11-14) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 | **Grafana** | time series, pipeline health, alerting — for the operator, over the tailnet | 150 MB | with infrastructure observability, after the USGS showcase is live ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
 
-How a dashboard will reach a visitor (the operator's decisions of 2026-11-14,
-[ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
-proposed; not built): a Dagster asset in a job of its own reads gold through
-`dct` with read-only credentials (the catalog role `lake_reader`, a read-only R2
-token), renders each board to one HTML file and uploads the files to an R2
-public bucket per environment, served on a custom domain. The upload token is
-scoped to that bucket; Cloudflare Pages is not used because, as far as is known,
-its API token is account-wide (to be confirmed in the Cloudflare dashboard).
-The step leaves dbt Charts telemetry on, a choice to verify in staging. The
-parts that exist: per-job credentials, the role, and a read-only attach
-without a password in the connection string.
+**How a dashboard reaches a visitor**
+([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
+the operator's decisions of 2026-11-14; built, not yet run in staging). After
+each successful `usgs` run a sensor requests the job `dashboards`, whose one
+asset runs, in order and stopping at the first thing wrong:
+
+1. `dct validate --strict --warehouse` against the real lake, attached
+   **read-only** with the role `lake_reader` (its password is `PGPASSWORD`, not
+   part of the connection string) and a read-only R2 token;
+2. `dct render` of every board to one HTML file, and to the rows it was drawn from;
+3. `check_boards.py`, which compares the rows with gold;
+4. the **watermark**: each page says `Page built at <UTC time>` once, above the
+   title (a dbt Charts setting, `style.timestamp`), and the step refuses a page
+   whose stamp is missing, repeated or more than 15 minutes old, so a page
+   left in place by a failed run shows its age;
+5. the **upload** of the pages to the environment's R2 public bucket
+   (`lagom-staging-dashboards`, `lagom-prod-dashboards`), served on a custom
+   domain (`lagom-staging.ofantini.com`, `lagom.ofantini.com`), with a token
+   scoped to that bucket; stale pages are deleted only after the last upload.
+
+The render's Pod never holds the owner's password or the lake's write token,
+and `dct`, a tool we do not control, never sees the bucket's token or the ping
+URL. The job carries the pipeline's tag, so it queues behind a `usgs` run and
+the budget in §11 does not change. dbt Charts telemetry stays on in the step
+(every command has a timeout, so a stalled request cannot hang a run); Cloudflare
+Pages is not used because, as far as is known, its API token is account-wide.
+What is not verified yet (R2, the cluster's catalog, telemetry on the node's
+network, memory on real data) is the staging checklist in the runbook.
 
 `dct serve`, the server inside dbt Charts, was tried on 2026-11-12 against the
 lake (ADR-0041) and on 2026-11-14 against Postgres, and is not deployed: about
@@ -426,7 +448,11 @@ run summary. The image:
 Sizes, measured on the first builds: `lagom-usgs` 206 MiB and
 `lagom-warehouse` 397 MiB (archive PR #27, 2026-10-17, built in 40 and 52 s),
 and `lagom-orchestration` 961 MiB (PR #31, 2026-10-28). The orchestration image
-bundles Dagster, dbt, dlt, DuckDB and pyarrow.
+bundles Dagster, dbt, dlt, DuckDB and pyarrow, and since the dashboards' render
+dbt Charts and the boards: locally, unpacked, it grew from 1,376 MiB to 1,612 MiB
+(+237 MiB; `docker image inspect`, 2026-11-14). The 961 MiB above is the
+registry's figure and the growth in it is read from GHCR after CI builds the
+image.
 
 The first two packages are private: an anonymous manifest request to ghcr.io
 returns HTTP 403 (checked 2026-10-17; the same request against a public image
@@ -693,7 +719,10 @@ longer run is sampled. dbt's SQL runs inside Postgres while every layer
 lives there ([ADR-0008](adr/0008-postgres-for-all-layers.md)). Sealed Secrets
 declares 32 MB and uses 16 MiB measured ([ADR-0010](adr/0010-sealed-secrets.md)), small enough to leave
 the totals above unchanged at this precision. The dashboards' render is an
-ephemeral job, not yet measured on real data ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)).
+ephemeral job too, in the same one-run slot as `usgs` (the job carries its tag,
+so the queue never runs both): the budget does not change. On the CI fixture,
+in the built image under a 1 GiB limit, a render peaked at 540 MiB (2026-11-14);
+real data is not measured yet ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md); runbook: *The dashboards' publishing path*).
 
 **Full design**, adding what enters by trigger:
 
@@ -1512,7 +1541,9 @@ kubectl --context <node-name> -n staging exec postgres-1 -c postgres -- psql -d 
 # expected: t|t|0  (usage, connect, and no table in the schema without SELECT)
 # 3. The role can read and cannot write: an attach with read_only=True and no password in the
 #    string (PGPASSWORD from the Secret) lists the tables and refuses an INSERT. Not scripted here:
-#    the render step's pull request adds the job that does it, and its staging run is this check.
+#    the job `dashboards` does it, and its staging run is this check (*The dashboards' publishing path*).
+#    Done once, on 2026-11-14, against a throwaway Postgres: it reads, refuses INSERT and CREATE,
+#    and a failed attach prints no password.
 ```
 
 If `lake_maintenance` fails with `the role lake_reader does not exist`, the
@@ -1523,6 +1554,126 @@ it: step 1 shows which. The daily job fails and e-mails until then, by design
 **Rotate the password:** seal a new one with the command above for that
 namespace only, commit, and let Argo CD apply it; CloudNativePG changes the
 role's password to match. A reader holding the old one must restart.
+
+#### The dashboards' publishing path
+
+The job `dashboards` renders the boards and uploads them to a public bucket
+([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
+Think of the bucket as a shop window: Cloudflare serves whatever is in it to
+anyone, on the custom domain. The job holds a key that can change the window and
+nothing else, and a second key that can only look at the lake. Four Secrets per
+namespace make this work; the first is *The catalog's read-only role* above:
+
+| Secret | Keys | What it is |
+|---|---|---|
+| `lake-reader-credentials` | `username`, `password` | the catalog role `lake_reader` |
+| `r2-lake-reader` | `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`, `ENDPOINT` | an R2 token that can **read** the lake bucket (`lagom-<env>-lake`) |
+| `r2-dashboards` | the same three keys | an R2 token that can read and write **only** the dashboards bucket (`lagom-<env>-dashboards`) |
+
+**What exists in Cloudflare** (set up by the operator): per environment, a bucket
+`lagom-staging-dashboards` or `lagom-prod-dashboards`, public through a custom
+domain (`lagom-staging.ofantini.com`, `lagom.ofantini.com`), with the minimum TLS
+version 1.2, the `r2.dev` address off, and the tokens above, each limited to one
+bucket. Check these in the dashboard after any change: a token with account-wide
+scope, or `r2.dev` left on, defeats the reason for the design.
+
+**Seal the two R2 tokens, one pair per namespace, before the change is
+rolled out.** Cloudflare shows a token's key and secret once, at creation. The
+command reads them without echoing them (`read -s`), refuses a value of the
+wrong shape before sealing it (an R2 key ID is 32 hex characters, its secret 64,
+the endpoint `https://<account-id>.r2.cloudflarestorage.com`: a value pasted into
+the wrong prompt is caught here, not by a failed run), seals them in one pipe, and
+writes through a temporary file that is renamed only when `kubeseal` succeeds, so
+a failed run leaves no empty file to commit. Run from the repository root (the
+paths are relative to it), with the kubeconfig that reaches the node and
+Tailscale connected:
+
+```bash
+seal_r2() {  # seal_r2 <namespace> <secret name> <file name>
+  local ns="$1" name="$2" f="platform/infra/postgres-$1/$3" key secret endpoint
+  # printf, not `read -p`: in zsh, macOS's shell, -p reads from a coprocess.
+  printf '%s access key ID (%s): ' "$name" "$ns"; read -rs key; echo
+  printf '%s secret access key (%s): ' "$name" "$ns"; read -rs secret; echo
+  printf '%s endpoint (%s): ' "$name" "$ns"; read -rs endpoint; echo
+  if [[ $key =~ ^[0-9a-f]{32}$ && $secret =~ ^[0-9a-f]{64}$ &&
+        $endpoint =~ ^https://[0-9a-f]{32}\.r2\.cloudflarestorage\.com$ ]]; then
+    kubectl create secret generic "$name" -n "$ns" --from-literal=ACCESS_KEY_ID="$key" \
+      --from-literal=ACCESS_SECRET_KEY="$secret" --from-literal=ENDPOINT="$endpoint" \
+      --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" && echo "ok: $f" \
+      || { rm -f "$f.tmp"; echo "FAILED: $f"; }
+  else
+    echo "REJECTED $ns/$name: lengths ${#key} ${#secret} ${#endpoint}, expected 32 64 65"
+  fi
+  unset key secret endpoint
+}
+for ns in staging prod; do
+  seal_r2 "$ns" r2-lake-reader r2-lake-reader-sealed.yaml
+  seal_r2 "$ns" r2-dashboards r2-dashboards-sealed.yaml
+done
+```
+
+Commit the four `-sealed.yaml` files. Each namespace takes its own tokens (the
+read-only lake token and the dashboards token, each limited to that
+environment's bucket). **Do not paste a token into a chat, a file or the shell
+history**; if one was shown anywhere, revoke it in Cloudflare and make another.
+
+**Rollout order.** The job, the sensor and the Secrets' names are in the image;
+the bucket's name is in the values. Seal the Secrets first, then merge. Without
+them a `dashboards` run's Pod stays in `CreateContainerConfigError` and the run
+fails (the alarm e-mails; Dagster's run monitoring marks a run whose Pod never
+starts as failed after its start timeout, the chart's default, to confirm in
+staging). Then pin the new image's digest in staging's values, reload the code
+location (*Deployment → Code locations → lagom → Reload*), and run the checks
+below; prod takes staging's digest after they pass.
+
+**Check it in staging** (replace `staging` with `prod` after):
+
+1. **The Secrets exist** (names only; never read their values):
+   `kubectl --context <node-name> -n staging get secret lake-reader-credentials r2-lake-reader r2-dashboards`.
+2. **The job is there with the right environment.** *Jobs → dashboards → Launchpad*
+   shows a `dagster-k8s/config` tag whose `env` names `PGPASSWORD`,
+   `LAGOM_R2_*` from `r2-lake-reader` and `LAGOM_DASHBOARDS_*` from
+   `r2-dashboards`, and no `PG_URI`.
+3. **The run succeeds.** Launch it from the Launchpad, or wait for the next
+   `usgs` run to end. The log ends with `published 1 page(s): earthquakes.html`.
+   Read `dct validate`, `dct render` and `check_boards` durations in the log: a
+   command near its timeout (180, 360, 120 s) says something is stalling, and
+   telemetry is the first suspect. If a blocked or slow telemetry endpoint makes
+   any command fail or wait, put `DO_NOT_TRACK=1` back in the step (ADR-0044,
+   decision 9). The unit tests prove a stalled command is killed; they do not prove
+   how the node's network behaves, so this run is the evidence.
+4. **The page is live with its watermark.**
+   `curl -sI https://lagom-staging.ofantini.com/earthquakes.html` returns 200,
+   `content-type: text/html; charset=utf-8` and `cache-control: public, max-age=300`;
+   the page, opened in a browser, shows `Page built at <time> UTC` above the
+   title, within minutes of the run. The root of the domain is not a page: R2
+   serves no index document, so the address of a board is the file's name.
+5. **The read-only attach works with the real role.** Step 3 passing is the
+   proof: the catalog string has no password, so a connection means libpq read
+   `PGPASSWORD`. To see that the role cannot write, no job is needed: the profile
+   attaches read-only and a test refuses a write; the catalog role itself was
+   checked in *The catalog's read-only role*.
+6. **A failed attach does not leak the password.** From the Launchpad, launch
+   `dashboards` with the run tag `dagster-k8s/config` set to the job's own tag
+   (copied from step 2) with `PGPASSWORD` given as the plain value
+   `wrong-password-for-test`. The run fails at `dct validate`. Read the run's log
+   and the failure e-mail: neither the test string nor the real password may
+   appear. The test string is not a secret; it is what the check looks for.
+7. **Memory.** While the run is going, `kubectl --context <node-name> -n staging top pod`
+   in a loop (the kubelet refreshes every ~10 s), or the Pod's peak in Grafana
+   when it exists. The request is 768 MiB and the limit 1 GiB; the fixture peaked
+   at 540 MiB. Record the peak here and in §11; if it comes within 100 MiB of the
+   limit, raise the job's own resources, not `usgs`'s.
+8. **The alarm still works for it.** After the above, a failed run in step 6 must
+   have sent one e-mail naming the job `dashboards`.
+
+**If a render fails,** the old pages stay up (nothing is deleted before the new
+ones are uploaded) and show their age in their watermark. The run's log says which
+command failed; its error has the password and keys removed.
+
+**Rotate a token:** make a new one in Cloudflare, seal it with the function above
+for that namespace, commit, let Argo CD apply it, then revoke the old one. The
+next run reads the new value; a running Pod keeps the old until it ends.
 
 ### Operator UIs behind Cloudflare Access (M3)
 
@@ -1880,9 +2031,10 @@ In prod, replace `staging` with `prod`.
 | Job | Schedule (UTC) | What it does |
 |---|---|---|
 | `usgs` | every 30 minutes, at :00 and :30 | dlt loads the events USGS updated since the last cursor into DuckLake (`bronze.usgs_events`), then `dbt build` builds silver and gold on the `lake` target and runs their 33 tests |
-| `lake_maintenance` | daily at 04:15 | merges small Parquet files, expires snapshots older than 7 days, deletes files nothing references |
+| `lake_maintenance` | daily at 04:15 | merges small Parquet files, expires snapshots older than 7 days, deletes files nothing references; its second step, `grant_lake_reader`, gives `lake_reader` its grants |
+| `dashboards` | after each successful `usgs` run (the sensor `render_dashboards_after_usgs`) | renders the boards against the lake, checks them, and publishes them to the environment's dashboards bucket (§9; runbook: *The dashboards' publishing path*) |
 
-Both carry the tag `lagom/pipeline=usgs`, and the daemon's queue starts one
+All three carry the tag `lagom/pipeline=usgs`, and the daemon's queue starts one
 run with that tag at a time. A second run waits as *Queued* until the first
 ends. In staging's first week (2026-10-28 to 11-05), 372 of 373 `usgs` runs
 succeeded, in 43 s at the median and 136 s at most; the one failure was the
@@ -1975,7 +2127,8 @@ took **4 min 25 s**. Until it ends, the Pod is `ContainerCreating` and
 runs start from the node's copy. A new digest is pulled once.
 
 **The alarm sensors** ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)) are two entries under *Automation → Sensors* in the UI, both
-running: `usgs_success_heartbeat` and `run_failure_alarm`. They live in the
+running: `usgs_success_heartbeat` and `run_failure_alarm` (which also covers a
+failed `dashboards` run). A third, `render_dashboards_after_usgs`, is not the alarm: it starts the render. They live in the
 code server, which reads the check's ping URL from `HEARTBEAT_URL` when it
 starts and **does not start without it**. A sensor whose call failed three
 times shows a failed tick in the UI, with the HTTP status or the error class,

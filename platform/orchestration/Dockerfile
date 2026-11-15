@@ -1,6 +1,7 @@
 # The platform's Dagster code location (ADR-0026): Dagster, the services'
-# assets and the dbt project, in one image. Built from the repository root,
-# because it bundles directories from services/ and platform/:
+# assets, the dbt project and the dashboards' boards, in one image. Built from
+# the repository root, because it bundles directories from services/, platform/
+# and products/:
 #   docker build -f platform/orchestration/Dockerfile .
 # The same image runs the code server (`dagster api grpc`, set by the Helm
 # chart) and every run Pod the run launcher starts (`dagster api
@@ -19,7 +20,8 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_LINK_MODE=copy
 WORKDIR /src
 COPY platform/orchestration/pyproject.toml platform/orchestration/uv.lock ./
-RUN uv sync --locked --no-dev
+# The dashboards group is dbt Charts (`dct`), which the `dashboards` job runs.
+RUN uv sync --locked --no-dev --group dashboards
 
 FROM base AS runtime
 RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin lagom
@@ -34,6 +36,9 @@ COPY platform/warehouse/dbt_project.yml platform/warehouse/profiles.yml platform
 COPY platform/warehouse/macros/ platform/warehouse/macros/
 COPY platform/warehouse/models/ platform/warehouse/models/
 COPY platform/warehouse/tests/ platform/warehouse/tests/
+# The dashboards' boards and the check that proves them (the `dashboards` job).
+COPY products/dashboards/dbt_charts.yml products/dashboards/profiles.yml products/dashboards/check_boards.py products/dashboards/
+COPY products/dashboards/charts/ products/dashboards/charts/
 # The root filesystem is read-only at run time; every writer goes to /tmp
 # (an emptyDir): dlt's working files, dbt's logs and target, DuckDB's
 # extensions (installed per run, under HOME).

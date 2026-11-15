@@ -425,16 +425,20 @@ def test_run_fails_when_given_nothing_to_check(connection: duckdb.DuckDBPyConnec
     assert run([], connection) == 1
 
 
-def test_the_dashboards_profile_is_the_warehouses_lake_target_plus_a_scope() -> None:
+def test_the_dashboards_profile_is_the_warehouses_lake_target_plus_a_scope_and_read_only() -> None:
     # profiles.yml here is a copy of the warehouse's `lake` target (dct needs a
-    # scope on the secret, which the warehouse's profile does not have). Nothing
-    # else may differ, or a change to one connection would miss the other.
+    # scope on the secret, which the warehouse's profile does not have, and the
+    # boards attach the lake read-only, ADR-0044). Nothing else may differ, or a
+    # change to one connection would miss the other.
     warehouse = yaml.safe_load((REPOSITORY / "platform/warehouse/profiles.yml").read_text())
     dashboards = yaml.safe_load((HERE.parent / "profiles.yml").read_text())
     lake = warehouse["lagom"]["outputs"]["lake"]
     copy_ = copy.deepcopy(dashboards["lagom_dashboards"]["outputs"]["lake"])
     scopes = [secret.pop("scope") for secret in copy_["secrets"] if "scope" in secret]
     assert scopes == ["{{ env_var('LAGOM_LAKE_DATA_PATH') }}"]
+    # The writer's profile does not attach read-only; this one must.
+    assert [attach.pop("read_only", False) for attach in lake["attach"]] == [False]
+    assert [attach.pop("read_only", False) for attach in copy_["attach"]] == [True]
     assert copy_ == lake
     assert dashboards["lagom_dashboards"]["target"] == "lake"
 
