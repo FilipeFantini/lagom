@@ -105,11 +105,11 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at cb08eb4 (PR #86,
-        # the dashboards' render one query at a time, within lake_reader's
-        # connection limit; the `dashboards` job came in PR #83, ADR-0044).
-        # The code location needs HEARTBEAT_URL, set below.
-        tag: "cb08eb44dff07593c9e79a073a74cb05cb00ec8c@sha256:6fc4097d68e8e608d4ab7431aa066753cf945e5ca07d6c5bce8919af7919252d"
+        # Pinned by digest (ADR-0015): built from main at 587c03a (PR #90, the
+        # dashboards run logs its memory peak; PR #88 before it, the map's
+        # circles grow with magnitude). The `dashboards` job came in PR #83
+        # (ADR-0044). The code location needs HEARTBEAT_URL, set below.
+        tag: "587c03a76821a41ab944967f2867c4b8c17480f0@sha256:3b1fbe169c04abdafe9f32391797d4648d7052b368167d56e30e8f40eac3ebe2"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
