@@ -106,6 +106,26 @@ PAGE_CONTENT_TYPE = "text/html; charset=utf-8"
 PAGE_CACHE_CONTROL = "public, max-age=300"
 
 
+# The container's peak memory, from its cgroup (v2): the run's process and
+# every command it started, as the kernel counted them against the limit. A
+# render's Pod lives less than a minute, which `kubectl top` (a sample a
+# minute) does not see; this is how its memory is measured (architecture.md
+# section 11).
+CGROUP_MEMORY_PEAK = Path("/sys/fs/cgroup/memory.peak")
+
+
+def memory_peak_mib(path: Path = CGROUP_MEMORY_PEAK) -> float | None:
+    """The container's peak memory in MiB, or None where the kernel does not report it.
+
+    A measurement, not data: a kernel without the file (cgroup v1, or older
+    than 5.19) gives None and the log says so; nothing is published from it.
+    """
+    try:
+        return int(path.read_text()) / 2**20
+    except (OSError, ValueError):
+        return None
+
+
 def subprocess_env(environ: Mapping[str, str]) -> dict[str, str]:
     """The variables `dct` and the check run with: those in SUBPROCESS_ENV that are set."""
     return {name: environ[name] for name in SUBPROCESS_ENV if name in environ}

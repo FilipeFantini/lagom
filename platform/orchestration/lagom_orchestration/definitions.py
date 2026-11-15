@@ -31,7 +31,7 @@ from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from services.usgs.assets import usgs_events
 
 from lagom_orchestration.alarm import build_alarm_sensors
-from lagom_orchestration.dashboards import build_render_trigger, run_dashboards
+from lagom_orchestration.dashboards import build_render_trigger, memory_peak_mib, run_dashboards
 from lagom_orchestration.lake import attach_lake, grant_reader_access, run_maintenance
 
 REPO = Path(__file__).resolve().parents[3]
@@ -153,6 +153,11 @@ def pages(context: AssetExecutionContext) -> None:
     """The boards, rendered against the lake, checked, and published to the bucket."""
     published = run_dashboards(REPO)
     context.log.info(f"published {len(published)} page(s): {', '.join(published)}")
+    peak = memory_peak_mib()
+    context.log.info(
+        "memory peak of the run's container: "
+        + (f"{peak:.0f} MiB" if peak is not None else "not reported by the kernel")
+    )
 
 
 dashboards_job = define_asset_job(
