@@ -112,11 +112,13 @@ def good_queries() -> dict[str, list[dict[str, Any]]]:
                 "event_id": "c", "place": "5 km S of Y, Chile", "latitude": -33.0,
                 "longitude": -72.0, "magnitude": 4.0, "magnitude_class": "light",
                 "depth_km": 5.0, "event_utc": "2026-10-12 00:00", "url": url("c"),
+                "circle_size": 1.0,
             },
             {
                 "event_id": "a", "place": "10 km N of X, Alaska", "latitude": 61.0,
                 "longitude": -150.0, "magnitude": 5.0, "magnitude_class": "moderate",
                 "depth_km": 10.0, "event_utc": "2026-11-10 12:00", "url": url("a"),
+                "circle_size": 4.0,
             },
         ],
         "largest": [
@@ -301,6 +303,15 @@ def test_a_circle_in_the_wrong_place_fails(gold: Gold) -> None:
     queries = good_queries()
     queries["on_map"][1]["latitude"] = 62.0
     assert any(f.startswith("map: row 1") for f in failures_of(queries, gold))
+
+
+def test_a_circle_sized_by_the_magnitude_itself_fails(gold: Gold) -> None:
+    # The board sizes circles by (magnitude - 3) squared; a board back on the
+    # raw magnitude, whose circles all look alike, must not pass.
+    queries = good_queries()
+    for row in queries["on_map"]:
+        row["circle_size"] = row["magnitude"]
+    assert any(f.startswith("map: row") for f in failures_of(queries, gold))
 
 
 def test_a_map_in_another_order_passes(gold: Gold) -> None:

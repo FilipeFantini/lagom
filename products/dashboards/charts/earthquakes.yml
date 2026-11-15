@@ -98,7 +98,7 @@ queries:
   on_map:
     sql: |
       select event_id, place, latitude, longitude, magnitude, magnitude_class,
-             depth_km, event_utc, url
+             depth_km, event_utc, url, power(magnitude - 3, 2) as circle_size
       from {{ queries.base }} where magnitude >= 4 order by magnitude desc
   largest:
     sql: |
@@ -167,8 +167,14 @@ charts:
     type: bubble_map
     query: on_map
     title: Where the earthquakes of magnitude 4.0 or more happened
-    subtitle: One circle per earthquake, sized by magnitude.
-    size: magnitude
+    subtitle: One circle per earthquake; the stronger the earthquake, the larger the circle.
+    # Not `size: magnitude`. dct's size scale starts at zero, so magnitudes 4
+    # to 7 drew circles of almost one size (seen on the first staging page,
+    # 2026-11-15). `circle_size`, (magnitude - 3) squared, is 1 at magnitude 4
+    # and 16 at 7: the circle's area follows it, so its width grows about
+    # fourfold. Its legend would show those numbers, not magnitudes, so it is
+    # hidden; the magnitude is in each circle's tooltip.
+    size: circle_size
     geo_source: world-countries
     # One colour, no class legend: dct draws a map's legend in alphabetical
     # order and `legend.values` has no effect on it, and the size already
@@ -176,6 +182,7 @@ charts:
     style:
       color: {static: '#bd0026'}
       marks: {point: {opacity: 0.55}}
+      legend: {visible: false}
   by_class:
     type: bar
     query: by_magnitude_class
