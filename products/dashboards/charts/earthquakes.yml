@@ -24,14 +24,30 @@ style:
     format: 'Page built at %Y-%m-%d %H:%M %Z'
   text:
     column: {max_number: 1}
+  # The look of ofantini.com, where the board is linked from: its paper, ink
+  # and accent colours (src/styles/site.css there). Its fonts, Archivo and IBM
+  # Plex Mono, cannot come along: the page is one file that loads nothing, and
+  # dct embeds only the fonts it ships. Inter and Source Code Pro are the
+  # nearest of those.
+  background: '#f2ead6'
+  font: {color: '#17252b'}
+  fonts:
+    heading: {family: "'Inter Variable'", weight: 800, color: '#17252b'}
+    section: {family: "'Inter Variable'", weight: 800, color: '#17252b'}
+    subtitle: {family: "'Inter Variable'", color: '#4b5b5f'}
+    body: {family: "'Inter Variable'", color: '#17252b'}
+    label: {family: "'Source Code Pro'", color: '#17252b'}
+    caption: {family: "'Inter Variable'", color: '#4b5b5f'}
+    numeral: {family: "'Inter Variable'", weight: 800, color: '#17252b'}
   charts:
     # One colour per class on every chart. Fixed here because the colours
-    # follow the class, not its position in a chart.
+    # follow the class, not its position in a chart: the site's gold to its
+    # red to a deep brown for magnitude, its tan to its teal for depth.
     category_colors:
       magnitude_class:
-        values: {micro: '#fed976', minor: '#feb24c', light: '#fd8d3c', moderate: '#f03b20', strong: '#bd0026', major: '#800026', great: '#4d0019'}
+        values: {micro: '#ead9a4', minor: '#dcad3d', light: '#e3863a', moderate: '#df4c36', strong: '#b23a2a', major: '#7a2e25', great: '#3d1a16'}
       depth_class:
-        values: {shallow: '#c7e9b4', intermediate: '#41b6c4', deep: '#253494'}
+        values: {shallow: '#c9b48f', intermediate: '#6f8f86', deep: '#263f43'}
 
 queries:
   # Gold's earthquakes of the last 30 UTC days up to the latest one in the
@@ -167,22 +183,24 @@ charts:
     type: bubble_map
     query: on_map
     title: Where the earthquakes of magnitude 4.0 or more happened
-    subtitle: One circle per earthquake; the stronger the earthquake, the larger the circle.
+    subtitle: 'One circle per earthquake. Its area is (magnitude - 3) squared: 1 at magnitude 4, 4 at 5, 9 at 6, 16 at 7.'
     # Not `size: magnitude`. dct's size scale starts at zero, so magnitudes 4
     # to 7 drew circles of almost one size (seen on the first staging page,
     # 2026-11-15). `circle_size`, (magnitude - 3) squared, is 1 at magnitude 4
     # and 16 at 7: the circle's area follows it, so its width grows about
-    # fourfold. Its legend would show those numbers, not magnitudes, so it is
-    # hidden; the magnitude is in each circle's tooltip.
+    # fourfold. dct 0.11.1 draws the size legend even with `legend.visible:
+    # false`, so the legend is named for what it shows and the subtitle reads
+    # it back into magnitudes; each circle's tooltip has the magnitude.
     size: circle_size
+    field_labels: {circle_size: '(magnitude - 3)²'}
     geo_source: world-countries
     # One colour, no class legend: dct draws a map's legend in alphabetical
     # order and `legend.values` has no effect on it, and the size already
     # carries the magnitude.
+    basemap: {source: world-countries, fill: '#e2d6b8', stroke: '#f2ead6'}
     style:
-      color: {static: '#bd0026'}
-      marks: {point: {opacity: 0.55}}
-      legend: {visible: false}
+      color: {static: '#df4c36'}
+      marks: {point: {opacity: 0.6}}
   by_class:
     type: bar
     query: by_magnitude_class
@@ -196,7 +214,7 @@ charts:
     y_label: Earthquakes
     style:
       legend: {visible: false}
-      marks: {bar: {labels: {visible: true, position: above, format: integer, font: {color: '#333333'}}}}
+      marks: {bar: {labels: {visible: true, position: above, format: integer, font: {color: '#17252b'}}}}
     # Needed once a count passes 999 (the default writes 3.17k); on small
     # data dct reports it as restating the default.
     warnings_ignore: [WARN-RESTATED-FORMAT]
@@ -213,7 +231,7 @@ charts:
     y_label: Earthquakes
     style:
       legend: {visible: false}
-      marks: {bar: {labels: {visible: true, position: above, format: integer, font: {color: '#333333'}}}}
+      marks: {bar: {labels: {visible: true, position: above, format: integer, font: {color: '#17252b'}}}}
     # Needed once a count passes 999 (the default writes 3.17k); on small
     # data dct reports it as restating the default.
     warnings_ignore: [WARN-RESTATED-FORMAT]
@@ -227,7 +245,8 @@ charts:
     x_label: Region
     y_label: Earthquakes
     style:
-      marks: {bar: {labels: {visible: true, position: above}}}
+      color: {static: '#263f43'}
+      marks: {bar: {labels: {visible: true, position: above, font: {color: '#17252b'}}}}
   largest:
     type: table
     query: largest
