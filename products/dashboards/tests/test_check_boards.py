@@ -472,7 +472,9 @@ def test_the_short_board_is_checked_like_the_full_one(gold: Gold) -> None:
     queries = good_queries()
     del queries["largest"]
     queries["on_map"][1]["latitude"] = 62.0
-    assert any(f.startswith("map: row") for f in compare_earthquakes(queries, gold, with_table=False))
+    assert any(
+        f.startswith("map: row") for f in compare_earthquakes(queries, gold, with_table=False)
+    )
 
 
 def test_the_short_board_must_not_draw_the_table(gold: Gold) -> None:

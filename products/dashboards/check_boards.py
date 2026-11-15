@@ -267,9 +267,7 @@ def check_earthquakes(queries: Queries, connection: duckdb.DuckDBPyConnection) -
     return compare_earthquakes(queries, read_gold(connection))
 
 
-def check_earthquakes_short(
-    queries: Queries, connection: duckdb.DuckDBPyConnection
-) -> list[str]:
+def check_earthquakes_short(queries: Queries, connection: duckdb.DuckDBPyConnection) -> list[str]:
     return compare_earthquakes(queries, read_gold(connection), with_table=False)
 
 
