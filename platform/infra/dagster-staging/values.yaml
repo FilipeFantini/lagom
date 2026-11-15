@@ -105,10 +105,11 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at 06355de (PR #80,
-        # each job's credentials in its own tag, ADR-0044; the code location
-        # needs HEARTBEAT_URL, set below).
-        tag: "06355de0e60ee65c52ce80e5526724673a7e5afc@sha256:9b114c93927e7e8cf30fbe9d6f9df23e4f973369489b7c9e5fad8f43cb7bd422"
+        # Pinned by digest (ADR-0015): built from main at d570793 (PR #83,
+        # the `dashboards` job: render and publish to R2, ADR-0044; its
+        # Secrets r2-lake-reader and r2-dashboards are sealed in
+        # postgres-staging/). The code location needs HEARTBEAT_URL, set below.
+        tag: "d5707937f3cf66a062083b0169b99e67e823fc9d@sha256:88d56984613124ad934c117a862465d6f786748ce2c9ed3d2052a2de89db5487"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
