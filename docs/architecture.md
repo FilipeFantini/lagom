@@ -568,6 +568,9 @@ token and a read-only catalog role). The catalog role exists:
 `lake_reader`, a login with at most 3 connections and `SELECT` on the schema
 `ducklake`, whose grants the `lake_maintenance` job keeps
 ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
+The render stays within that limit by running `dct render --max-workers 1`: its
+default of 8 workers, each on its own connection, failed the first staging run
+with "too many connections for role" (2026-11-15).
 The read-only R2 token comes with the dashboards' render. A data test checks the outcome in the
 catalogue: gold readable, bronze and silver not, nothing writable
 ([warehouse README](../platform/warehouse/README.md)). A consumer gets its own login role inside that group
