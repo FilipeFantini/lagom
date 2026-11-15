@@ -748,8 +748,12 @@ declares 32 MB and uses 16 MiB measured ([ADR-0010](adr/0010-sealed-secrets.md))
 the totals above unchanged at this precision. The dashboards' render is an
 ephemeral job too, in the same one-run slot as `usgs` (the job carries its tag,
 so the queue never runs both): the budget does not change. On the CI fixture,
-in the built image under a 1 GiB limit, a render peaked at 540 MiB (2026-11-14);
-real data is not measured yet ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md); runbook: *The dashboards' publishing path*).
+in the built image under a 1 GiB limit, a render peaked at 540 MiB (2026-11-14).
+On real data, the whole run Pod in staging (Dagster's run process, `dct` and
+`check_boards`, from the container's cgroup) peaked at 804 MiB on 2026-11-15:
+above the 768 MiB request, which the node can give for the minute the render
+lasts, and 220 MiB under the 1 GiB limit
+([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md); runbook: *The dashboards' publishing path*).
 
 **Full design**, adding what enters by trigger:
 
@@ -1694,9 +1698,10 @@ below; prod takes staging's digest after they pass.
    and every command it started. `kubectl top` does not do: the render's Pod
    lives less than a minute and metrics-server samples once a minute, so the
    first staging runs never showed in it (2026-11-15). The request is 768 MiB
-   and the limit 1 GiB; the fixture peaked
-   at 540 MiB. Record the peak here and in §11; if it comes within 100 MiB of the
-   limit, raise the job's own resources, not `usgs`'s.
+   and the limit 1 GiB; the fixture peaked at 540 MiB, and staging on real data
+   at 804 MiB (2026-11-15, the run of 18:31). Record a new peak here and in §11;
+   if it comes within 100 MiB of the limit, raise the job's own resources, not
+   `usgs`'s.
 8. **The alarm still works for it.** After the above, a failed run in step 6 must
    have sent one e-mail naming the job `dashboards`.
 

@@ -348,11 +348,14 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
         (`lagom-staging.ofantini.com`, `lagom.ofantini.com`) with a
         bucket-scoped token, not to Cloudflare Pages, with dbt Charts telemetry
         left on (ADR-0044, decisions 7 to 9). **Built,** and `r2-lake-reader` and
-        `r2-dashboards` sealed for both namespaces (2026-11-14); open until the
-        digest is pinned in staging and its checks pass: the run, the page at its hostname with its
-        watermark, a failed attach that leaks nothing, telemetry that never
-        stalls a render, and the render's memory measured and budgeted from a
-        run on real data (runbook: *The dashboards' publishing path*). Two
+        `r2-dashboards` sealed for both namespaces (2026-11-14). Staging passed
+        its checks on 2026-11-15 (runbook: *The dashboards' publishing path*):
+        the run after each `usgs` run, the page at its hostname with its
+        watermark, a failed attach whose error held no password (the first run,
+        refused by the role's connection limit, fixed by rendering one query
+        at a time), telemetry left on with every run done in about a minute,
+        and the render's memory on real data, 804 MiB against the 1 GiB limit.
+        Open until prod runs the same digest and its page is up. Two
         requirements the operator added on 2026-11-14, both met in the code:
     - **The catalog password is not exposed,** rated high risk: none of the
       render step's output can carry it. ADR-0040's defences are in the step:
