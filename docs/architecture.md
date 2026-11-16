@@ -761,7 +761,7 @@ Staging adds ~1.2 GB:
   ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/cluster.yaml));
 - its own Dagster, 800 MB.
 
-That leaves **~2.1 GB** for jobs. Staging's ResourceQuota caps everything
+That leaves **~2.3 GB** for jobs. Staging's ResourceQuota caps everything
 staging requests at 2432 MiB. Staging requests 1,932 MiB in all (Postgres 364,
 Dagster 800, its run 768); under
 [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
@@ -845,7 +845,7 @@ lands. Requests in MiB:
 
 | Point | Total | Room under 5,632 |
 |---|---|---|
-| Today (2026-11-16) | 5,070 | 562 |
+| Before ADR-0046's first trims (2026-11-16) | 5,070 | 562 |
 | Prod with M6 (RisingWave 768, hub 64, one Grafana 128, `hello` removed, trims), staging `off` | 3,942 | 1,690 |
 | … staging `dev` (256) | 4,198 | 1,434 |
 | … staging `streaming` (960) | 4,902 | 730 |

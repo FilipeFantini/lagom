@@ -7,7 +7,7 @@
 # compressible, so going over it means running slower, not dying, and a CPU
 # limit would only add throttling.
 
-# Single sign-on is not used: operators log in as admin over Tailscale.
+# Single sign-on is not used: there is no UI to log in to (server, below).
 dex:
   enabled: false
 
