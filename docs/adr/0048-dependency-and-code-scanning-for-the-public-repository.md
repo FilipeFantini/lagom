@@ -73,7 +73,10 @@ every pull request and weekly (done by the operator on 2026-11-16). Its
 results become a merge gate with the `main` ruleset's *Require code scanning
 results* rule: tool CodeQL, security alerts *High or higher*, alerts
 *Errors*. A pull request that adds an alert at those levels does not merge.
-Alerts already on `main` do not block it.
+Alerts already on `main` do not block it. The rule is set last, and only
+after CodeQL has reported on a Markdown-only pull request and on a
+Dependabot one: a required result that never comes blocks every pull
+request of that kind. Removing the rule undoes it.
 
 **4. The first alert is dismissed as a false positive, with its reason.**
 CodeQL's `actions/untrusted-checkout/high` flags the checkout of the pull
@@ -144,8 +147,9 @@ taken after reading the skill.
   Decision 4.
 - Decision 2 is shown when `agent review` reports a verdict on a Dependabot
   pull request, #107 or #108 re-run.
-- Decision 3 is shown when a pull request lists the code scanning rule among
-  its requirements, and one with Markdown only still merges: a required
-  result that never comes would block it.
+- Decision 3: CodeQL reported on #109, Markdown only (`CodeQL`,
+  `Analyze (actions)` and `Analyze (python)` passed). A Dependabot pull
+  request reporting too is still to be shown, before the rule is set; then a
+  pull request lists the rule among its requirements.
 - Decision 5 is shown when CodeQL and every workflow still run after the
   setting is on.
