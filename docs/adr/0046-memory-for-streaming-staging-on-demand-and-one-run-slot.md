@@ -521,3 +521,12 @@ without rewriting it.
   `tools/resource_budget.py` fails an Application that declares a run slot
   whose rendered instance allows any other number, or has no queue. The tag
   limit on `usgs` stays. The budget's total does not change.
+- **2026-11-16 — staging without its UI and its backup (part of decision 1).**
+  Staging's webserver runs at zero replicas and the tunnel no longer serves
+  `/dagster-staging`; staging's `Cluster` has no Barman Cloud plugin, and its
+  `ObjectStore`, `ScheduledBackup` and R2 token are removed from Git and
+  deleted by hand (runbook, *Retire a manifest from `postgres-<env>`*).
+  Staging stays always on until the modes and the mode file are built. The
+  budget check's total falls from 4,958 to 4,734 MiB. The Postgres requests
+  stay at 300 until a reading during a run confirms 256.
+

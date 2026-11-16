@@ -33,10 +33,10 @@ data:
     # request's path; the path is passed on unchanged, so each tool serves
     # itself under its prefix (Dagster's pathPrefix in its values.yaml).
     # Rules are tried in order and the first match wins.
+    # Staging's Dagster UI is not served (ADR-0046): its webserver runs at zero
+    # replicas. /dagster-staging falls to the 404 below, since the prod rule
+    # matches only /dagster and /dagster/...
     ingress:
-      - hostname: ops.ofantini.com
-        path: ^/dagster-staging(/.*)?$
-        service: http://dagster-dagster-webserver.staging.svc.cluster.local:80
       - hostname: ops.ofantini.com
         path: ^/dagster(/.*)?$
         service: http://dagster-dagster-webserver.prod.svc.cluster.local:80

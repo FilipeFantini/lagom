@@ -6,8 +6,9 @@
 # everything from `imageName` to `bootstrap`, and the `gold_reader` and
 # `lake_reader` roles, is identical to postgres-prod/cluster.yaml, and a change
 # to one is made to both.
-# The only additions are `pg_hba` and the `lagom_dev` role, for the developer
-# (ADR-0014).
+# The additions are `pg_hba` and the `lagom_dev` role, for the developer
+# (ADR-0014). The differences: no backup, since staging's data is rebuilt by
+# loading the source again and prod's backup is the protection (ADR-0046).
 # The reasoning behind each shared setting is written once, in the prod file.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -66,17 +67,10 @@ spec:
 
   enableSuperuserAccess: false
 
-  # Backups (ADR-0025): the Barman Cloud plugin archives every WAL segment to
-  # the ObjectStore r2-backups (objectstore.yaml) and takes the base backups
-  # scheduledbackup.yaml asks for. isWALArchiver makes it the one place WAL
-  # goes. If archiving fails, Postgres keeps the WAL on its volume and the
-  # Cluster reports it, so the failure is loud, not silent: watch the
-  # volume, since it fills if archiving stays broken.
-  plugins:
-    - name: barman-cloud.cloudnative-pg.io
-      isWALArchiver: true
-      parameters:
-        barmanObjectName: r2-backups
+  # No backup (ADR-0046, amending ADR-0025's "staging first"): no Barman
+  # Cloud plugin, so no sidecar (64 MiB) and no WAL archived. A change to the
+  # backup is validated in prod. `archive_timeout` above stays only to keep
+  # the parameters identical to prod's.
 
   # The developer's login (ADR-0014). The operator creates the role and keeps
   # it matching this block. Its password comes from the Sealed Secret

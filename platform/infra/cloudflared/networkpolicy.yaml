@@ -10,7 +10,7 @@
 #    and nothing else in prod. Staging has no NetworkPolicy, so it needs none.
 #
 # Not restricted: cloudflared's egress. It needs Cloudflare's edge (port
-# 7844), Access's key endpoint (443), cluster DNS and the two webservers; a
+# 7844), Access's key endpoint (443), cluster DNS and prod's webserver; a
 # list of Cloudflare's addresses would go stale.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
