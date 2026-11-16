@@ -105,11 +105,12 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at 4f241c2 (PR #96, a
-        # short earthquakes board for an article to frame; PR #94 before it,
-        # the look of ofantini.com). The `dashboards` job came in PR #83
-        # (ADR-0044). The code location needs HEARTBEAT_URL, set below.
-        tag: "4f241c2ace23b8792a42c523ac566271d5bf29f5@sha256:1cd8e28bb8cb60b89b1146ca8e2e6937eb9b12de8d016d62de98f30d093dbaac"
+        # Pinned by digest (ADR-0015): built from main at 4620b83 (PR #98, map
+        # cards that fit, in the site's paper; PR #96 before it, the short
+        # board an article frames). The `dashboards` job came in PR #83
+        # (ADR-0044); its memory peak is logged since PR #90. The code location
+        # needs HEARTBEAT_URL, set below.
+        tag: "4620b83cebcfdb98438111556680ed6afd87ea38@sha256:9c975956677a7d17d8dd3e19c2284ac9f9bf609a497b8bedd5981b1064d362f9"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
