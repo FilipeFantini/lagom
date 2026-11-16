@@ -15,6 +15,9 @@
   decision 6;
   [ADR-0042](0042-the-dashboards-return-to-dbt-charts.md), decision 6: Grafana
   is the streaming tool.
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): one Grafana reads both environments
+  (decision 9); staging's streaming stack runs on demand; every streaming
+  source shares one hub, one RisingWave and one Redpanda Connect process.
 
 ## Context and problem
 
