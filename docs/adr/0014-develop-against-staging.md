@@ -1,6 +1,7 @@
 # ADR-0014 — Develop against staging, with no local services
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging's Postgres is
+  hibernated by default, so developing against `lagom_dev` needs it awake
 - **Date:** 2026-10-16
 - **Supersedes:** the `dev` environment of [ADR-0007](0007-three-environments.md)
   (local machine, throwaway `k3d` cluster), and the "`dev` runs a local

@@ -3,6 +3,8 @@
 - **Status:** Accepted; decision 5 amended by
   [ADR-0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md):
   a job declares its own Secrets, and the ping URL is the one left shared
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging's alarm reports failures only, since
+  staging is off by default
 - **Date:** 2026-11-07
 - **Decided by:** the operator, on 2026-11-07: retire the CronJobs now, with
   the alarm, and accept the ping URL in run Pods (decision 5).

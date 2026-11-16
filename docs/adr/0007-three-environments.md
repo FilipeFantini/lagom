@@ -6,6 +6,9 @@
   [ADR-0015](0015-images-on-ghcr.md) (what triggers staging's jobs), and by
   [ADR-0026](0026-dagster-one-instance-per-environment.md) ("staging runs no
   Dagster": each environment now runs its own)
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging's workloads run on demand, lean and
+  one mode at a time, switched by agents; its namespace, Postgres volume,
+  secrets and quota stay permanent, and prod's NetworkPolicy keeps denying it
 - **Note:** the 2.6 GB ceiling cited below was lowered to 2.2 GB by
   [ADR-0016](0016-ci-ceiling-2-2-gb.md)
 - **Date:** 2026-10-12

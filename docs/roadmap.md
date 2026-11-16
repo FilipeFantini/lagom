@@ -424,6 +424,40 @@ node that carries prod.
 - [ ] What the site shows of this showcase: aggregates only, under the
       ADR's privacy rule (decision 11) — not decided
 
+**Memory first.** As designed, M6 does not fit the CI ceiling: its spikes put
+RisingWave at a 768 MiB request, and a hub, RisingWave and Grafana in each
+environment would take the total to about 7,100 of 5,632 MiB.
+[ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
+(proposed) frees the room, and its pull requests come before the hub and the
+processing above. With them, prod with M6 totals about 3,942 MiB, and a lean
+staging fits beside it in either mode: streaming with 730 MiB to spare, batch
+with 90 ([architecture.md §11](architecture.md#11-resource-budget)). M6 reaches
+prod after these.
+
+- [ ] Remove the `hello` Application (16 MiB), and the runbook steps that
+      use it
+- [ ] Trim platform requests to what was measured: `argocd-server` removed,
+      cert-manager's controller and cainjector at 48 MiB, prod's Postgres at
+      256 MiB once a reading during a run confirms it
+- [ ] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
+      instances, and the budget check failing a run slot without it
+- [ ] A lean staging on demand: no Dagster UI and no backup; Postgres
+      hibernated while off; the budget check counting the mode declared in
+      Git; the quota capped at the batch mode; staging's alarm on failures
+      only; the runbook steps that used staging's UI and backup
+- [ ] The mode switch that agents operate: one schema-checked file outside
+      the guarded list (a guardrail change, approved once by the operator)
+- [ ] One Grafana in its own namespace, reading each environment's live
+      store through its own read-only role
+- [ ] The streaming components shared by every streaming source: one hub,
+      one RisingWave, one Redpanda Connect process in streams mode, per
+      environment
+- [ ] ADR-0045's archive job validated locally, in a compose like the
+      spikes', since it needs both of staging's modes at once
+- [ ] Local spike: Flux in place of Argo CD (saving about 400 to 450 MiB
+      expected, not measured), kept only if it gives the same guarantees,
+      with its own ADR
+
 ## M7 — Two developers
 
 Environments were pulled forward to M2 — see
