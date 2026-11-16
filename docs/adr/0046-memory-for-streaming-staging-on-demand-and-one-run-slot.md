@@ -60,8 +60,8 @@ M6, the streaming showcase
 proposed), adds resident components to both environments. Its local spikes of
 2026-11-15 and 16 measured them. Their notes, a section *Notes from the
 spikes* in ADR-0045, are on the branch `claude/lagom-m6-streaming-spikes-29a59a`
-and not yet in `main`; their pull request is to land before this one. The
-figures used here are restated:
+and were not yet in `main` when this ADR merged; they arrive with the
+spikes' own pull request. The figures used here are restated:
 
 - **RisingWave** fits a 1 GiB limit only with lean memory budgets, and its
   working set (p95 718 MiB over one hour) includes about 450 MiB of active file
