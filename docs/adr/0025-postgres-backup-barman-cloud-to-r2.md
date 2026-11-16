@@ -4,7 +4,7 @@
   passed (see *How it is accepted*). Prod enabled 2026-10-28; see the notes.
   RPO and prod retention partially superseded by
   [ADR-0027](0027-hourly-wal-archiving-and-14-day-prod-retention.md)
-- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging is no longer backed up; a change to
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): staging is no longer backed up; a change to
   the backup is validated in prod
 - **Date:** 2026-10-28
 - **Decided by:** the operator, on 2026-10-28, choosing the plugin over a

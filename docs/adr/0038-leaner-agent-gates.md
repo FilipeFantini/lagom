@@ -1,7 +1,7 @@
 # ADR-0038 — Leaner agent gates: the guarded list is the security core, and the reviewer runs less and blocks less
 
 - **Status:** Accepted
-- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging's mode file,
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): staging's mode file,
   an input to what Argo CD applies in staging, sits outside the guarded list
 - **Date:** 2026-11-07
 - **Decided by:** the operator, on 2026-11-07: nothing critical runs on this

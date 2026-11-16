@@ -428,17 +428,18 @@ node that carries prod.
 RisingWave at a 768 MiB request, and a hub, RisingWave and Grafana in each
 environment would take the total to about 7,100 of 5,632 MiB.
 [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
-(proposed) frees the room, and its pull requests come before the hub and the
+frees the room, and its pull requests come before the hub and the
 processing above. With them, prod with M6 totals about 3,942 MiB, and a lean
 staging fits beside it in either mode: streaming with 730 MiB to spare, batch
 with 90 ([architecture.md §11](architecture.md#11-resource-budget)). M6 reaches
 prod after these.
 
-- [ ] Remove the `hello` Application (16 MiB), and the runbook steps that
-      use it
-- [ ] Trim platform requests to what was measured: `argocd-server` removed,
-      cert-manager's controller and cainjector at 48 MiB, prod's Postgres at
-      256 MiB once a reading during a run confirms it
+- [x] Remove the `hello` Application (16 MiB), and the runbook steps that
+      use it (2026-11-16)
+- [x] Trim platform requests to what was measured: `argocd-server` at zero
+      replicas, cert-manager's controller and cainjector at 48 MiB
+      (2026-11-16)
+- [ ] Prod's Postgres at 256 MiB, once a reading during a run confirms it
 - [ ] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
       instances, and the budget check failing a run slot without it
 - [ ] A lean staging on demand: no Dagster UI and no backup; Postgres

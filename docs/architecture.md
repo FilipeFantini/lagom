@@ -437,7 +437,7 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`platform/infra/dagster-prod/`](../platform/infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
 
 **Staging on demand** ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md),
-proposed; not built — the table above is how staging runs today). So that M6
+accepted; being built — the table above is how staging runs today). So that M6
 fits the ceiling (§11), staging runs lean and only when something is to be
 validated, one mode at a time:
 
@@ -708,9 +708,12 @@ for k3s's growth over days and the shims of new Pods, which requests do not
 count ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It was 2.2 GB on
 the 4 GB node ([ADR-0016](adr/0016-ci-ceiling-2-2-gb.md)), where M3 did not
 fit, hence the move ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Today's
-total is 5,070 MiB: Dagster in both environments (each 800 resident and 768
+total is 4,958 MiB: Dagster in both environments (each 800 resident and 768
 per run) and `cloudflared`, 48, which serves their UIs behind a login
-([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). It was 5,582,
+([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). It was 5,070
+until 2026-11-16, when `hello` (16), `argocd-server` (64) and 32 of
+cert-manager's requests went
+([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)). It was 5,582,
 50 MiB under the ceiling, until the two CronJobs on Postgres were retired on
 2026-11-07, which freed 256 each
 ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)).
@@ -741,14 +744,14 @@ adds that 70 MiB request as its allowance for components outside Git.
 | Component | Request | Source |
 |---|---|---|
 | kube-system (CoreDNS, metrics-server) and local-path | ~215 MB | requests: CoreDNS 70, metrics-server 80, local-path 64 MiB; Traefik disabled ([ADR-0021](adr/0021-k3s-packaged-components-under-git.md)). Measured 2026-10-27: 71, 73 and 47 MiB |
-| Argo CD (no Dex) | 608 MB | set from measurement with three Applications: application-controller 290–465 MiB before `GOMEMLIMIT`, 190–285 MiB after (request 384, limit 640, `GOMEMLIMIT` 540MiB), repo-server ~105, server ~37, redis ~10 ([ADR-0009](adr/0009-argocd-bootstrap-and-self-management.md)) |
+| Argo CD (no Dex, no UI) | 544 MB | set from measurement with three Applications: application-controller 290–465 MiB before `GOMEMLIMIT`, 190–285 MiB after (request 384, limit 640, `GOMEMLIMIT` 540MiB), repo-server ~105, redis ~10 ([ADR-0009](adr/0009-argocd-bootstrap-and-self-management.md)). `argocd-server` (~37 measured, 64 requested) runs at zero replicas since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)) |
 | CloudNativePG operator | 64 MB | measured 24 MiB with no Cluster, 31 MiB reconciling one (request 64, limit 192, `GOMEMLIMIT` 150MiB) ([ADR-0012](adr/0012-cloudnative-pg.md)) |
-| Backup: Barman Cloud plugin and cert-manager | 192 MB | plugin 32, cert-manager controller 64, cainjector 64, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
+| Backup: Barman Cloud plugin and cert-manager | 160 MB | plugin 32, cert-manager controller 48, cainjector 48, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB, and on 2026-11-16 the cert-manager three at 39, 35 and 22, from which the controller and cainjector came down from 64 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
 | Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
 | Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
 | `cloudflared` | 48 MB | the tunnel that serves the operator's UIs behind Cloudflare Access, both environments ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)): request 48 MiB, limit 128 MiB, `GOMEMLIMIT` 100MiB. Measured 24 MiB at start and 31 MiB a few minutes later, on 2026-11-07, idle (Cloudflare's figure is ~30 MB); the request is re-set from `kubectl top` after a week |
-| **Core requests** | **~2.29 GB** | |
-| **Left within the ceiling for ephemeral jobs** | **~3.3 GB** | |
+| **Core requests** | **~2.20 GB** | |
+| **Left within the ceiling for ephemeral jobs** | **~3.4 GB** | |
 
 Staging adds ~1.2 GB:
 
@@ -762,7 +765,7 @@ That leaves **~2.1 GB** for jobs. Staging's ResourceQuota caps everything
 staging requests at 2432 MiB. Staging requests 1,932 MiB in all (Postgres 364,
 Dagster 800, its run 768); under
 [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
-(proposed) that becomes 0 while it is off and 1,600 in its batch mode (below).
+that becomes 0 while it is off and 1,600 in its batch mode (below).
 dlt and dbt do not appear above: they are ephemeral jobs, and their requests
 count against what is left. Since 2026-11-07 they run inside each Dagster
 run (768 MiB, above). Until then they ran as one Pod per environment, the
@@ -813,7 +816,7 @@ the node allows, not a budget to fill (§1).
 
 **M6, streaming, and what makes room for it**
 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md),
-proposed; not built). M6's local spikes set RisingWave's request at 768 MiB
+accepted; being built: `hello` and the first trims are done). M6's local spikes set RisingWave's request at 768 MiB
 (its working set includes about 450 MiB of active file cache), the NATS hub's
 at 64 and a Redpanda Connect process's at 128; Grafana's 128 is not measured.
 With ADR-0045 as designed, a hub, RisingWave and Grafana per environment, M6
@@ -1228,9 +1231,11 @@ helm install argocd argo/argo-cd --version 10.10.3 -n argocd --create-namespace 
 kubectl -n argocd get pods
 ```
 
-Expected: `argocd-application-controller-0`, `argocd-repo-server`,
-`argocd-server`, and `argocd-redis` Running; `argocd-redis-secret-init`
-Completed. No Dex, notifications, or ApplicationSet pods.
+Expected: `argocd-application-controller-0`, `argocd-repo-server` and
+`argocd-redis` Running; `argocd-redis-secret-init` Completed. No Dex,
+notifications, ApplicationSet or server Pods: the server's Deployment exists
+at zero replicas, since the operator uses no UI and the CLI works with
+`--core` ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)).
 
 **Repository access — none needed.** The repository is public, and every
 Application names it by its HTTPS URL, so Argo CD clones it anonymously, the
@@ -1296,7 +1301,10 @@ for `timeout.reconciliation`), so a merge lands within about three minutes. It
 **watches the cluster** continuously, so a manual change there is reverted
 almost at once (`selfHeal`).
 
-Measured on 2026-10-13:
+Measured on 2026-10-13, on `hello`, a trivial nginx kept for this test until
+2026-11-16, when it was removed to save its memory
+([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md));
+any Application now shows the same loop:
 
 | Test | Result |
 |---|---|
@@ -1307,11 +1315,23 @@ Measured on 2026-10-13:
 
 ```bash
 kubectl -n argocd get applications                       # Synced / Healthy per Application
-kubectl -n argocd get application hello -o jsonpath='{.status.sync.revision}'   # commit applied
+kubectl -n argocd get application root -o jsonpath='{.status.sync.revision}'    # commit applied
 ```
 
 A manual change to anything under Argo CD's management is not a deployment: it
 is undone on the next pass. To change the cluster, change `main`.
+
+**Removing an Application.** Deleting its file from `platform/infra/apps/`
+makes `root` prune the Application, but not what the Application created:
+no Application here carries Argo CD's resources finalizer, so its objects
+are left running, unmanaged, and a namespace made by `CreateNamespace=true`
+is never pruned. The operator deletes them by hand after the merge. For
+`hello`, on 2026-11-16:
+
+```bash
+kubectl -n argocd get application hello          # NotFound: root pruned it
+kubectl delete namespace hello                   # its Deployment, Service and ConfigMap go with it
+```
 
 ### Sealed Secrets (M1)
 
@@ -1429,7 +1449,8 @@ kubectl -n staging describe resourcequota staging   # Used against Hard
 
 **Check that staging cannot reach prod** — `BLOCKED` is the pass; run the same
 command with `-n prod` as the control, which must print `REACHED`. The image is
-the one the `hello` app already keeps on the node:
+a small unprivileged nginx pinned by digest, the one the `hello` app used until
+2026-11-16; the node pulls it if it is not cached:
 
 ```bash
 kubectl -n staging run nettest --rm -i --quiet --restart=Never \
