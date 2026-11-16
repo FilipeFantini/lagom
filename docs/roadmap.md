@@ -438,13 +438,13 @@ prod after these.
       use it
 - [ ] Trim platform requests to what was measured: `argocd-server` removed,
       cert-manager's controller and cainjector at 48 MiB, prod's Postgres at
-      256 MiB
+      256 MiB once a reading during a run confirms it
 - [ ] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
       instances, and the budget check failing a run slot without it
 - [ ] A lean staging on demand: no Dagster UI and no backup; Postgres
       hibernated while off; the budget check counting the mode declared in
-      Git; the quota fitting only the largest mode; staging's alarm on
-      failures only
+      Git; the quota capped at the batch mode; staging's alarm on failures
+      only; the runbook steps that used staging's UI and backup
 - [ ] The mode switch that agents operate: one schema-checked file outside
       the guarded list (a guardrail change, approved once by the operator)
 - [ ] One Grafana in its own namespace, reading each environment's live
@@ -454,8 +454,9 @@ prod after these.
       environment
 - [ ] ADR-0045's archive job validated locally, in a compose like the
       spikes', since it needs both of staging's modes at once
-- [ ] Local spike: Flux in place of Argo CD (about 450 MiB expected, not
-      measured), kept only if it gives the same guarantees, with its own ADR
+- [ ] Local spike: Flux in place of Argo CD (saving about 400 to 450 MiB
+      expected, not measured), kept only if it gives the same guarantees,
+      with its own ADR
 
 ## M7 — Two developers
 

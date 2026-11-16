@@ -443,7 +443,7 @@ validated, one mode at a time:
 
 | Mode | What runs | Requests |
 |---|---|---|
-| `off`, the default | nothing: Postgres hibernated (`cnpg.io/hibernation: "on"`: the Pod goes, the volume and its data stay), no Dagster | 0 |
+| `off`, the default | nothing: Postgres hibernated (`cnpg.io/hibernation: "on"`: the Pod goes, the volume and its data stay; Argo CD shows it Suspended), no Dagster (daemon and code server removed, since the chart cannot scale them to zero) | 0 |
 | `dev` | Postgres alone, for development against `lagom_dev` | 256 MiB |
 | `streaming` | NATS hub, RisingWave, synthetic producer ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md)) | 960 MiB |
 | `batch` | Postgres, Dagster's daemon and code server, its run | 1,600 MiB |
@@ -454,12 +454,15 @@ validated, one mode at a time:
 - **Switched by agents:** the mode is one field in a small file outside the
   guarded list, checked in CI to hold only one of the four values. The pull
   request that brings a change to validate sets it; an agent merges the one
-  that switches staging off. Staging's ResourceQuota fits only the largest
-  mode, so two modes cannot both start.
+  that switches staging off, or on. Only staging's Applications read the file.
+  Staging's ResourceQuota caps its total at the batch mode.
+- **Runs follow the schedules:** with no UI, a change is validated by the next
+  `usgs` run; a job off schedule is waited for or launched by the operator.
 - **Its alarm reports failures only,** so silence while off raises nothing.
 
-The namespace, the Postgres volume, the secrets, the quota and the
-NetworkPolicy stay permanent, so the four conditions below still hold. The
+The namespace, the Postgres volume, the secrets and the quota stay
+permanent, and prod's NetworkPolicy keeps denying staging, so the four
+conditions below still hold. The
 cost: staging no longer exercises the pipeline continuously, so a change in
 the source between validations is caught by prod and its alarm, not by
 staging first; a backup change is validated in prod; and a digest pinned in
@@ -834,7 +837,8 @@ would take the total to about 7,100 MiB. ADR-0046 frees the room:
 
 The budget check counts what Git declares: a hibernated `Cluster` requests
 nothing, Deployments at zero replicas request nothing, and a Dagster with no
-daemon has no run slot. Requests in MiB:
+daemon has no run slot. Prod's Postgres is read during a run before its trim
+lands. Requests in MiB:
 
 | Point | Total | Room under 5,632 |
 |---|---|---|
@@ -843,7 +847,7 @@ daemon has no run slot. Requests in MiB:
 | … staging `dev` (256) | 4,198 | 1,434 |
 | … staging `streaming` (960) | 4,902 | 730 |
 | … staging `batch` (1,600) | 5,542 | **90** |
-| … staging `batch`, if Flux replaces Argo CD (about 450 expected, not measured) | ~5,090 | ~540 |
+| … staging `batch`, if Flux replaces Argo CD (saving about 400 to 450 of Argo CD's 544, not measured) | ~5,100–5,150 | ~480–530 |
 
 **Batch-mode staging fits with M6 in prod, by 90 MiB**: enough to validate,
 not to grow. Until more room is found, a new resident component in prod makes

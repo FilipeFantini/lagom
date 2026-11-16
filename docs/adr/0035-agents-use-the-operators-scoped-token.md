@@ -1,6 +1,8 @@
 # ADR-0035 — Agents use the operator's repository-scoped token; an environment approval guards what reaches the cluster
 
 - **Status:** Accepted
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging's mode file,
+  an input to what Argo CD applies in staging, sits outside the guarded list
 - **Date:** 2026-11-07
 - **Decided by:** the operator, on 2026-11-07: agents in the runner work
   autonomously — they open and merge their own pull requests — from a place

@@ -21,9 +21,9 @@
     replacement in a spike of its own, kept only if it gives the same
     guarantees.
 - **Amends:**
-  - [ADR-0007](0007-three-environments.md): staging's namespace, secrets,
-    quota and NetworkPolicy stay permanent; its workloads run on demand, one
-    mode at a time.
+  - [ADR-0007](0007-three-environments.md): staging's namespace, secrets
+    and quota stay permanent, and prod's NetworkPolicy keeps denying it; its
+    workloads run on demand, one mode at a time.
   - [ADR-0009](0009-argocd-bootstrap-and-self-management.md): its rejection
     of a headless Argo CD (no UI or API server) is reversed; the operator
     does not use the UI.
@@ -39,6 +39,9 @@
     comes.
   - [ADR-0033](0033-dagster-alerts-through-healthchecks.md): staging's alarm
     reports failures only.
+  - [ADR-0035](0035-agents-use-the-operators-scoped-token.md) and
+    [ADR-0038](0038-leaner-agent-gates.md): one input to what Argo CD applies
+    in staging, the mode file, sits outside the guarded list (decision 2).
   - [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md)
     (proposed): RisingWave's request, one Grafana for both environments
     (decision 9), staging's streaming stack on demand, every streaming source
@@ -110,7 +113,8 @@ code server peaked at 291 MiB; a run peaked at 804 MiB.
   is switched on is not one.
 - **The operator does not operate the switch.** Agents do.
 - Staging stays isolated from prod ([ADR-0007](0007-three-environments.md)):
-  its own Postgres, quota, NetworkPolicy and secrets. Nothing joins the two
+  its own Postgres, quota and secrets, and prod's NetworkPolicy, which admits
+  nothing from staging. Nothing joins the two
   pipelines (ADR-0045, *Environments*).
 - No prod data and no prod guarantee is lost.
 - A new source, batch or streaming, costs configuration, not a new resident
@@ -167,7 +171,8 @@ Isolation between sources at about 960 MiB a source. Rejected (decision 7).
 
 **Requests trimmed below what was measured.** It would make room on paper
 and evict Pods under pressure. Not done: every trim below stays above the
-working set measured.
+working set measured, except staging's daemon, whose request holds only for a
+mode that runs for hours (decision 1).
 
 ## Decision
 
@@ -200,21 +205,36 @@ working set measured.
      *Declarative hibernation*, versions 1.28 and 1.30, read on 2026-11-16.)
      Argo CD syncs the annotation like any field; it does not own the Pods the
      operator deletes.
-   - **Dagster is off outside `batch`:** the code server at `replicas: 0` and
-     the daemon removed (`dagsterDaemon.enabled: false`), since the pinned
-     chart (1.13.27) hard-codes the daemon's `replicas: 1`. With no daemon
-     nothing is dequeued, so no run starts.
-   - **Lean requests, each above what was measured:** Postgres 256 (213
-     measured); the daemon 256, which holds for a mode that runs for hours
+   - **Dagster is off outside `batch`.** The pinned chart (1.13.27) accepts
+     zero replicas for neither the daemon (its template fixes `replicas: 1`)
+     nor a code server (its schema requires more than 0), so both are
+     removed rather than scaled: `dagsterDaemon.enabled: false`, and
+     `dagster-user-deployments.enabled: false` with `enableSubchart: false`.
+     The webserver, gone in every mode, renders at `replicaCount: 0`. What is
+     left requests nothing, and with no daemon nothing is dequeued, so no run
+     starts.
+   - **Lean requests:** Postgres 256 (213 measured for the Pod, 179 for its
+     `postgres` container); the daemon 256, which holds for a mode that runs for hours
      (104 MiB at start, 206 after four hours) and not for days (263 after
      seven); the code server stays at 320 (291 measured).
-   - **The quota enforces one mode at a time.** Staging's ResourceQuota is
-     lowered to the batch mode plus a small margin, so the API server refuses
-     the Pods of a second mode even if both were declared.
+   - **The quota caps what staging can hold.** Staging's ResourceQuota is
+     lowered to the batch mode plus a small margin, so whatever is declared,
+     the API server refuses Pods past that total. It does not refuse every
+     pair of modes (`dev` and `streaming` together are 1,216 MiB); one mode
+     at a time is held by the mode file's single value.
    - **The CI check counts the mode declared in Git**, so the ceiling stays a
      check. [`tools/resource_budget.py`](../../tools/resource_budget.py) learns
      that a hibernated `Cluster` requests nothing and that a Dagster
      Application with no daemon Deployment has no run slot.
+   - **Runs in staging follow the schedules.** With no UI, and `kubectl exec`
+     denied to agents, a change is validated by the next scheduled `usgs` run
+     (every 30 minutes), which the dashboards' render follows. A job off
+     that schedule, such as `lake_maintenance` at 04:15, is either waited for
+     or launched by the operator (`dagster job launch` through `kubectl
+     exec` on the code server).
+   - **Argo CD shows `postgres-staging` as Suspended** while it is hibernated:
+     its health check for CloudNativePG maps the hibernation condition to
+     that state. It is expected, not a fault.
 
    **The trade-off, stated plainly: staging no longer exercises the pipeline
    continuously.** While it is off, a change in the USGS source, the lake or
@@ -227,10 +247,14 @@ working set measured.
    [`.github/CODEOWNERS`](../../.github/CODEOWNERS)), holding one field,
    `mode`, with one of the four values above.
    - The file only selects among states that are defined in guarded paths;
-     it carries no manifest and no value of its own. A CI check fails any
-     content other than that one field and its four values. How the file
-     reaches each staging Application is settled in the implementation pull
-     request.
+     it carries no manifest and no value of its own. A CI check, in
+     `tools/` (guarded), fails any content other than that one field and its
+     four values. Only staging's Applications read it; prod's never do. How
+     the file reaches each staging Application is settled in the
+     implementation pull request.
+   - A pull request that touches the file alone may set any of the four
+     values, `batch` included. That is the point: an agent can switch staging
+     on to validate without the operator, within what the modes allow.
    - A pull request that brings a change to validate in staging (a digest, a
      manifest) already touches guarded paths and is approved by the operator
      as today; it sets the mode in the same change. The pull request that
@@ -261,8 +285,10 @@ working set measured.
    **Why this is not the link between environments ADR-0045 forbids.** That
    rule is about the pipelines: no staging component reads, writes or
    triggers anything of prod, and the reverse. It holds. Data does not move
-   between the environments; each environment's NetworkPolicy admits Grafana's
-   namespace to its RisingWave port only, and still denies staging to prod.
+   between the environments. Prod's NetworkPolicy, which admits only `prod`
+   and `cnpg-system` today, is amended to admit Grafana's namespace to
+   RisingWave's port only, and still admits nothing from staging; staging has
+   no NetworkPolicy, so Grafana reaches it as anything in the cluster can.
    Grafana is the operator's viewer: it holds two read-only credentials and
    writes nothing to either store. Two risks are accepted with it:
    - **one compromised Grafana reads both live stores,** and prod's holds the
@@ -335,8 +361,13 @@ working set measured.
      loop in the UI; the operator does not use it.
    - **cert-manager's controller and cainjector at 48 MiB each**, from 64
      (39 and 35 measured): 32 MiB.
-   - **Prod's Postgres at 256 MiB**, from 300 (210 measured; its limit stays
-     512): 44 MiB.
+   - **Prod's Postgres at 256 MiB**, from 300 (210 measured for the Pod and
+     184 for its `postgres` container, between runs; its limit stays 512):
+     44 MiB. §11 kept 300 "for dbt load", when dbt built every layer inside
+     Postgres; since 2026-11-07 dbt runs in the run Pod on DuckLake, and
+     Postgres holds the catalog and Dagster's history. Prod's Postgres is
+     read during a run before the trim lands, and the trim waits if that
+     reading is above 256.
 
 9. **ADR-0045's archive job is validated locally.** It reads RisingWave and
    writes DuckLake through Dagster (ADR-0045, decision 7), so it needs both
@@ -359,7 +390,7 @@ plus RisingWave 768, the hub 64 and one Grafana 128.
 | … staging `dev` | 4,198 | 1,434 |
 | … staging `streaming` | 4,902 | 730 |
 | … staging `batch` | **5,542** | **90** |
-| … staging `batch`, if Flux replaces Argo CD (about 450 expected, not measured) | ~5,090 | ~540 |
+| … staging `batch`, if Flux replaces Argo CD (saving about 400 to 450 of Argo CD's 544, not measured) | ~5,100–5,150 | ~480–530 |
 
 Pods that do not run also have no `containerd-shim`, about 20 MiB each outside
 Kubernetes ([ADR-0024](0024-ci-ceiling-on-the-8-gb-node.md)), which the check
@@ -413,6 +444,12 @@ is decided in its own ADR, not here.
   mode for days lets its daemon grow past its request, which makes it the
   first Pod the kubelet evicts when the node runs short; its limit is what
   stops it.
+- **Runbook steps that rely on what goes** are rewritten in the pull request
+  that removes it: *Check it in staging* of the dashboards' publishing path
+  and *Start a run on demand* (both use staging's UI); the staging rows of
+  *Backup and restore*, its restore test sized to staging's quota, and its
+  "staging first"; the expected Pods of *Install Argo CD (M1)*, which list
+  `argocd-server`.
 - **Staging's public dashboards go stale.** The pages at
   `lagom-staging.ofantini.com` stay in R2 while staging is off, with their
   `Page built at` stamp showing their age, and are rebuilt by a run in batch
