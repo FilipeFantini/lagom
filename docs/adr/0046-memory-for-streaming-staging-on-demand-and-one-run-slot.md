@@ -98,7 +98,8 @@ untested, and even so prod with M6 plus today's staging is about 6,000 MiB.
 
 **Staging destroyed and recreated per pull request.** Rejected by ADR-0007 for
 reasons that still hold: a failure takes its state with it, and there is no
-standing URL. Hibernation keeps both (decision 1).
+standing URL. Hibernation keeps the state, and the namespace keeps its
+addresses (decision 1); the UIs answer only while staging is on.
 
 **A Grafana per environment.** 128 MiB more, and two places for the operator
 to look. Rejected by the operator.
@@ -129,8 +130,10 @@ is the subject of its own spike and, if it passes, its own ADR.
    | **Streaming** | NATS hub 64, RisingWave 768, synthetic producer 128 | 960 |
    | **Batch** | Postgres 364, Dagster 800, its run 768 | 1,932 |
 
-   - **Dagster** (webserver, daemon, code server) is `replicas: 0` in Git by
-     default. With the daemon at zero nothing is dequeued, so no run starts.
+   - **Dagster** is off in Git by default: the webserver and the code server
+     at `replicas: 0`, and the daemon removed (`dagsterDaemon.enabled:
+     false`), since the pinned chart (1.13.27) hard-codes the daemon's
+     `replicas: 1`. With no daemon nothing is dequeued, so no run starts.
    - **Postgres is hibernated declaratively**, by the annotation
      `cnpg.io/hibernation: "on"` on staging's `Cluster`. In CloudNativePG 1.30
      (the operator running on the node is 1.30.1, from chart 0.29.1), the
@@ -151,7 +154,7 @@ is the subject of its own spike and, if it passes, its own ADR.
      check. The implementation teaches
      [`tools/resource_budget.py`](../../tools/resource_budget.py) that a
      hibernated `Cluster` requests nothing, and that a Dagster Application
-     whose daemon has zero replicas has no run slot. A pull request that
+     whose daemon Deployment is absent has no run slot. A pull request that
      switches on more than fits fails the check before it merges.
 
    **The trade-off, stated plainly: staging no longer exercises the pipeline
@@ -177,10 +180,16 @@ is the subject of its own spike and, if it passes, its own ADR.
    between the environments; each environment's NetworkPolicy admits Grafana's
    namespace to its RisingWave port only, and still denies staging to prod.
    Grafana is the operator's viewer: it holds two read-only credentials and
-   writes nothing to either store. The risk it adds is that one compromised
-   Grafana reads both live stores. Both hold the same kind of data, the
-   viewer is behind a login, and the roles are read-only, so that risk is
-   accepted.
+   writes nothing to either store. Two risks are accepted with it:
+   - **one compromised Grafana reads both live stores,** and prod's holds the
+     Pi's real events, which ADR-0045 keeps private (decision 11), while
+     staging's holds synthetic ones. The viewer is behind a login and its
+     roles are read-only;
+   - **a change to Grafana itself** (an upgrade, a plugin, a dashboard file)
+     reaches the viewer that holds prod's credential with no staging copy to
+     try it on first. So Grafana is first deployed with staging's data source
+     only, and prod's is added once it works; later changes are reviewed
+     like any change to an operator UI, and reverted by Git.
 
 3. **The `hello` Application is removed.** It is the M1 smoke test, a trivial
    nginx that proved the GitOps loop; Argo CD's own Applications and Dagster
@@ -294,6 +303,11 @@ yet deployed (prod without M6, staging in batch mode: 5,054, room 578).
   `ScheduledBackup` is suspended (`spec.suspend: true`) with the `Cluster`,
   and resumed with it, so no failing Backup objects pile up. That this is
   enough is verified in the implementation pull request.
+- **Staging's public dashboards go stale.** The pages at
+  `lagom-staging.ofantini.com` stay in R2 while staging is off, with their
+  `Page built at` stamp showing their age, and are rebuilt only by a run in
+  batch mode, which does not fit once M6 is in prod. The runbook's staging
+  checks of the dashboards' publishing path need batch mode too.
 - **One run at a time.** A slow run delays the next job of any kind. A hung
   run holds the slot until Kubernetes stops it (`activeDeadlineSeconds:
   1500`) and Dagster's run monitoring, on by default in the chart, marks it

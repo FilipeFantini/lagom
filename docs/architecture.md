@@ -444,7 +444,7 @@ pull request:
 
 | State | What runs | Requests |
 |---|---|---|
-| **Off**, the default | nothing: Dagster at zero replicas, Postgres hibernated (`cnpg.io/hibernation: "on"`: the Pod goes, the volume and its data stay) | 0 |
+| **Off**, the default | nothing: Dagster's webserver and code server at zero replicas and its daemon disabled, Postgres hibernated (`cnpg.io/hibernation: "on"`: the Pod goes, the volume and its data stay) | 0 |
 | **Streaming** | NATS hub, RisingWave, synthetic producer ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md)) | 960 MiB |
 | **Batch** | Postgres, Dagster and its run | 1,932 MiB |
 
@@ -819,8 +819,9 @@ would take the total to about 7,100 MiB. ADR-0046 frees the room:
 - **shared streaming components**: one hub, one RisingWave and one Redpanda
   Connect process in streams mode per environment, for every streaming source.
 
-The budget check counts what Git declares: a hibernated `Cluster` and a
-Dagster whose daemon is at zero replicas request nothing. Requests in MiB:
+The budget check counts what Git declares: a hibernated `Cluster` requests
+nothing, Deployments at zero replicas request nothing, and a Dagster whose
+daemon is disabled has no run slot. Requests in MiB:
 
 | Point | Total | Room under 5,632 |
 |---|---|---|
