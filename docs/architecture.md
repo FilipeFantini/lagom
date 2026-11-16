@@ -929,6 +929,12 @@ not fit (ADR-0047, decision 12).
   The Mac session's token can, as an administrator, edit rulesets and
   environments; for it the gates hold by convention — see
   [CONTRIBUTING](../CONTRIBUTING.md#branch-protection).
+- **Scanners find known defects, not intent.** Dependabot reports published
+  vulnerabilities in dependencies and CodeQL blocks new high-severity code
+  findings ([ADR-0048](adr/0048-dependency-and-code-scanning-for-the-public-repository.md)).
+  Harmful code that looks ordinary — written by an agent steered by text it
+  read, say — passes both. What stops it reaching the node is the reviewer
+  and the operator's approval of each pin.
 
 ## 13. Runbook
 
