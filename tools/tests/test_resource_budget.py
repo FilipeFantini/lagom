@@ -308,7 +308,7 @@ def test_run_queue_accepts_one_run_at_a_time() -> None:
     assert run_queue_violations("dagster-staging", [dagster_instance(queued(1))]) == []
 
 
-@pytest.mark.parametrize("limit", [-1, 2, 0, None])
+@pytest.mark.parametrize("limit", [-1, 2, 0, None, True, 1.0, "1"])
 def test_run_queue_refuses_any_other_limit(limit: object) -> None:
     from resource_budget import run_queue_violations
 

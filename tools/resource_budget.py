@@ -235,7 +235,8 @@ def run_queue_violations(label: str, docs: list[dict[str, Any]]) -> list[str]:
             found.append(f"{name}: run coordinator is not a {QUEUED_RUN_COORDINATOR}")
             continue
         limit = (coordinator.get("config") or {}).get("max_concurrent_runs")
-        if limit != RUN_SLOTS:
+        # `type(...) is int`: YAML's `true` and `1.0` compare equal to 1 in Python.
+        if type(limit) is not int or limit != RUN_SLOTS:
             found.append(
                 f"{name}: max_concurrent_runs is {limit!r}, not {RUN_SLOTS}; "
                 "the budget counts one run at a time"
