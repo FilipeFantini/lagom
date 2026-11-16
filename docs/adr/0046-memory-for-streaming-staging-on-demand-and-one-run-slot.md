@@ -5,6 +5,11 @@
   that day; how each is carried out, the CI checks and the figures were the
   architect's proposal. Being built in the pull requests that follow; what
   each one built is in the notes at the end.
+- **Superseded in part by:** [ADR-0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)
+  (proposed): the four modes of decisions 1 and 2 become two states, on and
+  off; decision 9 is superseded, the archive job is validated in staging;
+  decisions 4, 7 and 8 are amended, since no stream processor is built; the
+  Flux spike is parked.
 - **Date:** 2026-11-16
 - **Decided by:** the operator, on 2026-11-16, in two rounds.
   - First: staging on demand, with its Postgres hibernated while off; one
