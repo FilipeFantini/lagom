@@ -1,6 +1,8 @@
 # ADR-0030 — ofantini.com as the domain; operator UIs at ops.ofantini.com behind Cloudflare Access
 
 - **Status:** Accepted
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): `/dagster-staging` goes with staging's
+  Dagster UI; `/grafana` comes, one Grafana for both environments
 - **Date:** 2026-11-07
 - **Decided by:** the operator, on 2026-11-05 and 2026-11-07.
   - **2026-11-05:** they chose Cloudflare Tunnel + Access over

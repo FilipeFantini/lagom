@@ -7,9 +7,9 @@
 - **Amended by:** [ADR-0033](0033-dagster-alerts-through-healthchecks.md):
   Dagster takes over the alarm, and the CronJobs retire with it, without the
   week in prod or ADR-0023's acceptance.
-- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging's Dagster is off (no daemon,
-  webserver and code server at zero replicas) unless switched on, and the run queue holds one run per environment, of
-  any job, not only the pipeline's tag.
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): staging runs no Dagster UI, and no Dagster
+  at all outside its batch mode; the run queue holds one run per
+  environment, of any job, not only the pipeline's tag.
 - **Supersedes:** in [ADR-0007](0007-three-environments.md), "staging runs no
   Dagster". The reason given there was memory on the 4 GB node, and it no
   longer holds ([ADR-0024](0024-ci-ceiling-on-the-8-gb-node.md)).
