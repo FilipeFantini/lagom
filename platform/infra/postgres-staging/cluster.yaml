@@ -8,8 +8,7 @@
 # to one is made to both.
 # The additions are `pg_hba` and the `lagom_dev` role, for the developer
 # (ADR-0014). The differences: no backup, since staging's data is rebuilt by
-# loading the source again and prod's backup is the protection (ADR-0046), and
-# its memory request, set from staging's own measurement.
+# loading the source again and prod's backup is the protection (ADR-0046).
 # The reasoning behind each shared setting is written once, in the prod file.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster

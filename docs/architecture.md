@@ -329,7 +329,9 @@ pooler are declared the same way when their triggers arrive.
 Barman Cloud plugin, running beside the operator, archives every WAL segment
 and takes a daily base backup into an R2 bucket per environment. Each Cluster
 names an `ObjectStore` in `spec.plugins`, and the plugin adds a sidecar to its
-Pod. Staging and prod each have their own bucket; procedures are in the
+Pod. Prod has its bucket; staging was backed up to its own until 2026-11-16,
+when its backup went
+([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)). Procedures are in the
 runbook's *Backup and restore*. cert-manager issues the TLS certificates the plugin and
 the operator use.
 
@@ -763,7 +765,7 @@ adds that 70 MiB request as its allowance for components outside Git.
 | CloudNativePG operator | 64 MB | measured 24 MiB with no Cluster, 31 MiB reconciling one (request 64, limit 192, `GOMEMLIMIT` 150MiB) ([ADR-0012](adr/0012-cloudnative-pg.md)) |
 | Backup: Barman Cloud plugin and cert-manager | 160 MB | plugin 32, cert-manager controller 48, cainjector 48, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB, and on 2026-11-16 the cert-manager three at 39, 35 and 22, from which the controller and cainjector came down from 64 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
 | Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
-| Dagster | 800 MB | per environment ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
+| Dagster | 800 MB | in prod; staging 640, its webserver at zero replicas since 2026-11-16 ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
 | `cloudflared` | 48 MB | the tunnel that serves the operator's UIs behind Cloudflare Access, both environments ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)): request 48 MiB, limit 128 MiB, `GOMEMLIMIT` 100MiB. Measured 24 MiB at start and 31 MiB a few minutes later, on 2026-11-07, idle (Cloudflare's figure is ~30 MB); the request is re-set from `kubectl top` after a week |
 | **Core requests** | **~2.20 GB** | |
 | **Left within the ceiling for ephemeral jobs** | **~3.4 GB** | |
@@ -896,8 +898,9 @@ validated locally instead.
   (local-path pins the volume to a node; either node affinity or Longhorn).
 - **Postgres backup: paid on 2026-10-28, with one open check.** The debt
   accepted in [ADR-0019](adr/0019-postgres-backup-deferred.md) is paid by
-  [ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md): both
-  environments archive WAL and take daily backups to R2, and a restore was
+  [ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md): prod archives
+  WAL and takes daily backups to R2 (staging did too until 2026-11-16,
+  ADR-0046), and a restore was
   tested (runbook, *Backup and restore*). Retention deleted its first expired
   backup on 2026-11-05 (ADR-0025 notes). Still unproven: a rebuild of the node
   that restores from the bucket, instead of re-loading, has not been run.
@@ -1636,6 +1639,7 @@ objects with it, and the `SealedSecret` its Secret:
 
 ```bash
 kubectl -n staging get cluster postgres -o jsonpath='{.spec.plugins}'   # empty: synced
+kubectl -n staging get pod postgres-1                                    # 1/1 Running: restarted without the sidecar
 kubectl -n staging delete scheduledbackup daily
 kubectl -n staging delete objectstore r2-backups
 kubectl -n staging delete sealedsecret r2-backups
@@ -1999,7 +2003,7 @@ the Secret and the Pod, and rolls each Dagster webserver.
 kubectl --context <node-name> -n cloudflared get pods                       # cloudflared 1/1 Running
 kubectl --context <node-name> -n cloudflared logs deploy/cloudflared | grep -c 'Registered tunnel connection'   # 4
 kubectl --context <node-name> -n prod get pods -l component=dagster-webserver      # 1/1 Running: the probe follows the prefix
-kubectl --context <node-name> -n staging get pods -l component=dagster-webserver   # same
+kubectl --context <node-name> -n staging get pods -l component=dagster-webserver   # none since 2026-11-16: staging has no UI
 curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://ops.ofantini.com/dagster/server_info
 # 302 to https://<team-name>.cloudflareaccess.com/...: the login comes first
 ```
@@ -2065,8 +2069,8 @@ The hostname, DNS and Access need nothing new.
 
 ### Backup and restore (M3)
 
-Each environment's Postgres is backed up to its own R2 bucket by the Barman
-Cloud plugin ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)):
+Prod's Postgres is backed up to its R2 bucket by the Barman Cloud plugin, and
+staging's was until 2026-11-16 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)):
 
 | Environment | Bucket | Retention |
 |---|---|---|
