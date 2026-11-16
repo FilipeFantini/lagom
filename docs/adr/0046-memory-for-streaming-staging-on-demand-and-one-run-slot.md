@@ -516,3 +516,8 @@ without rewriting it.
   zero replicas; cert-manager's controller and cainjector request 48 MiB.
   The budget check's total falls from 5,070 to 4,958 MiB. Prod's Postgres
   trim waits for a reading during a run, as decision 8 says.
+- **2026-11-16 — one run slot per environment (decision 6).** Both Dagster
+  instances queue runs one at a time (`maxConcurrentRuns: 1`), and
+  `tools/resource_budget.py` fails an Application that declares a run slot
+  whose rendered instance allows any other number, or has no queue. The tag
+  limit on `usgs` stays. The budget's total does not change.

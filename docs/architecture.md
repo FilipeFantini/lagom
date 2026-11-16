@@ -261,6 +261,14 @@ read. Its first content is USGS on DuckLake:
 - the job `dashboards` after each successful `usgs` run: it renders the boards
   against the lake with read-only credentials and publishes them (§9).
 
+**One run at a time per environment**, of any job: the run queue starts a run
+only when the one before it has ended (`maxConcurrentRuns: 1` in
+`platform/infra/dagster-<env>/values.yaml`), because the budget in §11 counts
+one run's memory per environment
+([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)).
+A new batch source takes turns in that slot. Two `usgs` runs are also kept
+apart by their tag, a rule of their own: they would share dlt's cursor.
+
 Dagster raises its own alarm through the same Healthchecks.io check
 ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)): a
 sensor pings it after each successful `usgs` run, and another calls its
@@ -727,7 +735,11 @@ lacks a memory request, a memory limit, or a CPU request (for a CloudNativePG
 declared on the `ObjectStore` it names; Pods a controller creates at run
 time, such as Dagster's runs, are declared on their Application with the
 annotation `lagom.dev/ephemeral-memory-request` and counted as ephemeral
-jobs), or if the total
+jobs), or if an Application that declares runs that way does not limit them
+to one at a time (its rendered Dagster instance must queue runs with
+`max_concurrent_runs: 1`, since the annotation counts one run;
+[ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)),
+or if the total
 exceeds the ceiling above, which it reads from this file. The total is resident
 requests, plus **every ephemeral job at once**, plus an **allowance for
 components k3s installs outside Git**.
@@ -826,11 +838,11 @@ would take the total to about 7,100 MiB. ADR-0046 frees the room:
   requests 1,600 MiB instead of 1,932, and nothing counts while it is off;
 - **one Grafana** for both environments, 128;
 - **`hello` removed**, 16;
-- **one run slot per environment for every batch job**: Dagster's run queue
-  set to one run at a time (`maxConcurrentRuns: 1`; today only runs tagged
-  `lagom/pipeline: usgs` are limited, and the chart's default is no limit), so
-  a new batch source adds no request; the budget check fails an Application
-  that declares a run slot without that limit;
+- **one run slot per environment for every batch job** (done on 2026-11-16):
+  Dagster's run queue holds one run at a time (`maxConcurrentRuns: 1`; until
+  then only runs tagged `lagom/pipeline: usgs` were limited, and the chart's
+  default is no limit), so a new batch source adds no request; the budget
+  check fails an Application that declares a run slot without that limit;
 - **shared streaming components**: one hub, one RisingWave and one Redpanda
   Connect process in streams mode per environment, for every streaming source;
 - **platform requests trimmed to what was measured**, 140: `argocd-server`

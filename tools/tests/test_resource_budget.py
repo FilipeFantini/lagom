@@ -282,3 +282,58 @@ def test_declared_ephemeral_absent_without_annotation() -> None:
 
     assert declared_ephemeral({"metadata": {"name": "x"}}) is None
     assert declared_ephemeral({"metadata": {"name": "x", "annotations": None}}) is None
+
+
+def dagster_instance(coordinator: dict[str, Any] | None) -> dict[str, Any]:
+    import yaml
+
+    instance = {"run_coordinator": coordinator} if coordinator is not None else {}
+    return {
+        "kind": "ConfigMap",
+        "metadata": {"name": "dagster-instance"},
+        "data": {"dagster.yaml": yaml.safe_dump(instance)},
+    }
+
+
+def queued(limit: object) -> dict[str, Any]:
+    config: dict[str, Any] = {"tag_concurrency_limits": []}
+    if limit is not None:
+        config["max_concurrent_runs"] = limit
+    return {"class": "QueuedRunCoordinator", "config": config}
+
+
+def test_run_queue_accepts_one_run_at_a_time() -> None:
+    from resource_budget import run_queue_violations
+
+    assert run_queue_violations("dagster-staging", [dagster_instance(queued(1))]) == []
+
+
+@pytest.mark.parametrize("limit", [-1, 2, 0, None])
+def test_run_queue_refuses_any_other_limit(limit: object) -> None:
+    from resource_budget import run_queue_violations
+
+    assert run_queue_violations("dagster-staging", [dagster_instance(queued(limit))]) == [
+        f"dagster-staging ConfigMap dagster-instance: max_concurrent_runs is {limit!r}, "
+        "not 1; the budget counts one run at a time"
+    ]
+
+
+def test_run_queue_refuses_a_coordinator_that_does_not_queue() -> None:
+    from resource_budget import run_queue_violations
+
+    default = {"class": "DefaultRunCoordinator", "config": {}}
+    assert run_queue_violations("x", [dagster_instance(default)]) == [
+        "x ConfigMap dagster-instance: run coordinator is not a QueuedRunCoordinator"
+    ]
+    assert run_queue_violations("x", [dagster_instance(None)]) == [
+        "x ConfigMap dagster-instance: run coordinator is not a QueuedRunCoordinator"
+    ]
+
+
+def test_run_queue_refuses_a_run_slot_with_no_instance() -> None:
+    from resource_budget import run_queue_violations
+
+    other = {"kind": "ConfigMap", "metadata": {"name": "env"}, "data": {"A": "1"}}
+    assert run_queue_violations("x", [other]) == [
+        "x declares a run slot but renders no Dagster instance to limit it"
+    ]
