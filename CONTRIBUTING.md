@@ -222,6 +222,28 @@ What it does not enforce:
 4. Only then is `agent review` added to the `main` ruleset's required checks;
    a required check that never reports blocks every pull request.
 
+**The Actions policy that lets the two gates run.** Both gates run on
+`pull_request_target`, which GitHub blocks by default in public repositories
+from 2026-12-02 unless an Actions policy allows it; it was tried in two
+brownouts, on 2026-11-09 and 2026-11-16 from 16:00 to 18:00 UTC, when both
+gates failed to start and no pull request could merge
+([GitHub changelog](https://github.blog/changelog/2026-11-02-pull_request_target-blocked-by-default-december-2/)).
+The trigger runs with the repository's secrets on behalf of anyone's pull
+request, which is why GitHub closes it; the gates are safe with it because
+they run only `main`'s code and read the pull request's files as data, never
+running them. On 2026-11-16 the operator created the repository policy
+`Allow the merge gates on pull_request_target` (*Settings → Actions →
+Policies*): enforcement active, workflow paths
+`.github/workflows/guardrail-approval.yml` and
+`.github/workflows/agent-review.yml`, one rule restricting their events to
+`pull_request_target`. Any other workflow that adds the trigger stays
+blocked. The policy lives outside Git, so a rebuilt or forked repository needs
+it created again; the site's repository needs the same one. Inspect it with
+`gh api repos/FilipeFantini/lagom/actions/policies` (and
+`/actions/policies/<id>` for its paths and rules). How it takes precedence
+over GitHub's default rule is not documented; it is confirmed by the gates
+running after 2026-12-02.
+
 Until 2026-10-27 `main` had no protection: on a private repository it needs a
 paid plan, and the operator accepted that as an exception (2026-10-13) and as
 debt for ADR-0013 (2026-10-16).
