@@ -1,9 +1,10 @@
 # ADR-0046 — Memory for streaming: a lean staging on demand, one Grafana, one run slot per environment
 
-- **Status:** Proposed. The decisions below were taken by the operator in
-  conversation on 2026-11-16; how each is carried out, the CI checks and the
-  figures are the architect's proposal, accepted when this pull request is
-  approved. Nothing is built yet: the implementation pull requests follow.
+- **Status:** Accepted, by the operator approving its pull request (#101) on
+  2026-11-16. The decisions below were taken by the operator in conversation
+  that day; how each is carried out, the CI checks and the figures were the
+  architect's proposal. Being built in the pull requests that follow; what
+  each one built is in the notes at the end.
 - **Date:** 2026-11-16
 - **Decided by:** the operator, on 2026-11-16, in two rounds.
   - First: staging on demand, with its Postgres hibernated while off; one
@@ -504,3 +505,14 @@ its memory documentation and issue 7450; Bytewax's repository activity as
 indexed by ecosyste.ms. None of those processors was run. The longest period
 a Healthchecks.io check allows is from memory of its documentation and
 checked when set.
+
+## Notes
+
+The text above is kept as accepted. These notes record what was built,
+without rewriting it.
+
+- **2026-11-16 — `hello` removed, and the first trims (decisions 5 and 8).**
+  The `hello` Application and its manifests are gone; `argocd-server` runs at
+  zero replicas; cert-manager's controller and cainjector request 48 MiB.
+  The budget check's total falls from 5,070 to 4,958 MiB. Prod's Postgres
+  trim waits for a reading during a run, as decision 8 says.

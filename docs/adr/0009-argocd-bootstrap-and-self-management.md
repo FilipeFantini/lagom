@@ -2,7 +2,7 @@
 
 - **Status:** Accepted — decision 4 (the deploy key) superseded by
   [ADR-0017](0017-public-repository-from-a-snapshot.md)
-- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) (proposed): the rejection of a headless Argo CD is
+- **Amended by:** [ADR-0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): the rejection of a headless Argo CD is
   reversed; `argocd-server` is removed, since the operator does not use the UI
 - **Date:** 2026-10-13
 

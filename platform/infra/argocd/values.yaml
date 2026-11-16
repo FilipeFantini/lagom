@@ -7,7 +7,7 @@
 # compressible, so going over it means running slower, not dying, and a CPU
 # limit would only add throttling.
 
-# Single sign-on is not used: operators log in as admin over Tailscale.
+# Single sign-on is not used: there is no UI to log in to (server, below).
 dex:
   enabled: false
 
@@ -39,7 +39,14 @@ repoServer:
     requests: {cpu: 50m, memory: 128Mi}
     limits: {memory: 384Mi}
 
+# No UI and no API server (ADR-0046, reversing ADR-0009's rejection of a
+# headless install): the operator does not use the UI, and the `argocd` CLI
+# talks to the cluster through the kubeconfig with `--core`. Reconciliation,
+# self-heal and pruning live in the application controller. Zero replicas
+# keeps the chart's objects without the Pod, as for the ApplicationSet
+# controller above; the resources stay declared for the Pod if it returns.
 server:
+  replicas: 0
   resources:
     requests: {cpu: 25m, memory: 64Mi}
     limits: {memory: 192Mi}

@@ -6,12 +6,13 @@
 crds:
   enabled: true
 
-# Requests and limits are starting figures, not measurements: each is a small
-# Go process. Corrected from `kubectl top` once running (ADR-0025).
+# Requests set from `kubectl top` (ADR-0046): on 2026-11-16 the controller
+# used 39 MiB, the cainjector 35 and the webhook 22, so the first two request
+# 48 (from 64) and the webhook keeps 32. The limits are unchanged.
 # GOMEMLIMIT keeps each runtime under its limit instead of holding idle heap
 # (architecture.md section 11).
 resources:
-  requests: {cpu: 10m, memory: 64Mi}
+  requests: {cpu: 10m, memory: 48Mi}
   limits: {memory: 192Mi}
 extraEnv:
   - {name: GOMEMLIMIT, value: 160MiB}
@@ -25,7 +26,7 @@ webhook:
 
 cainjector:
   resources:
-    requests: {cpu: 10m, memory: 64Mi}
+    requests: {cpu: 10m, memory: 48Mi}
     limits: {memory: 192Mi}
   extraEnv:
     - {name: GOMEMLIMIT, value: 160MiB}
