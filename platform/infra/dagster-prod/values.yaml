@@ -70,8 +70,16 @@ dagsterDaemon:
     type: QueuedRunCoordinator
     config:
       queuedRunCoordinator:
+        # One run at a time, of any job (ADR-0046): the budget check counts one
+        # run's memory per environment (the Application's
+        # lagom.dev/ephemeral-memory-request), and fails unless this is 1. A
+        # new batch source then takes turns in the same slot instead of adding
+        # a run nobody counted. The chart's default is no limit.
+        maxConcurrentRuns: 1
         # Two runs of the pipeline never overlap: both would read dlt's cursor
-        # and write it back (the CronJob's concurrencyPolicy: Forbid).
+        # and write it back (the CronJob's concurrencyPolicy: Forbid). Kept
+        # beside the limit above, because it is a correctness rule, not a
+        # budget one, and must hold if that limit is ever raised.
         tagConcurrencyLimits:
           - key: lagom/pipeline
             value: usgs

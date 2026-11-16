@@ -440,8 +440,9 @@ prod after these.
       replicas, cert-manager's controller and cainjector at 48 MiB
       (2026-11-16)
 - [ ] Prod's Postgres at 256 MiB, once a reading during a run confirms it
-- [ ] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
+- [x] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
       instances, and the budget check failing a run slot without it
+      (2026-11-16)
 - [ ] A lean staging on demand: no Dagster UI and no backup; Postgres
       hibernated while off; the budget check counting the mode declared in
       Git; the quota capped at the batch mode; staging's alarm on failures

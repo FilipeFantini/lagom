@@ -24,6 +24,9 @@ ObjectStore must be rendered by the same Application as the Cluster.
 Pods a controller creates at run time from no rendered spec, such as Dagster's
 runs, are declared on their Application with the annotation
 `lagom.dev/ephemeral-memory-request` and counted as one ephemeral job each.
+That count is true only while one run at a time can start, so an Application
+that declares it must render a Dagster instance whose run queue allows exactly
+one run (`max_concurrent_runs: 1`, ADR-0046); anything else is a violation.
 
 Exits 1 on any violation. Run from anywhere:
 
@@ -53,6 +56,9 @@ CNPG_API_VERSION = "postgresql.cnpg.io/v1"
 OBJECT_STORE_API_VERSION = "barmancloud.cnpg.io/v1"
 BARMAN_PLUGIN = "barman-cloud.cloudnative-pg.io"
 EPHEMERAL_ANNOTATION = "lagom.dev/ephemeral-memory-request"
+QUEUED_RUN_COORDINATOR = "QueuedRunCoordinator"
+# The runs an annotation counts: one at a time per Application (ADR-0046).
+RUN_SLOTS = 1
 
 _BINARY = {"Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40}
 _DECIMAL = {"k": 10**3, "M": 10**6, "G": 10**9, "T": 10**12}
@@ -204,6 +210,40 @@ def declared_ephemeral(app: dict[str, Any]) -> Workload | None:
     return Workload(app["metadata"]["name"], "declared", "runs", 1, parse_bytes(value))
 
 
+def run_queue_violations(label: str, docs: list[dict[str, Any]]) -> list[str]:
+    """Check that an Application which declares a run slot limits runs to that slot.
+
+    The annotation counts one run's memory. Dagster's run queue decides how
+    many runs start at once; its default is no limit, so a second source with
+    its own tag, or a run launched with none, would run beside the first and
+    the budget would not show it. The instance configuration is the ConfigMap
+    whose `dagster.yaml` the daemon reads.
+    """
+    instances = [
+        doc
+        for doc in docs
+        if doc.get("kind") == "ConfigMap" and "dagster.yaml" in (doc.get("data") or {})
+    ]
+    if not instances:
+        return [f"{label} declares a run slot but renders no Dagster instance to limit it"]
+    found = []
+    for config_map in instances:
+        name = f"{label} ConfigMap {config_map['metadata']['name']}"
+        instance = yaml.safe_load(config_map["data"]["dagster.yaml"]) or {}
+        coordinator = instance.get("run_coordinator") or {}
+        if coordinator.get("class") != QUEUED_RUN_COORDINATOR:
+            found.append(f"{name}: run coordinator is not a {QUEUED_RUN_COORDINATOR}")
+            continue
+        limit = (coordinator.get("config") or {}).get("max_concurrent_runs")
+        # `type(...) is int`: YAML's `true` and `1.0` compare equal to 1 in Python.
+        if type(limit) is not int or limit != RUN_SLOTS:
+            found.append(
+                f"{name}: max_concurrent_runs is {limit!r}, not {RUN_SLOTS}; "
+                "the budget counts one run at a time"
+            )
+    return found
+
+
 def replicas(doc: dict[str, Any]) -> int:
     if doc["kind"] in {"Deployment", "StatefulSet", "ReplicaSet"}:
         count: int = doc["spec"].get("replicas", 1)
@@ -352,9 +392,10 @@ def main() -> int:
     for app in load_applications(repo):
         app_name = app["metadata"]["name"]
         declared = declared_ephemeral(app)
+        docs = render_application(repo, app)
         if declared is not None:
             ephemeral.append(declared)
-        docs = render_application(repo, app)
+            problems += run_queue_violations(app_name, docs)
         stores = {d["metadata"]["name"]: d for d in docs if is_object_store(d)}
         for doc in docs:
             if is_cnpg_cluster(doc):
@@ -390,7 +431,7 @@ def main() -> int:
         ["## Resource budget", "", *lines, "", f"**{status} budget**: {total / MI:.0f} MiB"]
     )
     if problems:
-        report += "\n\n### Missing resources\n\n" + "\n".join(f"- {p}" for p in problems)
+        report += "\n\n### Violations\n\n" + "\n".join(f"- {p}" for p in problems)
     print(report)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

@@ -19,6 +19,13 @@ action without an explicit flag.
 ruff, mypy, and pytest settings, and `uv.lock` pins them. CI runs
 `ruff format --check`, `ruff check`, `mypy --strict`, and `pytest` on it.
 
+`resource_budget.py` also fails an Application that declares its run Pods
+with `lagom.dev/ephemeral-memory-request` but whose rendered Dagster instance
+does not queue runs one at a time (`max_concurrent_runs: 1`): the annotation
+counts one run. It does not check what a run requests; that the code
+location's run resources equal the annotation is a test in
+`platform/orchestration/tests/test_definitions.py`.
+
 `resource_budget.py` renders charts with `helm template`, and
 `manifest_policy.py` uses that same rendering. A release name, chart,
 repository, version or namespace that starts with `-` is refused, and so is a
