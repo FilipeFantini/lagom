@@ -33,9 +33,14 @@ telemetry:
   enabled: false
 
 dagsterWebserver:
-  # Served at https://ops.ofantini.com/dagster-staging, behind Cloudflare Access
-  # (ADR-0030). The webserver mounts every route under this prefix, the UI's
-  # links and WebSocket included, and answers only a redirect at "/".
+  # No UI in staging (ADR-0046): the operator rarely validates there, and a
+  # staging run is followed in its Pod's logs and through the failure alarm.
+  # Zero replicas keeps the chart's objects without the Pod (160 MiB); the
+  # settings below stay for the day it returns, with the tunnel's rule for
+  # https://ops.ofantini.com/dagster-staging (cloudflared/config.yaml).
+  replicaCount: 0
+  # The webserver mounts every route under this prefix, the UI's links and
+  # WebSocket included, and answers only a redirect at "/".
   pathPrefix: /dagster-staging
   # The chart's probe asks for /server_info at the root, which the prefix
   # leaves unanswered: the Pod would never be ready. Helm merges this path

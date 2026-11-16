@@ -441,7 +441,7 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | Environment | Where | What runs there |
 |---|---|---|
 | `dev` | code on the operator's machine, data in staging | dbt and dlt run from the machine's `uv` environments against the `lagom_dev` database in staging's Postgres, through `kubectl port-forward` over the tailnet; unit tests need no database; manifests are checked with a server-side dry run ([ADR-0014](adr/0014-develop-against-staging.md)); agents use `kubectl diff -n <namespace> -f`, since `apply` is denied to them ([CONTRIBUTING](../CONTRIBUTING.md#workflow)) |
-| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): webserver, daemon and the platform's code location, with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07 |
+| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07 |
 | `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`platform/infra/dagster-prod/`](../platform/infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
 
 **Staging on demand** ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md),
@@ -457,8 +457,9 @@ validated, one mode at a time:
 | `batch` | Postgres, Dagster's daemon and code server, its run | 1,600 MiB |
 
 - **Lean:** no Dagster UI in staging (`ops.ofantini.com/dagster-staging`
-  goes) and no backup (prod's, with its restore test, is the protection);
-  Postgres at 256 MiB and the daemon at 256, above what was measured.
+  gone) and no backup (prod's, with its restore test, is the protection),
+  both done on 2026-11-16; Postgres at 256 MiB and, once staging runs only on
+  demand, the daemon at 256, above what was measured.
 - **Switched by agents:** the mode is one field in a small file outside the
   guarded list, checked in CI to hold only one of the four values. The pull
   request that brings a change to validate sets it; an agent merges the one
@@ -589,7 +590,8 @@ path will serve partners' reports, each with its own Access application and
 policy.
 
 The operator's tools share one hostname, `ops.ofantini.com`, one path per
-tool (`/dagster`, `/dagster-staging`), so a new tool needs no DNS or Access
+tool (`/dagster`; `/dagster-staging` until staging's UI was removed on
+2026-11-16), so a new tool needs no DNS or Access
 change; each tool serves itself under its path. What the tunnel serves is the
 list of rules in
 [`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml); any
@@ -716,11 +718,12 @@ for k3s's growth over days and the shims of new Pods, which requests do not
 count ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It was 2.2 GB on
 the 4 GB node ([ADR-0016](adr/0016-ci-ceiling-2-2-gb.md)), where M3 did not
 fit, hence the move ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Today's
-total is 4,958 MiB: Dagster in both environments (each 800 resident and 768
-per run) and `cloudflared`, 48, which serves their UIs behind a login
+total is 4,734 MiB: Dagster in both environments (800 resident in prod, 640 in
+staging, which has no UI, and 768 per run) and `cloudflared`, 48, which serves their UIs behind a login
 ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). It was 5,070
-until 2026-11-16, when `hello` (16), `argocd-server` (64) and 32 of
-cert-manager's requests went
+until 2026-11-16, when `hello` (16), `argocd-server` (64), 32 of
+cert-manager's requests, staging's webserver (160) and staging's backup
+sidecar (64) went
 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)). It was 5,582,
 50 MiB under the ceiling, until the two CronJobs on Postgres were retired on
 2026-11-07, which freed 256 each
@@ -765,17 +768,19 @@ adds that 70 MiB request as its allowance for components outside Git.
 | **Core requests** | **~2.20 GB** | |
 | **Left within the ceiling for ephemeral jobs** | **~3.4 GB** | |
 
-Staging adds ~1.2 GB:
+Staging adds ~0.94 GB:
 
-- its own Postgres, ~364 MB ([ADR-0007](adr/0007-three-environments.md)): a
-  second `Cluster` with the same request and limit as prod's, plus the 64 MiB
-  backup sidecar, which the CI check counts like the first
-  ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/cluster.yaml));
-- its own Dagster, 800 MB.
+- its own Postgres, 300 MB ([ADR-0007](adr/0007-three-environments.md)): a
+  second `Cluster` with the same request and limit as prod's
+  ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/cluster.yaml)),
+  with no backup sidecar since 2026-11-16;
+- its own Dagster, 640 MB: daemon and code server, with no webserver since
+  2026-11-16.
 
-That leaves **~2.3 GB** for jobs. Staging's ResourceQuota caps everything
-staging requests at 2432 MiB. Staging requests 1,932 MiB in all (Postgres 364,
-Dagster 800, its run 768); under
+That leaves **~2.5 GB** for jobs. Staging's ResourceQuota caps everything
+staging requests at 2432 MiB. Staging requests 1,708 MiB in all (Postgres 300,
+Dagster 640, its run 768; 1,932 until 2026-11-16, when its UI and backup
+went); under
 [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
 that becomes 0 while it is off and 1,600 in its batch mode (below).
 dlt and dbt do not appear above: they are ephemeral jobs, and their requests
@@ -1624,6 +1629,22 @@ with it:
 kubectl -n <namespace> delete cronjob usgs-pipeline
 ```
 
+Staging's backup was retired the same way on 2026-11-16
+([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)). After Argo CD has synced the `Cluster` without its plugin,
+delete the objects left behind; the `ScheduledBackup` takes its `Backup`
+objects with it, and the `SealedSecret` its Secret:
+
+```bash
+kubectl -n staging get cluster postgres -o jsonpath='{.spec.plugins}'   # empty: synced
+kubectl -n staging delete scheduledbackup daily
+kubectl -n staging delete objectstore r2-backups
+kubectl -n staging delete sealedsecret r2-backups
+```
+
+The files in the bucket `lagom-staging-backups` are deleted by hand in
+Cloudflare's dashboard, with the bucket and its token, when the operator
+chooses; nothing reads them.
+
 #### The catalog's read-only role
 
 The login `lake_reader` reads DuckLake's metadata tables and writes nothing
@@ -1682,6 +1703,10 @@ then check that the `dagster-k8s/config` tag shown in the Launchpad begins with
 `{"container_config": {"env": ...`.
 
 **Check it in staging** (replace `staging` with `prod` after):
+
+Since 2026-11-16 staging has no Dagster UI ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): where a step below names
+the Launchpad or a reload, it applies to prod; in staging, a new digest rolls
+the code server by itself, and the scheduled run is the check.
 
 ```bash
 # 1. CloudNativePG created the role: it is listed as reconciled, with no password shown
@@ -1781,6 +1806,10 @@ below; prod takes staging's digest after they pass.
 
 **Check it in staging** (replace `staging` with `prod` after):
 
+Since 2026-11-16 staging has no Dagster UI ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): where a step below names
+the Launchpad or a reload, it applies to prod; in staging, a new digest rolls
+the code server by itself, and the scheduled run is the check.
+
 1. **The Secrets exist** (names only; never read their values):
    `kubectl --context <node-name> -n staging get secret lake-reader-credentials r2-lake-reader r2-dashboards`.
 2. **The job is there with the right environment.** *Jobs → dashboards → Launchpad*
@@ -1837,8 +1866,9 @@ next run reads the new value; a running Pod keeps the old until it ends.
 The operator's tools share one HTTPS address, one path per tool, behind a
 login ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)):
 
-- `https://ops.ofantini.com/dagster/` is prod's Dagster;
-- `https://ops.ofantini.com/dagster-staging/` is staging's.
+- `https://ops.ofantini.com/dagster/` is prod's Dagster. Staging's,
+  `/dagster-staging/`, was served until 2026-11-16, when staging's UI was
+  removed ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)); the path now gets the tunnel's 404.
 
 Bookmark them with the final slash. Without it, Dagster answers with a
 redirect to the address with the slash, and since it does not know the
@@ -1954,7 +1984,7 @@ command extracts them:
 sed -e '1,/config.yaml: |/d' -e 's/^    //' platform/infra/cloudflared/config.yaml > /tmp/cloudflared.yaml
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress validate                                   # OK
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster/runs   # prod's rule
-cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster-staging  # staging's rule
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster-staging  # the 404 rule since 2026-11-16
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/               # the 404 rule
 rm /tmp/cloudflared.yaml
 ```
@@ -2030,8 +2060,8 @@ The hostname, DNS and Access need nothing new.
   `audTag`. Re-check the AUD tag.
 - **In the meantime,** the port-forward still works. Run `kubectl --context
   <node-name> -n <namespace> port-forward svc/dagster-dagster-webserver
-  3000:80`, then browse `http://localhost:3000/dagster` (prod) or
-  `http://localhost:3000/dagster-staging` (staging).
+  3000:80`, then browse `http://localhost:3000/dagster` (prod). Staging has no
+  webserver to forward to since 2026-11-16.
 
 ### Backup and restore (M3)
 
@@ -2040,7 +2070,7 @@ Cloud plugin ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)):
 
 | Environment | Bucket | Retention |
 |---|---|---|
-| staging | `lagom-staging-backups` | 7 days |
+| staging | none since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)); `lagom-staging-backups` keeps the old files until they are deleted by hand | — |
 | prod | `lagom-prod-backups` | 14 days ([ADR-0027](adr/0027-hourly-wal-archiving-and-14-day-prod-retention.md)) |
 
 Two kinds of copy land there:
@@ -2111,9 +2141,10 @@ YAML
 The heredoc is unquoted so the shell fills in `$N`. Nothing else in it
 starts with `$`.
 
-**Test a restore** into a temporary Cluster in the same namespace. It reads
-the bucket and archives nothing of its own. Its memory request is small so it
-fits staging's quota. Then compare the row counts and delete it:
+**Test a restore** into a temporary Cluster in the same namespace: `prod`,
+the only environment backed up since 2026-11-16. It reads the bucket and
+archives nothing of its own. Its memory request is small, since it runs beside
+prod's Postgres. Then compare the row counts and delete it:
 
 ```bash
 kubectl --context <node-name> -n <env> apply -f - <<'YAML' && kubectl --context <node-name> -n <env> wait cluster/restore-test --for=condition=Ready --timeout=900s
@@ -2203,19 +2234,21 @@ Dagster's own start-up and per-step overhead.
 
 ```bash
 kubectl --context <node-name> -n argocd get application dagster-staging   # Synced / Healthy
-kubectl --context <node-name> -n staging get pods | grep dagster           # three Running, plus finished runs
+kubectl --context <node-name> -n staging get pods | grep dagster           # two Running (no webserver since 2026-11-16), plus finished runs
 ```
 
-**Open the UI.** Prod's is `https://ops.ofantini.com/dagster` and
-staging's `https://ops.ofantini.com/dagster-staging`, behind the Access login
+**Open the UI.** Prod's is `https://ops.ofantini.com/dagster`, behind the
+Access login
 ([Operator UIs behind Cloudflare Access](#operator-uis-behind-cloudflare-access-m3)).
-When those are down, `kubectl port-forward` reaches it, with the kubeconfig.
-The UI has no login of its own: whoever reaches the port controls Dagster.
-Leave the command running, then browse http://localhost:3000/dagster-staging
-(the webserver serves under its path prefix); stop it with Ctrl+C:
+Staging has no UI since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): its runs are read
+from the terminal, below. When prod's is down, `kubectl port-forward` reaches
+it, with the kubeconfig. The UI has no login of its own: whoever reaches the
+port controls Dagster. Leave the command running, then browse
+http://localhost:3000/dagster (the webserver serves under its path prefix);
+stop it with Ctrl+C:
 
 ```bash
-kubectl --context <node-name> -n staging port-forward svc/dagster-dagster-webserver 3000:80
+kubectl --context <node-name> -n prod port-forward svc/dagster-dagster-webserver 3000:80
 ```
 
 *Runs* lists every run with its status and duration; open one to see each
@@ -2238,7 +2271,10 @@ A healthy run shows `loaded N rows into usgs_events`, two `STEP_SUCCESS`
 daemon logs `Completed scheduled launch of run …` at each :00 and :30. After
 an hour the Pod is gone, and the run is read in the UI.
 
-**Start a run on demand.** In the UI, *Jobs → usgs → Materialize all*. For
+**Start a run on demand** (prod; staging has no UI, so a change there is
+validated by the next scheduled run: `usgs` every 30 minutes, `dashboards`
+after it, `lake_maintenance` at 04:15 UTC). In the UI, *Jobs → usgs →
+Materialize all*. For
 `lake_maintenance`, which has no assets, *Jobs → lake_maintenance → Launchpad
 → Launch Run*. The run appears in *Runs*. If a scheduled run is in progress,
 it waits as *Queued*. Exercised on 2026-11-05: a `usgs` run started at
@@ -2246,8 +2282,8 @@ it waits as *Queued*. Exercised on 2026-11-05: a `usgs` run started at
 
 Start runs from the job's page, not from *Catalog* or the asset graph. A run
 started there belongs to Dagster's implicit asset job, which has none of the
-jobs' tags: the queue does not hold it back from a scheduled run, so two
-loads can overlap on dlt's cursor, it takes the code server's memory
+jobs' tags: since 2026-11-16 the queue holds every run to one at a time, so
+it no longer overlaps a scheduled load on dlt's cursor, but it still takes the code server's memory
 instead of the run's (§11), and it has no credentials (§7), so it fails at its
 first asset with a missing variable.
 
@@ -2330,8 +2366,9 @@ next index:
 6. [Restore the sealing key](#sealed-secrets-m1) — before step 7.
 7. [Apply the root Application](#hand-over-to-argo-cd-m1) and wait for every
    Application to be `Synced/Healthy` and both Postgres `Cluster`s ready.
-8. Run the pipeline, staging first, then prod: *Launch run* on the `usgs`
-   job page of each environment's [Dagster UI](#dagster-m3). The run must
+8. Run the pipeline, staging first, then prod: in staging, wait for the
+   scheduled `usgs` run (staging has no UI); in prod, *Launch run* on the
+   `usgs` job page of its [Dagster UI](#dagster-m3). The run must
    succeed with `dbt build` reporting `ERROR=0`, and the environment's check
    must turn *up* ([Pipeline heartbeat](#pipeline-heartbeat), *Verify*).
    dbt's `reconcile_*` tests assert the relations between layers. With no

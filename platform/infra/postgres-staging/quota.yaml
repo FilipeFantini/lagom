@@ -2,13 +2,15 @@
 # what exceeds these, rather than relying on good intentions (ADR-0007).
 #
 # Arithmetic, in memory, request / limit in Mi (finished Pods stop counting):
-#   Postgres Pod, with the backup sidecar (ADR-0025)    364 /  768
-#   Dagster webserver, daemon, code server (ADR-0026)   800 / 1920
+#   Postgres Pod, no backup sidecar since ADR-0046      300 /  512
+#   Dagster daemon and code server (ADR-0026; no
+#   webserver since ADR-0046)                           640 / 1536
 #   one Dagster run, its own tag in the code location   768 / 1024
 #                                                       ----   ----
-#                                                       1932 / 3712
-# rounded up to 2432 / 4608, about 500 Mi of room for a restore test or a
-# manual run. The CronJob usgs-pipeline (256 / 512) counted here until it was
+#                                                       1708 / 3072
+# The hard figures below were set for 1932 / 3712 (with the sidecar and the
+# webserver), rounded up to 2432 / 4608 for a manual run; they are lowered
+# with staging's modes (ADR-0046, decision 1). The CronJob usgs-pipeline (256 / 512) counted here until it was
 # retired on 2026-11-07 (ADR-0033); the quota was left as it was. Dagster's figures are measured (architecture.md section 11). The budget check counts the same workloads against the node's
 # ceiling (architecture.md section 11); the quota keeps staging inside them.
 apiVersion: v1

@@ -439,11 +439,12 @@ prod after these.
 - [x] Trim platform requests to what was measured: `argocd-server` at zero
       replicas, cert-manager's controller and cainjector at 48 MiB
       (2026-11-16)
-- [ ] Prod's Postgres at 256 MiB, once a reading during a run confirms it
+- [ ] Both Postgres at 256 MiB, once a reading during a run confirms it
 - [x] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
       instances, and the budget check failing a run slot without it
       (2026-11-16)
-- [ ] A lean staging on demand: no Dagster UI and no backup; Postgres
+- [x] Staging without its Dagster UI and its backup (2026-11-16)
+- [ ] A lean staging on demand: Postgres
       hibernated while off; the budget check counting the mode declared in
       Git; the quota capped at the batch mode; staging's alarm on failures
       only; the runbook steps that used staging's UI and backup
