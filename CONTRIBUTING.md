@@ -248,6 +248,26 @@ Until 2026-10-27 `main` had no protection: on a private repository it needs a
 paid plan, and the operator accepted that as an exception (2026-10-13) and as
 debt for ADR-0013 (2026-10-16).
 
+### Repository security settings
+
+These live in GitHub's settings, not in Git, so a rebuilt repository needs
+them set again. Why each exists is in
+[ADR-0047](docs/adr/0047-dependency-and-code-scanning-for-the-public-repository.md).
+
+| Setting | State | Inspect with |
+|---|---|---|
+| Dependabot alerts and security updates | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom --jq .security_and_analysis` |
+| `CLAUDE_CODE_OAUTH_TOKEN` as a Dependabot secret, so `agent review` runs on Dependabot's pull requests | to set by the operator | `gh api repos/FilipeFantini/lagom/dependabot/secrets` |
+| CodeQL default setup, `actions` and `python`, on pull requests and weekly | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/default-setup` |
+| `main` ruleset: *Require code scanning results*, CodeQL, security *High or higher*, alerts *Errors* | to set | `gh api repos/FilipeFantini/lagom/rulesets/25948914` |
+| CodeQL alert #1 (`actions/untrusted-checkout/high` in `agent-review.yml`) dismissed as *won't fix* | to dismiss | `gh api repos/FilipeFantini/lagom/code-scanning/alerts/1` |
+| Actions must be pinned to a full commit SHA | to set | `gh api repos/FilipeFantini/lagom/actions/permissions` |
+| Fork pull request CI approval: all external contributors | to set | `gh api repos/FilipeFantini/lagom/actions/permissions/fork-pr-contributor-approval` |
+| Secret scanning and push protection | on | `gh api repos/FilipeFantini/lagom --jq .security_and_analysis` |
+
+A row marked *to set* is not in force yet; it changes to its date when it
+is.
+
 ## Pull requests
 
 A pull request states:
