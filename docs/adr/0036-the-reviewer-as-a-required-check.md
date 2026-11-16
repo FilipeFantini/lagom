@@ -15,7 +15,7 @@
   [ADR-0038](0038-leaner-agent-gates.md) — Decisions 1, 2 and 4: Markdown-only
   changes pass unreviewed, no re-run on an edit, and the For the operator
   section no longer blocks.
-  [ADR-0047](0047-dependency-and-code-scanning-for-the-public-repository.md) — Decision 6:
+  [ADR-0048](0048-dependency-and-code-scanning-for-the-public-repository.md) — Decision 6:
   the same token is also a Dependabot secret, so Dependabot's pull requests
   are reviewed.
 

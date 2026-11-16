@@ -1,4 +1,4 @@
-# ADR-0047 — Dependency and code scanning for the public repository: Dependabot, CodeQL, pinned actions, approval for outside contributors' CI
+# ADR-0048 — Dependency and code scanning for the public repository: Dependabot, CodeQL, pinned actions, approval for outside contributors' CI
 
 - **Status:** Accepted
 - **Date:** 2026-11-16

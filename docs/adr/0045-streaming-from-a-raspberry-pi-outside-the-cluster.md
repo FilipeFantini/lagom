@@ -19,6 +19,10 @@
   reads both environments (decision 9); staging's streaming stack runs on
   demand; every streaming source shares one hub, one RisingWave and one
   Redpanda Connect process; the archive job is validated locally.
+- **Superseded in part by:** [ADR-0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)
+  (proposed): decision 6 is superseded, neither RisingWave nor the two-path
+  fallback is built, and events are written to Postgres with their windows
+  computed when read; decisions 3, 7, 8 and 9 are amended to match.
 
 ## Context and problem
 

@@ -252,7 +252,7 @@ debt for ADR-0013 (2026-10-16).
 
 These live in GitHub's settings, not in Git, so a rebuilt repository needs
 them set again. Why each exists is in
-[ADR-0047](docs/adr/0047-dependency-and-code-scanning-for-the-public-repository.md).
+[ADR-0048](docs/adr/0048-dependency-and-code-scanning-for-the-public-repository.md).
 
 | Setting | State | Inspect with |
 |---|---|---|

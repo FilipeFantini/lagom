@@ -29,7 +29,7 @@ dbt, Postgres, Dagster.
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | dbt Charts (the dashboards) | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)); replaced Evidence on 2026-11-10 ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)). Its static page is the target again since 2026-11-14 ([ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)) |
-| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). In M6 it is created only under the two-path fallback of [ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed) |
+| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). In M6 it is created to hold the streaming showcase's events ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed) |
 | Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `ops.ofantini.com/<tool>` ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
 | NATS | second consumer of the same stream, or a replay requirement. The streaming showcase (M6) meets it ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed) |
 | Streamlit | an interactive app a static page cannot serve |
@@ -398,171 +398,76 @@ The design is [ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-clus
 Raspberry Pi 3B+ at the operator's home is the source, outside the cluster,
 and NATS JetStream is the log. It replaces the earlier plan of joining the Pi
 to k3s as an agent node, which needed flannel moved to `tailscale0` on the
-node that carries prod.
+node that carries prod. [ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)
+(proposed) takes the stream processor out of it: Redpanda Connect writes the
+events to Postgres, their windows are views computed when read, and
+RisingWave is tried afterwards, as a second consumer of the same hub.
 
 - [ ] Spike on the operator's machine: a NATS leaf node and a hub, the hub's
       stream sourcing the leaf's, with the link cut and restored; nothing
       lost, nothing duplicated
-- [ ] Spike: RisingWave against the criteria of the ADR's decision 6 (memory
-      over 24 hours, state on local disk, late events, licence). It decides
-      between one path and the two-path fallback, and the result is written
-      in the ADR
-- [ ] Measure before deploying: memory of NATS and Redpanda Connect on the Pi
-      and on the node, of Grafana on the node, the events' size per day in
-      the live store and in the lake, what the showcase adds to R2 (limit:
-      1 GB of the free tier's 10), bytes written per day to the Pi's SD card
-- [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
-      tailnet tag and ACL, and its runbook section
-- [ ] The hub and the processing the spike chose, in staging, then prod
-- [ ] Grafana behind Cloudflare Access, one panel per question of the ADR's
+- [x] Spike: RisingWave measured (a 768 MiB request). Not built: its
+      measurements are the evidence for ADR-0047, and arrive in ADR-0045's
+      notes with the spikes' pull request
+- [ ] In staging: the hub, one Redpanda Connect process (the synthetic
+      producer and the consumer), the `serving` database with its unlogged
+      `events` table, and the views in dbt with their contracts and tests
+- [ ] The criteria of ADR-0047's decision 8, in staging: a restart, a cut
+      link, Postgres deleted, the table rebuilt from the hub, and 24 hours
+      of memory, the hub's size on disk and query times
+- [ ] Measure before deploying: memory of NATS and Redpanda Connect on the
+      Pi, the events' size per day in the live table and in the lake, what
+      the showcase adds to R2 (limit: 1 GB of the free tier's 10), bytes
+      written per day to the Pi's SD card
+- [ ] One Grafana in its own namespace behind Cloudflare Access, reading
+      each environment's `serving` through its own read-only role, with
+      staging's data source first; one panel per question of ADR-0045's
       decision 5
-- [ ] Archive to the lake on a schedule, with the raw events' retention
-- [ ] The measurements of both designs written in the ADR, as the source for
-      an article on kappa against lambda on a small node. The article itself
-      is written in the site's repository
+- [ ] Archive to the lake on a schedule, with the raw events' retention,
+      validated in staging
+- [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
+      tailnet tag and ACL, and its runbook section; it points at staging
+      first
+- [ ] The hub and Connect in prod, and the Pi moved to it
+- [ ] The measurements written in the ADRs, as the source for an article on
+      what streaming needs at this load and where a stream processor would
+      pay. The article itself is written in the site's repository
       ([ADR-0039](adr/0039-the-site-in-its-own-repository.md))
-- [ ] What the site shows of this showcase: aggregates only, under the
-      ADR's privacy rule (decision 11) — not decided
+- [ ] What the site shows of this showcase: aggregates only, under
+      ADR-0045's privacy rule (decision 11) — not decided
 
-**Memory first.** As designed, M6 does not fit the CI ceiling: its spikes put
-RisingWave at a 768 MiB request, and a hub, RisingWave and Grafana in each
-environment would take the total to about 7,100 of 5,632 MiB.
+**Memory.** With RisingWave, M6 did not fit the CI ceiling, and
 [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
-frees the room, and its pull requests come before the hub and the
-processing above. With them, prod with M6 totals about 3,942 MiB, and a lean
-staging fits beside it in either mode: streaming with 730 MiB to spare, batch
-with 90 ([architecture.md §11](architecture.md#11-resource-budget)). M6 reaches
-prod after these.
+freed room for it. Without it (ADR-0047), prod with M6 and a whole staging
+total 5,246 of 5,632 MiB, with 386 to spare, so staging stays on while M6 is
+built ([architecture.md §11](architecture.md#11-resource-budget)). Staging
+that can be switched off comes after M6, for the room it frees to try an
+idea.
 
 - [x] Remove the `hello` Application (16 MiB), and the runbook steps that
       use it (2026-11-16)
 - [x] Trim platform requests to what was measured: `argocd-server` at zero
       replicas, cert-manager's controller and cainjector at 48 MiB
       (2026-11-16)
-- [ ] Both Postgres at 256 MiB, once a reading during a run confirms it
 - [x] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
       instances, and the budget check failing a run slot without it
       (2026-11-16)
 - [x] Staging without its Dagster UI and its backup (2026-11-16)
-- [ ] A lean staging on demand: Postgres
-      hibernated while off; the budget check counting the mode declared in
-      Git; the quota capped at the batch mode; staging's alarm on failures
-      only; the runbook steps that used staging's UI and backup
-- [ ] The mode switch that agents operate: one schema-checked file outside
-      the guarded list (a guardrail change, approved once by the operator)
-- [ ] One Grafana in its own namespace, reading each environment's live
-      store through its own read-only role
-- [ ] The streaming components shared by every streaming source: one hub,
-      one RisingWave, one Redpanda Connect process in streams mode, per
-      environment
-- [ ] ADR-0045's archive job validated locally, in a compose like the
-      spikes', since it needs both of staging's modes at once
-- [ ] Local spike: Flux in place of Argo CD (saving about 400 to 450 MiB
-      expected, not measured), kept only if it gives the same guarantees,
-      with its own ADR
+- [ ] Both Postgres at 256 MiB, once a reading taken with events being
+      written confirms it
+- [ ] After M6 is in prod: staging on or off. Postgres hibernated and
+      Dagster removed while off; one schema-checked state file outside the
+      guarded list, operated by agents (a guardrail change, approved once by
+      the operator); the budget check counting staging as on whatever the
+      file says; the quota at the `on` total; staging's alarm on failures
+      only
+- [ ] Second phase, with its own ADR: RisingWave as a second consumer of
+      prod's hub, an experiment that runs while staging is off, the same
+      metrics compared with the views computed on read
+- Parked, by ADR-0047: the Flux spike, until a resident component for prod
+  does not fit beside a whole staging
 
-## M7 — Two developers
-
-Environments were pulled forward to M2 — see
-[ADR-0007](adr/0007-three-environments.md). What remains is onboarding.
-
-- [ ] Devcontainer, so both machines run an identical local environment
-- [ ] Kubeconfig with per-developer RBAC
-- [ ] Invite the second developer
-
-## Track G — Agent guardrails
-
-Cross-cutting, alongside the milestones: the guardrails that let agents build
-the platform from prompts without quality dropping. The model and its rules are
-in [ADR-0013](adr/0013-agent-driven-development-guardrails.md); each item enters
-by its own trigger, like any other piece.
-
-- [x] ADR-0013 accepted by the operator — 2026-10-16, with rule 2's fragility
-      while the repository is private accepted as debt
-- [x] **Secret scan in CI** (gitleaks) — the whole history on every pull
-      request; one exception, for Sealed Secrets ciphertext, tested against
-      plaintext in a sealed file. What it does not check is in
-      [CONTRIBUTING](../CONTRIBUTING.md#secrets)
-- [x] **Deny rules for destructive git** in `.claude/settings.json` — after an
-      escape: the implementer discarded its own uncommitted work with
-      `git checkout -- .` (archive PR #18). Claude Code cannot scope rules to one
-      agent, so they bind every session; see
-      [CONTRIBUTING](../CONTRIBUTING.md#workflow)
-- [x] **Deny rules for cluster writes** — `kubectl` verbs that change or
-      enter objects, file-based `create`, and `helm` writes are denied in
-      `.claude/settings.json`; `create job --from=cronjob/…` stays allowed for
-      on-demand runs. Triggered 2026-10-27, when agents first created Jobs to
-      validate a promotion. What it does not stop is in
-      [CONTRIBUTING](../CONTRIBUTING.md#workflow)
-- [x] **Manifest policy check in CI**, in `tools/` beside the budget check:
-      pinned chart and image versions, an explicit prune policy on every
-      Application — with the next Argo CD Application (the Postgres `Cluster`).
-      Its trigger was reached in M2, with the Postgres Applications. Done in [`tools/manifest_policy.py`](../tools/manifest_policy.py):
-      the four rules and what the check does not cover are in
-      [`tools/README.md`](../tools/README.md#manifest-policy-check). Required
-      on `main` by the ruleset since 2026-10-27
-- [x] Data gates — `dbt test` and reconciliation in CI, the M3 item above
-      (2026-11-07)
-- [x] **CI check that prod only pins a digest staging ran** —
-      [`tools/promotion_check.py`](../tools/promotion_check.py): every prod
-      image pinned by digest, and that digest pinned in staging on `main`
-      before the change. "Pinned on `main`" stands in for "ran": CI never
-      reaches the cluster ([ADR-0015](adr/0015-images-on-ghcr.md))
-- [ ] **Post-deploy verification automated** (sync and health, memory against
-      requests, error logs) — when the same manual check has been run after a
-      third merge. **Trigger reached 2026-10-27:** Argo CD sync and health, the
-      pinned digest in the CronJob, and a run's exit codes and dbt result were
-      checked by hand after public PRs #7, #8, #11 and #12
-- [x] **Branch protection** — ruleset on `main` since 2026-10-27, when the
-      repository became public; what it enforces and what it does not is in
-      [CONTRIBUTING](../CONTRIBUTING.md#branch-protection). The prerequisite
-      for any agent merge
-- [x] **Agents merge** — any agent, once the required checks are green and a
-      reviewer returned APPROVE; a guardrail change also needs the operator's
-      explicit go-ahead. Decided 2026-11-05, replacing the class-by-class
-      promotion of ADR-0013 rule 3
-      ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md))
-- [x] **Agents beyond Claude Code** — [`AGENTS.md`](../AGENTS.md) as the one
-      rulebook; an agent on another harness runs in that harness's sandbox
-      with network access off
-      ([ADR-0029](adr/0029-agents-on-more-than-one-harness.md)). An
-      orchestration layer (Paseo, in a sealed container) was built and removed
-      the same day; the ADR keeps its design for when several agents at once,
-      or work from the phone, become a need
-- [x] **Agents through an agent runner** — several agents at once, each
-      in a container with network but no credential, on its own clone, with
-      work handed over as a patch. Any runner that passes the ADR's checks;
-      Tucano first. Decided 2026-11-07
-      ([ADR-0032](adr/0032-agents-in-credential-free-containers.md))
-- [x] **Agents merge their own work** — a runner holds the operator's
-      fine-grained token for `lagom` alone, without Administration,
-      Deployments or Workflows; a guarded change waits for the operator's
-      approval of the `guardrail` environment, which that token cannot give.
-      Decided 2026-11-07; set up and tested the same day: a guarded test pull
-      request (#59) waited on the environment, an unguarded one (#60) passed,
-      and approving with the runner's token was refused (403)
-      ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md))
-- [x] **The reviewer as a required check** — `agent review` runs the
-      reviewer role in CI from `main` on every pull request, and fails only on
-      a blocker or major finding; a Markdown-only change outside the agents'
-      instructions passes unreviewed. Decided 2026-11-07; required on `main`
-      the same day, after it posted a verdict on test pull request #60; runs
-      on Sonnet ([ADR-0036](adr/0036-the-reviewer-as-a-required-check.md),
-      [ADR-0037](adr/0037-the-reviewer-runs-on-sonnet.md),
-      [ADR-0038](adr/0038-leaner-agent-gates.md))
-- [ ] **Notion as the one documentation space outside the repository** —
-      status, briefs, pending decisions, and site drafts; it links to the
-      repository and never restates it. The Obsidian vault leaves the project
-      ([ADR-0034](adr/0034-notion-as-the-one-documentation-space-outside-the-repo.md), proposed)
-
-## Repository layout
-
-Defined in [ADR-0006](adr/0006-monorepo-layout.md) and listed in
-[`../README.md`](../README.md). Directories are created by the milestone that
-fills them — no empty scaffolding.
-
-| Directory | Born in |
-|---|---|
+---|---|
 | `docs/` | now |
 | `platform/infra/`, `.github/` | M1 |
 | `platform/warehouse/`, `services/usgs/` | M2 |
