@@ -260,9 +260,9 @@ them set again. Why each exists is in
 | `CLAUDE_CODE_OAUTH_TOKEN` as a Dependabot secret, so `agent review` runs on Dependabot's pull requests | to set by the operator | `gh api repos/FilipeFantini/lagom/dependabot/secrets` |
 | CodeQL default setup, `actions` and `python`, on pull requests and weekly | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/default-setup` |
 | `main` ruleset: *Require code scanning results*, CodeQL, security *High or higher*, alerts *Errors* | to set | `gh api repos/FilipeFantini/lagom/rulesets/25948914` |
-| CodeQL alert #1 (`actions/untrusted-checkout/high` in `agent-review.yml`) dismissed as *won't fix* | to dismiss | `gh api repos/FilipeFantini/lagom/code-scanning/alerts/1` |
-| Actions must be pinned to a full commit SHA | to set | `gh api repos/FilipeFantini/lagom/actions/permissions` |
-| Fork pull request CI approval: all external contributors | to set | `gh api repos/FilipeFantini/lagom/actions/permissions/fork-pr-contributor-approval` |
+| CodeQL alert #1 (`actions/untrusted-checkout/high` in `agent-review.yml`) dismissed as *won't fix* | dismissed on 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/alerts/1` |
+| Actions must be pinned to a full commit SHA | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/actions/permissions` |
+| Fork pull request CI approval: all external contributors | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/actions/permissions/fork-pr-contributor-approval` |
 | Secret scanning and push protection | on | `gh api repos/FilipeFantini/lagom --jq .security_and_analysis` |
 
 A row marked *to set* is not in force yet; it changes to its date when it
