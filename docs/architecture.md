@@ -163,24 +163,34 @@ proposed; not built). Its source is a Raspberry Pi outside the cluster:
 ```
 Pi:    sensors, ping -> Redpanda Connect -> NATS leaf node (stream on disk)
                                                  |  tailnet, outbound only
-node:  NATS hub (stream sources the Pi's) -> processing -> Grafana (operator)
-                                                 |
-                                         Dagster -> lake (history)
+node:  NATS hub (stream sources the Pi's) -> Redpanda Connect -> Postgres, serving.events
+                                                                    |-> views (dbt) -> Grafana (operator)
+                                                                    |-> Dagster -> lake (history)
 ```
 
 NATS stores; Redpanda Connect reads and writes. The leaf node keeps events
 while the home link is down and the hub copies them when it returns, hours
-late. How those late events are processed is the choice the ADR measures:
+late.
 
-- **One path (kappa), the first candidate:** RisingWave, a streaming
-  database, keeps views up to date as each event arrives, late ones included.
-  The views are dbt models, so a metric is defined once.
-- **Two paths (lambda), the fallback:** Redpanda Connect writes events to
-  `serving` and aggregates them live, approximately; dbt on the lake rebuilds
-  the correct aggregates in batch. A metric is defined twice.
+**No stream processor** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed, superseding ADR-0045's choice of
+RisingWave). On the node, Redpanda Connect reads the hub through a durable
+consumer, a position the hub keeps for it, and writes each event to an
+append-only table in the `serving` database, acknowledging only after the
+write; a primary key on the event's identifier stores a repeated delivery
+once. The table is `UNLOGGED`, so the events stay out of the backup and R2;
+a crash of Postgres empties it, and a dbt test on a schedule makes that
+loud. The windows over event time are views, defined in dbt and computed when
+read, so a late event is counted by the next query and each metric is defined
+once, behind a dbt contract that Grafana's panels read. The hub keeps events
+at least as long as the table does, so the table can be rebuilt by reading
+the stream again. This is aggregation on read, not stream processing.
+RisingWave is tried next, as a second consumer of the same hub, in the room
+staging frees while it is off (§9a), and stays only if the comparison earns
+its memory.
 
-The criteria RisingWave must pass, what is collected, the questions it
-answers, the limit on R2 and the privacy rule are in the ADR.
+What is collected, the questions it answers, the limit on R2 and the privacy
+rule are in ADR-0045; the criteria this design must pass in staging are in
+ADR-0047.
 
 ## 5. Storage — Postgres now, open table format by trigger
 
@@ -446,41 +456,42 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07 |
 | `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`platform/infra/dagster-prod/`](../platform/infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
 
-**Staging on demand** ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md),
-accepted; being built — the table above is how staging runs today). So that M6
-fits the ceiling (§11), staging runs lean and only when something is to be
-validated, one mode at a time:
+**Staging on or off** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed, replacing the four modes of
+[ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md); not built — the table above is how staging runs today, always on).
+Staging has two states:
 
-| Mode | What runs | Requests |
+| State | What runs | Requests |
 |---|---|---|
-| `off`, the default | nothing: Postgres hibernated (`cnpg.io/hibernation: "on"`: the Pod goes, the volume and its data stay; Argo CD shows it Suspended), no Dagster (daemon and code server removed, since the chart cannot scale them to zero) | 0 |
-| `dev` | Postgres alone, for development against `lagom_dev` | 256 MiB |
-| `streaming` | NATS hub, RisingWave, synthetic producer ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md)) | 960 MiB |
-| `batch` | Postgres, Dagster's daemon and code server, its run | 1,600 MiB |
+| `on` | Postgres, Dagster's daemon and code server, its run, and M6's hub and Redpanda Connect process | 1,900 MiB |
+| `off` | nothing: Postgres hibernated (`cnpg.io/hibernation: "on"`: the Pod goes, the volume and its data stay; Argo CD shows it Suspended), no Dagster (daemon and code server removed, since the chart cannot scale them to zero), the hub and Connect at zero replicas | 0 |
 
 - **Lean:** no Dagster UI in staging (`ops.ofantini.com/dagster-staging`
   gone) and no backup (prod's, with its restore test, is the protection),
-  both done on 2026-11-16; Postgres at 256 MiB and, once staging runs only on
-  demand, the daemon at 256, above what was measured.
-- **Switched by agents:** the mode is one field in a small file outside the
-  guarded list, checked in CI to hold only one of the four values. The pull
-  request that brings a change to validate sets it; an agent merges the one
-  that switches staging off, or on. Only staging's Applications read the file.
-  Staging's ResourceQuota caps its total at the batch mode.
+  both done on 2026-11-16.
+- **Switched by agents:** the state is one field in a small file outside the
+  guarded list, checked in CI to hold `on` or `off` and nothing else. Only
+  staging's Applications read it.
+- **The budget check counts staging as on, whatever the file says** (§11), so
+  neither value can break the ceiling and a component added to prod can never
+  take the room staging needs. What `off` frees is real memory on the node,
+  and room to try an experiment.
 - **Runs follow the schedules:** with no UI, a change is validated by the next
   `usgs` run; a job off schedule is waited for or launched by the operator.
-- **Its alarm reports failures only,** so silence while off raises nothing.
+- **Its alarm reports failures only,** so silence while off raises nothing
+  (ADR-0046, decision 3).
+- **Built last,** after M6 is in prod: until then staging stays on, which
+  gives the streaming pipeline its run of days.
 
 The namespace, the Postgres volume, the secrets and the quota stay
 permanent, and prod's NetworkPolicy keeps denying staging, so the four
 conditions below still hold. The
-cost: staging no longer exercises the pipeline continuously, so a change in
+cost: while staging is off it does not exercise the pipeline, so a change in
 the source between validations is caught by prod and its alarm, not by
 staging first; a backup change is validated in prod; and a digest pinned in
 staging may never have run there, so the operator's confirmation before
 promotion carries more weight. One Grafana, in a namespace of its own, reads
-both environments' live stores, each through its own read-only role; it is
-the operator's viewer, not a link between the pipelines.
+the `serving` database of both environments, each through its own read-only
+role; it is the operator's viewer, not a link between the pipelines.
 
 **Promotion** is by image digest: staging and prod each pin their own, so a new
 image reaches staging through one pull request and prod through another, both
@@ -783,8 +794,9 @@ That leaves **~2.5 GB** for jobs. Staging's ResourceQuota caps everything
 staging requests at 2432 MiB. Staging requests 1,708 MiB in all (Postgres 300,
 Dagster 640, its run 768; 1,932 until 2026-11-16, when its UI and backup
 went); under
-[ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
-that becomes 0 while it is off and 1,600 in its batch mode (below).
+[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) (proposed)
+that becomes 1,900 with M6's hub and Connect process, and 0 while it is off
+(below).
 dlt and dbt do not appear above: they are ephemeral jobs, and their requests
 count against what is left. Since 2026-11-07 they run inside each Dagster
 run (768 MiB, above). Until then they ran as one Pod per environment, the
@@ -833,51 +845,54 @@ platform moved to the CAX21 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)).
 On the 8 GB node it fits with about 1.5 GB to spare; that room is the margin
 the node allows, not a budget to fill (§1).
 
-**M6, streaming, and what makes room for it**
-([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md),
-accepted; being built: `hello` and the first trims are done). M6's local spikes set RisingWave's request at 768 MiB
-(its working set includes about 450 MiB of active file cache), the NATS hub's
-at 64 and a Redpanda Connect process's at 128; Grafana's 128 is not measured.
-With ADR-0045 as designed, a hub, RisingWave and Grafana per environment, M6
-would take the total to about 7,100 MiB. ADR-0046 frees the room:
+**M6, streaming, and what makes room for it** ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md), accepted, and
+[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed, which takes the stream processor out of it). M6's local
+spikes measured RisingWave at a 768 MiB request, the NATS hub at 64 and a
+Redpanda Connect process at 128; Grafana's 128 is not measured. With a hub,
+RisingWave and Grafana per environment, M6 would have taken the total to
+about 7,100 MiB. What makes it fit:
 
-- **staging on demand, lean, one mode at a time** (§9a): its batch mode
-  requests 1,600 MiB instead of 1,932, and nothing counts while it is off;
+- **no stream processor** (ADR-0047): events go to Postgres and their windows
+  are computed when read (§4), so RisingWave's 768 MiB per environment are
+  not requested. M6 adds 320 MiB in prod (hub 64, Connect 128, Grafana 128)
+  and 192 in staging (hub 64, and one Connect process, 128, running the
+  synthetic producer and the consumer);
 - **one Grafana** for both environments, 128;
-- **`hello` removed**, 16;
+- **`hello` removed**, 16 (done on 2026-11-16);
 - **one run slot per environment for every batch job** (done on 2026-11-16):
   Dagster's run queue holds one run at a time (`maxConcurrentRuns: 1`; until
   then only runs tagged `lagom/pipeline: usgs` were limited, and the chart's
   default is no limit), so a new batch source adds no request; the budget
   check fails an Application that declares a run slot without that limit;
-- **shared streaming components**: one hub, one RisingWave and one Redpanda
-  Connect process in streams mode per environment, for every streaming source;
-- **platform requests trimmed to what was measured**, 140: `argocd-server`
-  removed (64; the operator uses the CLI with `--core`, not the UI),
-  cert-manager's controller and cainjector at 48 each (32), prod's Postgres at
-  256 (44).
+- **shared streaming components**: one hub and one Redpanda Connect process
+  in streams mode per environment, for every streaming source;
+- **platform requests trimmed to what was measured** (done on 2026-11-16):
+  `argocd-server` at zero replicas (64; the operator uses the CLI with
+  `--core`, not the UI), cert-manager's controller and cainjector at 48 each
+  (32). The Postgres requests come down to 256 (44 each) only after a reading
+  taken with events being written (ADR-0047, decision 11);
+- **a staging without its Dagster UI and its backup** (done on 2026-11-16),
+  224.
 
-The budget check counts what Git declares: a hibernated `Cluster` requests
-nothing, Deployments at zero replicas request nothing, and a Dagster with no
-daemon has no run slot. Prod's Postgres is read during a run before its trim
-lands. Requests in MiB:
+**The check counts staging as on, always** (ADR-0047, decision 10; to be
+built with the state file). Staging can be hibernated (§9a), but the room
+that frees is for real memory and for experiments, not for prod to grow
+into: a resident component added to prod must fit beside a whole staging.
+Requests in MiB:
 
 | Point | Total | Room under 5,632 |
 |---|---|---|
 | Before ADR-0046's first trims (2026-11-16) | 5,070 | 562 |
-| Prod with M6 (RisingWave 768, hub 64, one Grafana 128, `hello` removed, trims), staging `off` | 3,942 | 1,690 |
-| … staging `dev` (256) | 4,198 | 1,434 |
-| … staging `streaming` (960) | 4,902 | 730 |
-| … staging `batch` (1,600) | 5,542 | **90** |
-| … staging `batch`, if Flux replaces Argo CD (saving about 400 to 450 of Argo CD's 544, not measured) | ~5,100–5,150 | ~480–530 |
+| Today (`main` at `2a74ef2`, 2026-11-16) | 4,734 | 898 |
+| Prod with M6, staging off: what runs, not what the check counts | 3,346 | 2,286 |
+| … staging off, with RisingWave as an experiment (768; ADR-0047, decision 9) | 4,114 | 1,518 |
+| Prod with M6, staging on (1,900): what the check counts | **5,246** | **386** |
+| … with both Postgres at 256 | 5,158 | 474 |
 
-**Batch-mode staging fits with M6 in prod, by 90 MiB**: enough to validate,
-not to grow. Until more room is found, a new resident component in prod makes
-batch-mode staging stop fitting, and the check says so on that component's
-pull request. The next room is expected from replacing Argo CD with Flux,
-measured in a spike of its own and kept only if it gives the same guarantees.
-ADR-0045's archive job needs both of staging's modes at once (2,560 MiB) and is
-validated locally instead.
+**Prod's permanent growth after M6 is bounded by 386 MiB.** The next room is
+the Postgres trim, and then replacing Argo CD with Flux (about 400 to 450 of
+Argo CD's 544, not measured), whose spike is parked until a component does
+not fit (ADR-0047, decision 12).
 
 ## 12. Accepted risks
 
