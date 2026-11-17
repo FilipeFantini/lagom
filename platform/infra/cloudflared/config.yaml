@@ -40,5 +40,10 @@ data:
       - hostname: ops.ofantini.com
         path: ^/dagster(/.*)?$
         service: http://dagster-dagster-webserver.prod.svc.cluster.local:80
+      # Grafana, for both environments (ADR-0047, decision 7); it serves
+      # itself under /grafana (serve_from_sub_path in grafana/config.yaml).
+      - hostname: ops.ofantini.com
+        path: ^/grafana(/.*)?$
+        service: http://grafana.grafana.svc.cluster.local:3000
       # Anything else, ops.ofantini.com/ included: refused by the tunnel.
       - service: http_status:404

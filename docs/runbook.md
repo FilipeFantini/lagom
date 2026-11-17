@@ -960,6 +960,10 @@ login ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)):
 - `https://ops.ofantini.com/dagster/` is prod's Dagster. Staging's,
   `/dagster-staging/`, was served until 2026-11-16, when staging's UI was
   removed ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)); the path now gets the tunnel's 404.
+- `https://ops.ofantini.com/grafana/` is Grafana, for both environments
+  ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md);
+  *The streaming showcase in staging (M6), Grafana*). It serves itself under
+  the prefix (`serve_from_sub_path`) and has no login of its own.
 
 Bookmark them with the final slash. Without it, Dagster answers with a
 redirect to the address with the slash, and since it does not know the
@@ -1076,6 +1080,7 @@ sed -e '1,/config.yaml: |/d' -e 's/^    //' platform/infra/cloudflared/config.ya
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress validate                                   # OK
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster/runs   # prod's rule
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster-staging  # the 404 rule since 2026-11-16
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/grafana/d/streaming  # Grafana's rule
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/               # the 404 rule
 rm /tmp/cloudflared.yaml
 ```
@@ -1583,6 +1588,154 @@ on 2026-11-17, with the rebuild above; the figures are in ADR-0047's *Notes*.
   - in `psql -d serving`, `\timing` on each `metrics` view over the whole
     table, which must stay under two seconds. The 7-day figure needs 7
     days of events.
+
+### Grafana
+
+What runs ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md),
+decision 7; [`platform/infra/grafana/`](../platform/infra/grafana/)):
+
+- **Grafana** (`grafana-…`, namespace `grafana`) is the operator's viewer: one
+  dashboard, *Streaming showcase*, one panel per question of ADR-0045's
+  decision 5. Think of it as a window onto the views: it shows what they
+  compute and holds nothing of its own that matters.
+- It is served at `https://ops.ofantini.com/grafana/`, behind the same
+  Access login as Dagster (*Operator UIs behind Cloudflare Access*). There is
+  no Grafana login: everyone past Access is an anonymous *Viewer*, who can
+  look and change nothing. The dashboard and the data source are files in
+  Git; a change is a pull request.
+- It reads staging's database `serving` as **`grafana_reader`**, a role that
+  may read the views of the schema `metrics` and nothing else, with at most
+  3 connections and 10 seconds per query. `pg_hba` refuses it every other
+  database, and a NetworkPolicy lets Grafana's Pod reach staging's Postgres
+  on port 5432 and nowhere else in `staging`. Since this policy, staging's
+  Postgres admits only `staging`, the CloudNativePG operator and Grafana.
+- The grants are dbt's: the `streaming` job gives `grafana_reader` SELECT on
+  each view every time it rebuilds them, and its test
+  `grafana_reader_privileges` fails, and e-mails the alarm, if the role can
+  read anything else, can write, or has lost its limit or its timeout.
+
+**Seal the password, before the change is merged.** One random password,
+sealed twice: once in `staging`, where CloudNativePG sets it on the role, and
+once in `grafana`, where Grafana reads it. A Sealed Secret opens only in the
+namespace it was sealed for, hence two files. Run from the repository's root:
+
+```bash
+openssl rand -hex 24 | { read -r PW && for pair in staging:postgres-staging grafana:grafana; do
+  ns="${pair%%:*}"; f="platform/infra/${pair##*:}/grafana-reader-credentials-sealed.yaml"
+  kubectl create secret generic grafana-reader-credentials -n "$ns" \
+    --type=kubernetes.io/basic-auth --from-literal=username=grafana_reader --from-literal=password="$PW" \
+    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"
+done; unset PW; }
+grep -c 'password:' platform/infra/postgres-staging/grafana-reader-credentials-sealed.yaml platform/infra/grafana/grafana-reader-credentials-sealed.yaml   # 1 each
+```
+
+**After Argo CD syncs**, in this order:
+
+1. CloudNativePG creates `grafana_reader`; the Pod `grafana-…` starts.
+2. Set the role's statement timeout, once, as Postgres's superuser.
+   CloudNativePG's role spec has no field for it, so it is a statement;
+   Postgres keeps it in the role, and the test above fails while it is
+   missing:
+
+   ```bash
+   kubectl -n staging exec postgres-1 -c postgres -- psql -c "alter role grafana_reader set statement_timeout = '10s'"
+   ```
+
+   Repeat it after anything that creates the role again: a rebuilt
+   Cluster, or a restore.
+3. The grants arrive with the first `lagom-orchestration` image built from
+   this change, once staging's values pin its digest (the pull request after
+   this one). Until then every panel says `permission denied for schema
+   metrics`: the role exists, the grants do not yet. After the next
+   `streaming` run at :45 the panels fill.
+
+```bash
+kubectl -n argocd get application grafana                       # Synced / Healthy
+kubectl -n grafana get pods                                     # grafana-… 1/1 Running
+kubectl -n staging get cluster postgres -o jsonpath='{.status.managedRolesStatus.byStatus}'   # grafana_reader among "reconciled"
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://ops.ofantini.com/grafana/   # 302 to the Access login
+```
+
+Then, in a private window, open `https://ops.ofantini.com/grafana/d/streaming`:
+the Access login, then the dashboard, every panel with the synthetic data.
+Over a held hour (above), *How late is an event* shows the backlog, and *How
+much arrived* a bar of late events.
+
+**Show what the role is refused.** As `grafana_reader`, over a port-forward
+(which enters the Pod as `127.0.0.1`, so the `pg_hba` lines apply), with its
+password in the shell's environment as in *Connect as the developer*:
+
+```bash
+export PGPASSWORD=$(kubectl -n staging get secret grafana-reader-credentials -o jsonpath='{.data.password}' | base64 -d)
+kubectl -n staging port-forward svc/postgres-rw 15432:5432 &
+uv run --no-project --with 'psycopg[binary]' python - <<'EOF'
+import psycopg
+
+def connect(db):
+    return psycopg.connect(host="127.0.0.1", port=15432, user="grafana_reader", dbname=db, sslmode="disable", autocommit=True)
+
+with connect("serving") as c:
+    rows = c.execute("select count(*) from metrics.pipeline_minute").fetchone()[0]
+    timeout = c.execute("show statement_timeout").fetchone()[0]
+    print(f"reads metrics.pipeline_minute: {rows} rows; statement_timeout {timeout}")
+    for sql in ("create table metrics.x (a int)", "insert into live.events (event_id) values ('x')",
+                "select count(*) from live.events", "select pg_sleep(11)"):
+        try:
+            c.execute(sql)
+            print("ALLOWED:", sql)
+        except psycopg.Error as e:
+            print("refused:", sql, "->", e.diag.message_primary)
+for db in ("lagom", "postgres"):
+    try:
+        connect(db).close()
+        print("ALLOWED: connect to", db)
+    except psycopg.OperationalError as e:
+        print("refused: connect to", db, "->", str(e).strip().splitlines()[-1])
+EOF
+unset PGPASSWORD; kill %1
+```
+
+Every line but the first must say `refused`: `permission denied for schema
+metrics` (no table may be created), `permission denied for schema live`
+(twice), `canceling statement due to statement timeout`, and `pg_hba.conf
+rejects connection` for `lagom` and `postgres`. Run against a local Postgres
+18 with the same roles and `pg_hba` lines on 2026-11-17, it printed exactly
+that.
+
+**Check that the policy closes staging's Postgres.** `BLOCKED` from `default`
+is the pass; from `staging` the control must print `REACHED` (the nettest
+image of *Postgres, Staging*):
+
+```bash
+for ns in default staging; do
+  kubectl -n "$ns" run nettest --rm -i --quiet --restart=Never \
+    --image=nginxinc/nginx-unprivileged:1.30.5-alpine@sha256:56b8272e43a0525f67aed68d1e0794a712d10e3e45a563e118e9a77c817e6f86 -- \
+    sh -c "nc -z -w 4 postgres-rw.staging.svc.cluster.local 5432 && echo $ns REACHED || echo $ns BLOCKED"
+done
+```
+
+**Memory, after a day:** `kubectl -n grafana top pod`. Set the request in
+`grafana.yaml` from the figure, as for every component
+([architecture.md §11](architecture.md#11-resource-budget)). Locally it held
+185 MiB at rest and 220 MiB after reading 26 hours of events.
+
+**If a panel fails:**
+
+- *permission denied for schema metrics*: the grants are missing. The
+  `streaming` job has not run with an image that has them (step 3), or its
+  last run failed before the views.
+- *canceling statement due to statement timeout*: the query took more than
+  10 s. That is already five times ADR-0047's target of two seconds; the
+  remedies are in its decision 8 (an index, then a per-minute table).
+- *pg_hba.conf rejects connection* or *password authentication failed*:
+  the role or its password differ between the two Secrets; seal both again
+  from one password, as above.
+- No data, no error: the time range is outside the events the table holds,
+  or the producer is stopped (*Read the state*, above).
+
+Grafana logs an error at each start, `plugin prometheus not found`, from a
+migration service for a data source that is turned off on purpose
+(`disable_plugins` in `config.yaml`). It is harmless.
 
 ## Disaster recovery
 

@@ -1,0 +1,28 @@
+# Grafana: the operator's viewer of the streaming showcase, one for both
+# environments (ADR-0046, decision 4; ADR-0047, decision 7), at
+# ops.ofantini.com/grafana behind Cloudflare Access. Its data sources and
+# dashboards are files in platform/infra/grafana/; its read-only database
+# role is declared with each environment's Cluster (postgres-staging/).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/FilipeFantini/lagom.git
+    targetRevision: main
+    path: platform/infra/grafana
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: grafana
+  syncPolicy:
+    automated:
+      # Pruning may delete Grafana's volume with its file. That is safe: the
+      # volume holds Grafana's own state, sessions and copies of what these
+      # files provision, and the next start creates it again from Git.
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

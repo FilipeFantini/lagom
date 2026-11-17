@@ -426,6 +426,9 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
       each environment's `serving` through its own read-only role, with
       staging's data source first; one panel per question of ADR-0045's
       decision 5
+      (staging's built in the pull request that adds `platform/infra/grafana/`;
+      its panels fill once staging pins the image that grants the role, and
+      prod's data source comes with the hub and Connect in prod)
 - [ ] Archive to the lake on a schedule, with the raw events' retention,
       validated in staging
 - [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
@@ -442,8 +445,9 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
 **Memory.** With RisingWave, M6 did not fit the CI ceiling, and
 [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
 freed room for it. Without it (ADR-0047), prod with M6 and a whole staging
-total 5,246 of 5,632 MiB, with 386 to spare, so staging stays on while M6 is
-built ([architecture.md §11](architecture.md#11-resource-budget)). Staging
+total 5,374 of 5,632 MiB, with 258 to spare (5,246 and 386 in ADR-0047, which
+counted Grafana at 128; measured, it is requested at 256), so staging stays
+on while M6 is built ([architecture.md §11](architecture.md#11-resource-budget)). Staging
 that can be switched off comes after M6, for the room it frees to try an
 idea.
 

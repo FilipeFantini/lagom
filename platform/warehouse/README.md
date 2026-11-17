@@ -141,7 +141,7 @@ target they are not.
 |---|---|---|
 | live table | `live.events`, created by the `on-run-start` hook (`macros/create_live_events.sql`) if it is missing, never altered | `UNLOGGED`; one row per event, its key the event identifier; `received_at` is when the hub stored it, so a replay writes the same rows; the writer `events_writer` may insert and nothing else |
 | typed events | `streaming.stg_events__pings`, `stg_events__health` (views) | the payload's fields, typed |
-| metrics | `metrics.*` (views), **contract enforced** | `link_minute`, `link_hour_profile`, `link_outages`, `source_health_minute`, `pipeline_minute`: what Grafana reads; grouped by `collected_at`, in UTC |
+| metrics | `metrics.*` (views), **contract enforced** | `link_minute`, `link_hour_profile`, `link_outages`, `source_health_minute`, `pipeline_minute`: what Grafana reads; grouped by `collected_at`, in UTC; SELECT on each, and USAGE on the schema, granted to Grafana's role `grafana_reader` on every build |
 
 Views, not tables: each is computed when read, so a late event is a row with
 an old `collected_at` that the next query counts. Two rules the views decide:
@@ -159,7 +159,13 @@ other tests are `not_null`,
 view, `tests/generic/`), and `tests/streaming/live_window_is_full.sql`: it
 fails when, over the last 60 whole minutes (less the last two), one of the
 five streams holds fewer than 1,800 events of 3,600. It reads
-`pipeline_minute`, so it runs last and stops no view. The table has no tests:
+`pipeline_minute`, so it runs last and stops no view. And
+`tests/streaming/grafana_reader_privileges.sql` fails when `grafana_reader`
+can read anything outside `metrics`, write anywhere, use `streaming` or
+`live`, or has no connection limit or statement timeout (the timeout is set
+by hand: runbook, *The streaming showcase in staging (M6), Grafana*); on
+2026-11-17, against a local Postgres 18, it failed without the timeout and
+with a grant on `live.events`, and passed as built (`PASS=28`). The table has no tests:
 its primary key and `NOT NULL` hold them, and a test would scan a week of
 rows.
 

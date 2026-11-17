@@ -8,7 +8,8 @@
 # to one is made to both.
 # The additions are `pg_hba` and the `lagom_dev` role, for the developer
 # (ADR-0014), and, until the streaming showcase reaches prod, the roles
-# `serving` and `events_writer` (ADR-0047). The differences: no backup, since staging's data is rebuilt by
+# `serving`, `events_writer` and `grafana_reader` with its `pg_hba` lines
+# (ADR-0047). The differences: no backup, since staging's data is rebuilt by
 # loading the source again and prod's backup is the protection (ADR-0046).
 # The reasoning behind each shared setting is written once, in the prod file.
 apiVersion: postgresql.cnpg.io/v1
@@ -54,8 +55,14 @@ spec:
     # connections with or without TLS, so no separate `hostssl` line is needed.
     # Local-socket access (`kubectl exec`, the operator) is a different rule
     # type and is not affected.
+    #
+    # Grafana's role may connect to `serving` and to no other database
+    # (ADR-0047, decision 7): the first line lets it reach the password check
+    # for `serving`, the second refuses it everywhere else, before that check.
     pg_hba:
       - host lagom lagom_dev all reject
+      - host serving grafana_reader all scram-sha-256
+      - host all grafana_reader all reject
 
   env:
     - name: GOMEMLIMIT
@@ -146,3 +153,28 @@ spec:
         comment: Redpanda Connect; insert into live.events only
         passwordSecret:
           name: events-writer-credentials
+      # Grafana's (ADR-0047, decision 7; platform/infra/grafana/). It may
+      # read the views of the schema `metrics`, granted by dbt on every build
+      # (platform/warehouse/dbt_project.yml), and nothing else: no `live`, no
+      # `streaming`, no other database (`pg_hba` above). A view runs with its
+      # owner's rights, so it reads `live.events` through the views without a
+      # grant on the table. The limit of 3 is Grafana's pool of 2 plus one
+      # for the operator. Its password is random, sealed by the operator in
+      # grafana-reader-credentials-sealed.yaml here and again in grafana/.
+      #
+      # The statement timeout is not a field CloudNativePG manages (its role
+      # spec has none), so it is set once by the operator, as the superuser,
+      # with `ALTER ROLE grafana_reader SET statement_timeout = '10s'`
+      # (runbook: The streaming showcase in staging), and kept by Postgres in
+      # the role. The `streaming` job's test grafana_reader_privileges fails
+      # every hour it is missing, so it cannot be lost quietly.
+      - name: grafana_reader
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        connectionLimit: 3
+        comment: Grafana; select on the views of metrics only
+        passwordSecret:
+          name: grafana-reader-credentials
