@@ -1529,12 +1529,18 @@ every Pod; a port-forward reaches it.
 
 ```bash
 kubectl -n staging port-forward deploy/connect 4195:4195 &
-curl -s -X DELETE localhost:4195/streams/producer      # 200: no more events
+curl -s -X DELETE -w "%{http_code}\n" localhost:4195/streams/producer   # 200: no more events
+curl -s localhost:4195/streams | jq keys               # ["consumer"]: no producer
 # A few seconds later, once the writer has caught up: the first second not produced.
 kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc "select to_char(
   (date_trunc('second', max(collected_at)) + interval '1 second') at time zone 'UTC',
   'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') from live.events where source = 'synthetic'"
 ```
+
+Check both answers before waiting. A port-forward to `deploy/connect` is tied
+to the Pod that was running when it started, and stops working when that Pod
+is replaced; `curl -s` then prints nothing, and the producer keeps running.
+Start a new port-forward after any restart of Connect.
 
 An hour later, release that hour and restart the producer:
 
@@ -1551,14 +1557,17 @@ curl -s -X DELETE localhost:4195/streams/backfill
 
 The backfill emits 3,600 seconds of events and stops: 18,000 rows. Then
 check, for the held hour, that `metrics.pipeline_minute` holds 60 events per
-minute and stream, all counted as late, and that the hour's synthetic outages
-(minutes 7 and 37) are in `metrics.link_outages`. A Pod restart before the
+whole minute and stream, and that the hour's synthetic outages (minutes 7 and
+37) are in `metrics.link_outages`. The events are counted as late except those
+collected less than a minute before the release: they reached the hub less
+than a minute after they were collected, which the rule calls on time. A Pod restart before the
 release brings the producer back from its file, which ends the hold early.
 Exercised against a local hub on 2026-11-17: 18,000 rows in 2 s, then
-`PASS=23`.
+`PASS=23`; and in staging the same day (ADR-0047, *Notes*).
 
 **The other criteria of decision 8**, each read as above: hub and table
-counts equal, and no pending or unacknowledged message.
+counts equal, and no pending or unacknowledged message. Exercised in staging
+on 2026-11-17, with the rebuild above; the figures are in ADR-0047's *Notes*.
 
 - **Connect restarted while events flow:** `kubectl -n staging delete pod -l app=connect`.
 - **Postgres's Pod deleted while events flow:**
