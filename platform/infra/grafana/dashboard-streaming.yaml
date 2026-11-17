@@ -99,156 +99,6 @@ data:
       },
       "panels": [
         {
-          "id": 1,
-          "type": "table",
-          "title": "How long was the link down",
-          "description": "Per target, over the time range: outages (runs of consecutive lost pings, link_outages), the time they lasted, and availability, the share of pings answered (link_minute). Pick 'This month' in the time picker for the month; the live table holds about 7 days.",
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 0
-          },
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${datasource}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "grafana-postgresql-datasource",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "with answered as (\n    select ping_target, sum(pings) as pings, sum(lost_pings) as lost_pings\n    from metrics.link_minute\n    where $__timeFilter(minute_start) and source = '$source'\n    group by ping_target\n),\noutages as (\n    select\n        ping_target,\n        count(*) as outages,\n        sum(duration_seconds) as down_seconds,\n        max(duration_seconds) as longest_seconds\n    from metrics.link_outages\n    where $__timeFilter(started_at) and source = '$source'\n    group by ping_target\n)\nselect\n    a.ping_target as \"Target\",\n    coalesce(o.outages, 0) as \"Outages\",\n    coalesce(o.down_seconds, 0) as \"Down\",\n    o.longest_seconds as \"Longest\",\n    100 * (1 - a.lost_pings::double precision / nullif(a.pings, 0)) as \"Availability\"\nfrom answered as a\nleft join outages as o using (ping_target)\norder by \"Target\""
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Down"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "s"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Longest"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "s"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Availability"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "percent"
-                  },
-                  {
-                    "id": "decimals",
-                    "value": 3
-                  }
-                ]
-              }
-            ]
-          },
-          "options": {
-            "showHeader": true
-          }
-        },
-        {
-          "id": 2,
-          "type": "table",
-          "title": "At which hours is the link worse ($target)",
-          "description": "Median and 95th-percentile round trip, and loss, by day of the week and hour of the day in UTC, for the target picked above, over everything the live table holds (link_hour_profile), not the time range. Sorted worst first.",
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 0
-          },
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${datasource}"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": {
-                "type": "grafana-postgresql-datasource",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "select\n    (array['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])[day_of_week] as \"Day\",\n    hour_of_day as \"Hour (UTC)\",\n    pings as \"Pings\",\n    100 * lost_pings::double precision / nullif(pings, 0) as \"Loss\",\n    rtt_p50_ms as \"Median\",\n    rtt_p95_ms as \"95th percentile\"\nfrom metrics.link_hour_profile\nwhere source = '$source' and ping_target = '$target'\norder by rtt_p95_ms desc nulls last"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Loss"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "percent"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Median"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "95th percentile"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              }
-            ]
-          },
-          "options": {
-            "showHeader": true
-          }
-        },
-        {
           "id": 3,
           "type": "timeseries",
           "title": "Is it the home router or the provider",
@@ -257,7 +107,7 @@ data:
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 7
+            "y": 0
           },
           "datasource": {
             "type": "grafana-postgresql-datasource",
@@ -310,7 +160,7 @@ data:
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 7
+            "y": 0
           },
           "datasource": {
             "type": "grafana-postgresql-datasource",
@@ -401,6 +251,156 @@ data:
               "mode": "multi",
               "sort": "none"
             }
+          }
+        },
+        {
+          "id": 1,
+          "type": "table",
+          "title": "How long was the link down",
+          "description": "Per target, over the time range: outages (runs of consecutive lost pings, link_outages), the time they lasted, and availability, the share of pings answered (link_minute). Pick 'This month' in the time picker for the month; the live table holds about 7 days.",
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "with answered as (\n    select ping_target, sum(pings) as pings, sum(lost_pings) as lost_pings\n    from metrics.link_minute\n    where $__timeFilter(minute_start) and source = '$source'\n    group by ping_target\n),\noutages as (\n    select\n        ping_target,\n        count(*) as outages,\n        sum(duration_seconds) as down_seconds,\n        max(duration_seconds) as longest_seconds\n    from metrics.link_outages\n    where $__timeFilter(started_at) and source = '$source'\n    group by ping_target\n)\nselect\n    a.ping_target as \"Target\",\n    coalesce(o.outages, 0) as \"Outages\",\n    coalesce(o.down_seconds, 0) as \"Down\",\n    o.longest_seconds as \"Longest\",\n    100 * (1 - a.lost_pings::double precision / nullif(a.pings, 0)) as \"Availability\"\nfrom answered as a\nleft join outages as o using (ping_target)\norder by \"Target\""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Down"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "s"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Longest"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "s"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Availability"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percent"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 3
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true
+          }
+        },
+        {
+          "id": 2,
+          "type": "table",
+          "title": "At which hours is the link worse ($target)",
+          "description": "Median and 95th-percentile round trip, and loss, by day of the week and hour of the day in UTC, for the target picked above, over everything the live table holds (link_hour_profile), not the time range. Sorted worst first.",
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${datasource}"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${datasource}"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "select\n    (array['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])[day_of_week] as \"Day\",\n    hour_of_day as \"Hour (UTC)\",\n    pings as \"Pings\",\n    100 * lost_pings::double precision / nullif(pings, 0) as \"Loss\",\n    rtt_p50_ms as \"Median\",\n    rtt_p95_ms as \"95th percentile\"\nfrom metrics.link_hour_profile\nwhere source = '$source' and ping_target = '$target'\norder by rtt_p95_ms desc nulls last"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Loss"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percent"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Median"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "ms"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "95th percentile"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "ms"
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true
           }
         },
         {
