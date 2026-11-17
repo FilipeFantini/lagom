@@ -167,7 +167,7 @@ passes.
       Cluster; [ADR-0012](adr/0012-cloudnative-pg.md)
 - [x] Postgres `Cluster` for prod (no PgBouncer yet); budget check counts the
       `Cluster`'s resources, since its Pods are not in Git — PostgreSQL 18.6,
-      47 MiB idle; runbook section in [architecture.md](runbook.md#postgres-m2)
+      47 MiB idle; runbook section in [runbook.md](runbook.md#postgres-m2)
 - [x] Bronze in Postgres via dlt; set `max_table_nesting` against the real
       payload — on the real USGS payload a column hint on
       `geometry__coordinates` (`data_type: json`) does the job without

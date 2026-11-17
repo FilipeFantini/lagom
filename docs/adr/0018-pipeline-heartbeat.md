@@ -21,7 +21,7 @@ Dagster's native alerting (M3) is the planned answer, but M3 does not fit the
 now.
 
 The node accepts no inbound connection
-([`architecture.md`](../runbook.md#tailscale-acl-and-zero-inbound-ports-m1)),
+([`runbook.md`](../runbook.md#tailscale-acl-and-zero-inbound-ports-m1)),
 so a monitor that probes a URL from outside has nothing to probe.
 
 ## Requirements and constraints

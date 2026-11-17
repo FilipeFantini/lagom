@@ -65,7 +65,7 @@ account is the project's public identity, as for any open-source author.
    Commits use the account's GitHub `noreply` address, never a personal one.
 3. **Identifiers leave the tree.** The runbook writes them as placeholders and
    says where each value is found
-   ([`architecture.md`](../runbook.md)). Kept on purpose: the
+   ([`runbook.md`](../runbook.md)). Kept on purpose: the
    GitHub account name (repository URL, image paths, the OCI source label), the
    license holder, the node's hostname, the Hetzner plan, location, and price,
    and the domain. Each is public elsewhere or is the reasoning the project

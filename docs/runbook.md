@@ -208,7 +208,7 @@ API is unavailable for a few seconds.
 Traefik and servicelb are not installed, and local-path and metrics-server are
 installed by Argo CD instead of k3s ([ADR-0021](adr/0021-k3s-packaged-components-under-git.md)):
 the `disable:` list in `config.yaml` above. metrics-server is what `kubectl top`
-needs to measure the budget in §11. **On a fresh install the cluster has no
+needs to measure the budget in [architecture.md §11](architecture.md#11-resource-budget). **On a fresh install the cluster has no
 storage class until Argo CD syncs `local-path`**; the Postgres `Cluster`s wait
 for it (their volumes bind on first use). The API (6443) and kubelet (10250)
 listen on all interfaces. **The Hetzner firewall is what keeps them
@@ -938,7 +938,7 @@ the code server by itself, and the scheduled run is the check.
    lives less than a minute and metrics-server samples once a minute, so the
    first staging runs never showed in it (2026-11-15). The request is 768 MiB
    and the limit 1 GiB; the fixture peaked at 540 MiB, and staging on real data
-   at 804 MiB (2026-11-15, the run of 18:31). Record a new peak here and in §11;
+   at 804 MiB (2026-11-15, the run of 18:31). Record a new peak here and in [architecture.md §11](architecture.md#11-resource-budget);
    if it comes within 100 MiB of the limit, raise the job's own resources, not
    `usgs`'s.
 8. **The alarm still works for it.** After the above, a failed run in step 6 must
@@ -1119,7 +1119,7 @@ kubectl --context <node-name> -n cloudflared top pod --containers
 ```
 
 Set the request in `deployment.yaml` from the figure, as for every component
-(§11).
+([architecture.md §11](architecture.md#11-resource-budget)).
 
 **Add a tool** (Airflow, for instance):
 
@@ -1282,7 +1282,7 @@ A deletion logs `Deleting backup not in the catalog` with the backup's name,
 and the ObjectStore's `status.serverRecoveryWindow` moves its
 `firstRecoverabilityPoint` forward. Staging showed both on 2026-11-05.
 
-**Memory measured** on 2026-10-28 is in §11: the sidecar used 18 Mi during a
+**Memory measured** on 2026-10-28 is in [architecture.md §11](architecture.md#11-resource-budget): the sidecar used 18 Mi during a
 base backup.
 
 ## Dagster (M3)
@@ -1298,7 +1298,7 @@ Each environment runs its own Dagster in its namespace
 
 A **run** is not one of them. For each run the daemon creates a Kubernetes
 Job named `dagster-run-<run id>`, whose Pod uses the code server's image and
-environment plus the Secrets its job names (§7); its memory is in §11. The Job and its Pod are deleted an hour after they
+environment plus the Secrets its job names ([architecture.md §7](architecture.md#7-orchestration--dagster)); its memory is in [architecture.md §11](architecture.md#11-resource-budget). The Job and its Pod are deleted an hour after they
 finish. The run's history stays in the database `dagster` of the same
 environment's Postgres.
 
@@ -1311,7 +1311,7 @@ In prod, replace `staging` with `prod`.
 |---|---|---|
 | `usgs` | every 30 minutes, at :00 and :30 | dlt loads the events USGS updated since the last cursor into DuckLake (`bronze.usgs_events`), then `dbt build` builds silver and gold on the `lake` target and runs their 33 tests |
 | `lake_maintenance` | daily at 04:15 | merges small Parquet files, expires snapshots older than 7 days, deletes files nothing references; its second step, `grant_lake_reader`, gives `lake_reader` its grants |
-| `dashboards` | after each successful `usgs` run (the sensor `render_dashboards_after_usgs`) | renders the boards against the lake, checks them, and publishes them to the environment's dashboards bucket (§9; runbook: *The dashboards' publishing path*) |
+| `dashboards` | after each successful `usgs` run (the sensor `render_dashboards_after_usgs`) | renders the boards against the lake, checks them, and publishes them to the environment's dashboards bucket ([architecture.md §9](architecture.md#9-visualization); runbook: *The dashboards' publishing path*) |
 
 All three carry the tag `lagom/pipeline=usgs`, and the daemon's queue starts one
 run with that tag at a time. A second run waits as *Queued* until the first
@@ -1375,7 +1375,7 @@ Start runs from the job's page, not from *Catalog* or the asset graph. A run
 started there belongs to Dagster's implicit asset job, which has none of the
 jobs' tags: since 2026-11-16 the queue holds every run to one at a time, so
 it no longer overlaps a scheduled load on dlt's cursor, but it still takes the code server's memory
-instead of the run's (§11), and it has no credentials (§7), so it fails at its
+instead of the run's ([architecture.md §11](architecture.md#11-resource-budget)), and it has no credentials ([architecture.md §7](architecture.md#7-orchestration--dagster)), so it fails at its
 first asset with a missing variable.
 
 **Pitfalls hit on the way in** (staging, 2026-10-28). Each made the code
@@ -1421,7 +1421,7 @@ never the URL. Dagster does not retry the run that tick was for.
 environment's values since its CronJob was retired (both on 2026-11-07). An image with the sensors is never pinned in an environment
 whose values do not set it: its code server would not start.
 
-**Memory** of each Pod and of a run, measured, is in §11.
+**Memory** of each Pod and of a run, measured, is in [architecture.md §11](architecture.md#11-resource-budget).
 
 ## The streaming showcase in staging (M6)
 

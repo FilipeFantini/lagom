@@ -74,7 +74,7 @@ spike in M3, on its free tier ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.
 **Outside the cluster, principle 3 does not hold yet.** The server, its
 firewall, the Tailscale ACL, the Cloudflare Access application and its DNS
 records, and the Healthchecks.io checks are created by hand, following the
-runbook (§13); the domain's zone at Cloudflare was set up by
+[runbook](runbook.md); the domain's zone at Cloudflare was set up by
 hand in its console. Argo CD
 reconciles only what runs inside the cluster. Terraform takes over these
 resources by trigger — see [`roadmap.md`](roadmap.md#trigger-table).
@@ -614,9 +614,10 @@ the cluster through a pull request and Argo CD, and inspection goes through
 - **`sudo` for operators only.** A developer who ever needs a shell gets a user
   outside the `sudo` group.
 - Root login and password authentication are disabled; `AllowUsers` lists every
-  permitted account explicitly. See the provisioning steps in §13.
+  permitted account explicitly. See the provisioning steps in the
+  [runbook](runbook.md#provision-the-node-m0).
 - **Reachable only over Tailscale.** The node has no inbound port open to the
-  internet; the break-glass path is in the runbook (§13).
+  internet; the break-glass path is in the [runbook](runbook.md).
 
 ### Tailscale
 

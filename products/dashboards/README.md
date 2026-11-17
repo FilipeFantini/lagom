@@ -88,7 +88,7 @@ CI, against the cluster's lake:
 `dct` runs with the lake's variables and nothing else: not the bucket's token,
 not the ping URL. Telemetry is on there (below); every command has a timeout.
 What the step proves and what is still to verify in staging are in
-[`architecture.md`](../../docs/runbook.md#the-dashboards-publishing-path).
+[`runbook.md`](../../docs/runbook.md#the-dashboards-publishing-path).
 
 ## Run it locally
 
