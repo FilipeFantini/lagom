@@ -80,5 +80,4 @@ OPEN ITEMS
 - what is not done or not verified
 ```
 
-Keep it under ~50 lines. The architect reads the diff; the report says what the
-diff cannot.
+The architect reads the diff; the report says only what the diff cannot.

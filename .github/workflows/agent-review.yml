@@ -163,7 +163,7 @@ jobs:
                say so in the summary as a minor finding; the operator decides.
 
             Return the structured output: your verdict, whether the change is
-            guarded, a summary of at most five sentences in plain words, and
+            guarded, a short summary in plain words, and
             each finding as one string in the format of reviewer.md.
           # Read is scoped to the workspace: a bare `Read` reaches any file on
           # the runner, /proc included, and what the reviewer writes is

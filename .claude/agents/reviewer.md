@@ -87,4 +87,4 @@ NOT VERIFIED
 ```
 
 REQUEST_CHANGES only for a blocker or major finding. Minor findings go in the
-list but do not block. Keep the whole report under ~60 lines.
+list but do not block.
