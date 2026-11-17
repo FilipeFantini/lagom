@@ -30,9 +30,11 @@ data:
   # - Subjects events.<source>.<signal>: whatever is published there is kept.
   # - Retention by age, 7 days, counted from when the hub stored each event:
   #   the live table is to keep 7 days too, so it can always be rebuilt from
-  #   here (ADR-0047, decision 4); never less. Until the archive job exists
-  #   (ADR-0047, decision 6) nothing deletes from the table, so a rebuild
-  #   restores only the last 7 days of it.
+  #   here (ADR-0047, decision 4); never less. The archive job deletes a
+  #   row from the table once it is older than 7 days and confirmed in the
+  #   lake (ADR-0047, decision 6), and platform/orchestration's
+  #   tests/test_archive.py fails if this keeps less than that job's
+  #   LIVE_RETENTION.
   # - And by size, 2 GiB: at 5 events a second and 458 bytes an event (the
   #   spike's figure), 7 days are about 1.4 GiB. The oldest go first.
   # - Duplicate window, 2 minutes: a message whose Nats-Msg-Id (the event

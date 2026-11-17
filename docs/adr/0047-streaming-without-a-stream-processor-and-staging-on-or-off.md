@@ -429,3 +429,47 @@ measured, without rewriting it.
     256, so the table in *What fits* becomes: today 5,182; prod with M6 and
     staging on, **5,374, with 258 MiB to spare**; with both Postgres at
     256, 5,286 and 346. The figure is read again on the node after a day.
+- **2026-11-17 — decision 6, the archive job, built.** Dagster's
+  `streaming_archive`, hourly at minute 20, where `LAGOM_STREAMING` is on
+  (`platform/orchestration/lagom_orchestration/archive.py`; runbook: *The
+  archive and the live table's retention*). How it was carried out, where
+  the text left it open:
+  - *Windows of `received_at`, one hour, UTC.* `received_at` is the hub's
+    timestamp and a replay writes the same value, so a window of it closes; a
+    window of `collected_at` never does. Hourly keeps each read small
+    (18,000 rows) and the lake an hour behind.
+  - *Idempotent by `event_id`.* A row is inserted only if its identifier is
+    not in the lake, looked up among the lake rows of the same
+    `collected_at`, which the identifier is made of. A window counts as
+    archived when every live row of it is found in the lake by identifier
+    and no identifier is there twice; otherwise the run fails before any
+    delete.
+  - *Retention, 7 days live.* An hour leaves `live.events` once all of it
+    is older than 7 days, the hub's retention (a test fails if the hub keeps
+    less), by the identifiers just confirmed, in one transaction that rolls
+    back unless it deletes exactly those. A failed archive deletes nothing.
+  - *The lake's table,* `bronze.streaming_events`: the live table's six
+    columns, the payload as JSON, sorted by source, signal and
+    `collected_at`, zstd, partitioned by the UTC day of `received_at`, with
+    no rows inlined into the catalog. A day then leaves the lake as whole
+    files, which `lake_maintenance` deletes from R2 once their snapshots
+    expire (seen locally: the file of a deleted day goes).
+  - *No index on `received_at`.* Measured locally on 2026-11-17 against a
+    Postgres 18 holding eight days (3.9 million rows, 1,958 MB): a normal
+    hourly run took 0.6 s without one and 0.3 s with one. Decision 8's rule
+    stands: none is built before a measurement asks for it. The run's time in
+    staging is read too.
+  - *ADR-0045's 90 days of raw events in the lake become 30,* fixed from the
+    measurement as its decision 8 says, and confirmed by the operator on
+    2026-11-17. Locally, the synthetic producer's
+    events (432,000 a day) took 8.86 MB a day in Parquet, 20.5 bytes an
+    event, in hourly files, and 8.38 MB, 19.4 bytes, once merged into one
+    file a day. The spike's 15.6 bytes measured typed columns, not the JSON
+    payload. In R2 a deleted day stays until its snapshot expires (7 days),
+    and a day's hourly files stay 7 days after the merge replaces them: per
+    environment about 38 × 8.4 + 8 × 8.9 ≈ 390 MB, both about 780 MB, inside
+    the showcase's 1 GB. 90 days would be about 1.8 GB for both. The
+    showcase adds nothing to the Postgres backup (decision 5) beyond the
+    catalog's few rows per run. The Pi's real events carry more fields and
+    less regular values; their size is read in prod's first days, and the
+    retention, one constant, is lowered if the two environments pass 1 GB.

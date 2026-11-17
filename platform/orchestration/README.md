@@ -9,8 +9,9 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
 | `lagom_orchestration/alarm.py` | The two sensors that raise the alarm through Healthchecks.io ([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)) |
 | `lagom_orchestration/dashboards.py` | The `dashboards` job's step (render, check, watermark, upload to R2) and the sensor that starts it after each `usgs` run ([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) |
 | `lagom_orchestration/lake.py` | Attaching the environment's DuckLake (read-only on request), its daily maintenance, and the grants of the catalog's read-only role |
+| `lagom_orchestration/archive.py` | The `streaming_archive` job's step: the streaming showcase's events copied from `serving` to the lake by hour, confirmed by identifier, then deleted from the live table after 7 days and from the lake after 30 |
 | `Dockerfile` | Built from the repository root: it bundles `services/*/ingestion`, `services/*/assets`, `platform/warehouse` and the dashboards' boards (`products/dashboards`), and installs dbt Charts |
-| `tests/` | The code location loads, and its graph, schedules and alarm sensors are the intended ones |
+| `tests/` | The code location loads, and its graph, schedules and alarm sensors are the intended ones; `test_archive.py` runs the archive against a real Postgres where `LAGOM_ARCHIVE_TEST_PG` names a throwaway database (CI's `warehouse (serving target)` job), and is skipped elsewhere |
 
 **Jobs.**
 
@@ -47,12 +48,52 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
   location, so a typo cannot drop the job and its alarm silently. A failed
   test, the emptied-table one included, is covered by `run_failure_alarm`.
 
+- `streaming_archive`, hourly at minute 20, **only where `LAGOM_STREAMING` is
+  `"true"`**, as `streaming` is: the op `archive_events`
+  ([`archive.py`](lagom_orchestration/archive.py); ADR-0045 decisions 7 and 8,
+  ADR-0047 decision 6). It works in windows of one hour of `received_at`, the
+  hub's timestamp, in UTC; a window is closed 10 minutes after its hour ends.
+  Each run, in this order:
+  1. counts the live table's rows per closed window (one query on the server)
+     and the lake's rows per window;
+  2. for each window with fewer rows in the lake than live, or old enough to
+     leave the live table, copies to `lake.bronze.streaming_events` the rows
+     whose `event_id` is not in the lake yet, sorted by source, signal and
+     `collected_at`;
+  3. confirms it: every live row of the window is found in the lake by
+     `event_id`, and no `event_id` is in the lake twice. Anything else fails
+     the run (`ArchiveMismatch`, with the window and the counts), before any
+     delete;
+  4. deletes from `live.events` a window whose every row is older than
+     7 days (`LIVE_RETENTION`, the hub's own retention), by the identifiers
+     just confirmed and no others, in one transaction that rolls back unless
+     it removes exactly that many;
+  5. deletes from the lake the events received before the start of the UTC
+     day 30 days back (`LAKE_RETENTION`), whole days, whose files
+     `lake_maintenance` then removes from R2 once their snapshots expire.
+
+  It logs one line per window it touched (live, lake before, inserted, lake
+  after, deleted from live), the lake's rows and Parquet bytes per UTC day,
+  and the run's memory peak. The lake's table is created on the first run:
+  partitioned by the UTC day of `received_at`, so a day leaves the lake as
+  whole files and `lake_maintenance` merges a day's hourly files into one;
+  zstd, and no rows inlined into the catalog, on this table only. Its Pod
+  holds the lake writer's Secrets without dlt's variables, and the owner of
+  `serving` (`ARCHIVE_ENV`); DuckDB reads `serving` read-only, and the
+  deletes go through their own connection. A re-run, a replay of the hub or
+  a run that failed half-way inserts nothing twice; a window that a replay
+  brings back with fewer rows than the lake holds is not a failure. A failed
+  run deletes nothing, and the live table keeps growing until one succeeds
+  (runbook: *The archive and the live table's retention*).
+
 The first three carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
 run at a time (so the render waits for the pipeline, and the budget does not change), and a `dagster-k8s/config` tag with the memory of the run's Pod
 (`RUN_RESOURCES`) and the Secrets it gets (`WRITER_ENV`, below). Without it a run would inherit the code server's, which is
 about half of what a run needs. `streaming` carries the same resources with
-its own Secrets (`SERVING_ENV`) and no pipeline tag: it touches neither dlt's
-cursor nor the lake, and the instance's one run slot still keeps it apart. Each environment's Application declares
+its own Secrets (`SERVING_ENV`), and `streaming_archive` with the lake
+writer's and `serving`'s (`ARCHIVE_ENV`), both with no pipeline tag: neither
+touches dlt's cursor or the USGS tables, and the instance's one run slot still
+keeps each apart. Each environment's Application declares
 the same request for the budget check, and the tests fail if they differ.
 Steps run in the run's own process (`in_process_executor`); dbt is still a
 process of its own.
@@ -99,7 +140,7 @@ its own tag, and a run's Pod gets the two lists together
 | `LAGOM_LAKE_DATA_PATH`, `LAGOM_LAKE_METADATA_SCHEMA`, `PGSSLMODE` | the environment's values | the lake's bucket and schema, for dbt and maintenance |
 | `HEARTBEAT_URL` | the environment's values, from the Secret `pipeline-heartbeat` | the check's ping URL (a secret): required by the code location, so every run Pod holds it (ADR-0033 decision 5, still true) |
 | `LAGOM_STREAMING` | the environment's values (`"true"` or `"false"`; unset is `"false"`) | whether the `streaming` job and its schedule exist |
-| `LAGOM_PG_HOST`, `LAGOM_PG_PORT`, `LAGOM_PG_DBNAME`, `LAGOM_PG_SSLMODE`; `LAGOM_PG_USER`, `LAGOM_PG_PASSWORD` | the `streaming` job's tag (`SERVING_ENV`); the last two from `serving-credentials` | dbt's `serving` target, as the owner of `serving` |
+| `LAGOM_PG_HOST`, `LAGOM_PG_PORT`, `LAGOM_PG_DBNAME`, `LAGOM_PG_SSLMODE`; `LAGOM_PG_USER`, `LAGOM_PG_PASSWORD` | the `streaming` and `streaming_archive` jobs' tags (`SERVING_ENV`); the last two from `serving-credentials` | dbt's `serving` target and the archive, as the owner of `serving` |
 | `LAGOM_DASHBOARDS_BUCKET` | the environment's values | the bucket the pages are published to (`lagom-<env>-dashboards`) |
 | `PG_URI` | each job's tag (`WRITER_ENV`), from `postgres-app` | the catalog owner's connection string |
 | `LAGOM_R2_ACCESS_KEY_ID`, `LAGOM_R2_SECRET_ACCESS_KEY`, `LAGOM_R2_ENDPOINT` | each job's tag, from `r2-lake` | the environment's R2 write token |

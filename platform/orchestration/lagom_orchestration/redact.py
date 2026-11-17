@@ -12,8 +12,8 @@ import re
 _USERINFO = re.compile(r"(://[^\s/:@]+:)([^@\s]+)@")
 # libpq keyword form: password=secret
 _PASSWORD_PARAM = re.compile(r"(?i)(\bpassword\s*=\s*)(\S+)")
-# DuckDB: SECRET 'value' / KEY_ID 'value' inside CREATE SECRET.
-_SQL_LITERAL = re.compile(r"(?i)(\b(?:SECRET|KEY_ID)\s+')([^']*)(')")
+# DuckDB: SECRET 'value' / KEY_ID 'value' / PASSWORD 'value' inside CREATE SECRET.
+_SQL_LITERAL = re.compile(r"(?i)(\b(?:SECRET|KEY_ID|PASSWORD)\s+')([^']*)(')")
 
 
 def redact_secrets(text: str) -> str:

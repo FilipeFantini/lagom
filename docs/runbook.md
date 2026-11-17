@@ -1498,10 +1498,10 @@ kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc \
 
 The writer has caught up when `num_pending` and `num_ack_pending` are 0.
 Then the hub's `messages` equals the table's count while the stream is less
-than 7 days old. After that, until the archive job exists, the table also
-holds what the hub has already dropped, so compare the count over the
-hub's own window instead: rows with `received_at` after the hub's first
-message (`.state.first_ts` in the same JSON).
+than 7 days old. After that the table also holds up to an hour the hub has
+already dropped (the archive deletes whole hours, below), so compare the
+count over the hub's own window instead: rows with `received_at` after the
+hub's first message (`.state.first_ts` in the same JSON).
 In the spike an event took 458 bytes in the hub; locally 366.
 
 **Rebuild the live table from the hub** (ADR-0047, decision 4). Do it after
@@ -1519,12 +1519,54 @@ kubectl -n staging delete pod -l app=connect
 Connect's new Pod finds no consumer and creates it with `deliver: all`, so it
 reads the stream from its first message. Rows written between the truncate
 and the restart are written again unchanged, since the insert ignores a key it
-has. It restores only what the hub still holds, the last 7 days: until the
-archive job exists, events older than that are not in the lake either, and
-are gone. `received_at` is the hub's timestamp, so the rebuilt rows equal the
-old ones. Wait until `num_pending` is 0, then compare the counts as above.
+has. It restores only what the hub still holds, the last 7 days; older
+events are in the lake, archived by `streaming_archive` (below), which does
+not copy the replayed rows again. `received_at` is the hub's timestamp, so
+the rebuilt rows equal the old ones. Wait until `num_pending` is 0, then compare the counts as above.
 Deleting the consumer is the step that matters: a Connect restart alone
 resumes from the consumer's position (ADR-0045's spike notes, correction 5).
+
+**The archive and the live table's retention** (ADR-0047, decision 6).
+Dagster's `streaming_archive` runs every hour at minute 20
+([`platform/orchestration/`](../platform/orchestration/README.md)): it copies
+the closed hours of `received_at` to `bronze.streaming_events` in the lake,
+confirms each row there by `event_id`, deletes from `live.events` an hour
+whose rows are all older than 7 days, and deletes from the lake the days
+older than 30. Read a run in its Pod's log, which Kubernetes keeps an hour:
+
+```bash
+kubectl -n staging get pods -l dagster/job=streaming_archive \
+  -o custom-columns=POD:.metadata.name,RUN:.metadata.labels.dagster/run-id,STATUS:.status.phase
+kubectl -n staging logs <pod> | grep -E 'window |window\(s\)|memory peak'
+```
+
+Each window it touched is a line: rows live, in the lake before, inserted,
+in the lake after, and deleted from the live table. A normal run touches two:
+the hour that just closed (inserted equals live) and the hour that turned
+7 days old (inserted 0, deleted equals live). A run with nothing to do logs
+`no window to archive or delete`. The summary line gives the lake's rows and
+its Parquet bytes per UTC day, the figure the 1 GB of R2 is checked against
+(ADR-0047's notes).
+
+**If it fails**, nothing was deleted: a mismatch (`ArchiveMismatch`) is raised
+before the delete, and the delete itself rolls back unless it removes exactly
+the rows confirmed. The alarm's e-mail carries the window and the counts.
+Until a run succeeds, the live table keeps every row, so it grows by about
+200 MB a day and, past 7 days, holds rows the hub has dropped: a crash of
+Postgres in that time loses them. So read the error the same day:
+
+- `N of them not found in the lake after the insert`: the insert did not
+  land; read the run's log for a DuckLake or R2 error above it.
+- `event_id(s) in the lake more than once`: two copies of an event in the
+  lake, which the archive never writes, so something else wrote to
+  `bronze.streaming_events`. Find what before removing a copy; every run
+  fails on that window until then, and deletes nothing.
+- `the delete would remove N`: rows of the window changed between the read
+  and the delete, which only a hand-made change to `live.events` does; the
+  next run reads the window again.
+
+A window that comes back from a rebuild with fewer rows than the lake holds
+is expected, not a failure: the lake keeps what the table lost.
 
 **Hold the synthetic events back for an hour** (ADR-0047, decision 8, the
 second criterion). It reproduces what the Pi does when its link comes back:
