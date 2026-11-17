@@ -257,9 +257,9 @@ them set again. Why each exists is in
 | Setting | State | Inspect with |
 |---|---|---|
 | Dependabot alerts and security updates | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom --jq .security_and_analysis` |
-| No Dependabot secret: `agent review` gets the repository's token, and allows `dependabot[bot]` in its workflow ([ADR-0049](docs/adr/0049-the-reviewer-runs-on-dependabots-pull-requests.md)) | the copy made on 2026-11-16 to delete | `gh api repos/FilipeFantini/lagom/dependabot/secrets` (empty) |
+| No Dependabot secret: `agent review` gets the repository's token, and allows `dependabot[bot]` in its workflow ([ADR-0049](docs/adr/0049-the-reviewer-runs-on-dependabots-pull-requests.md)) | the copy made on 2026-11-16 deleted on 2026-11-17 | `gh api repos/FilipeFantini/lagom/dependabot/secrets` (empty) |
 | CodeQL default setup, `actions` and `python`, on pull requests and weekly | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/default-setup` |
-| `main` ruleset: *Require code scanning results*, CodeQL, security *High or higher*, alerts *Errors* | to set | `gh api repos/FilipeFantini/lagom/rulesets/25948914` |
+| `main` ruleset: *Require code scanning results*, CodeQL, security *High or higher*, alerts *Errors* | not set: CodeQL does not analyse Dependabot's pull requests (ADR-0048 Validation) | `gh api repos/FilipeFantini/lagom/rulesets/25948914` |
 | CodeQL alert #1 (`actions/untrusted-checkout/high` in `agent-review.yml`) dismissed as *won't fix* | dismissed on 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/alerts/1` |
 | Actions must be pinned to a full commit SHA | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/actions/permissions` |
 | Fork pull request CI approval: all external contributors | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/actions/permissions/fork-pr-contributor-approval` |
