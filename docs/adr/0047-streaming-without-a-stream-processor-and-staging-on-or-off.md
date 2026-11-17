@@ -473,3 +473,31 @@ measured, without rewriting it.
     catalog's few rows per run. The Pi's real events carry more fields and
     less regular values; their size is read in prod's first days, and the
     retention, one constant, is lowered if the two environments pass 1 GB.
+- **2026-11-17 — the archive runs in staging.** The image built from #121
+  was pinned by #122. Each figure below is from the run's own log; the
+  table's counts are the archive's own, read in the same run as the lake's.
+  - *First run,* `1cde87fe-ce07-4f7d-ba1d-589804628462`, at 17:20 UTC,
+    37 seconds. It archived the 8 closed hours since the table began, from
+    09:00 to 16:00: 160,480 rows, and in each hour the lake held exactly
+    the live table's count. The hour from 09:00 held 16,555 rows, because
+    events started at 09:04. The hours from 11:00 and 12:00 held 26,800 and
+    27,180 rows, because they include the doubled backfill recorded above
+    for 10:23 to 11:23. The others held 18,000 each. The lake then held
+    3,576,317 bytes of Parquet, 22.3 bytes an event. The container's peak
+    was 520 MiB.
+  - *Second run,* `090c0145-b475-44b3-88fb-86bc6fd28d50`, at 18:20 UTC,
+    19 seconds. It read the per-hour counts of all nine closed hours and
+    archived only the new one, from 17:00: 18,000 rows. The eight hours
+    archived before were left as they were, with live and lake equal. The
+    lake held 178,480 rows, 160,480 plus 18,000, so no row was copied
+    twice. The new hour took 405,192 bytes, 22.5 bytes an event, which is
+    about 9.7 MB a day in hourly files. The peak was 490 MiB.
+  - *R2 against the 1 GB,* with staging's 22.5 bytes in place of the local
+    20.5: about 430 MB per environment and about 860 MB for both, still
+    inside the showcase's 1 GB, with less margin. Two figures are still to
+    read. The first is a merged day, after `lake_maintenance` at 04:15
+    merges the hourly files. The second is the first delete from the live
+    table, which comes once the hour from 09:00 on 2026-11-17 is 7 days
+    old: the 10:20 UTC run on 2026-11-24.
+  - *No index on `received_at`:* the two runs took 37 and 19 seconds, Pod
+    start included, so none is asked for.

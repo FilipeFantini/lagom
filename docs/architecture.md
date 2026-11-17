@@ -853,7 +853,9 @@ Staging adds ~1.13 GB:
   alone (Python and DuckDB, without Dagster's process around it) peaked at
   160 MiB for a normal hour and 216 MiB for a first catch-up of 192 hours;
   DuckDB is capped at 256 MB and spills to `/tmp` above it. The run's own
-  peak, Dagster included, is logged by each run.
+  peak, Dagster included, is logged by each run: in staging on 2026-11-17,
+  520 MiB for the first run, which archived 8 hours, and 490 MiB for the
+  next, which archived one.
 
 That leaves **~2.0 GB** for jobs. Staging's ResourceQuota caps everything
 staging requests at 2432 MiB. Staging requests 1,900 MiB in all (Postgres 300,

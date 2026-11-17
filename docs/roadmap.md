@@ -433,8 +433,10 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
       validated in staging (the hourly `streaming_archive` job, 7 days live
       and 30 in the lake, in the pull request that adds
       `platform/orchestration/lagom_orchestration/archive.py`, #121; its
-      image pinned in staging by the pull request after it; validated once
-      it runs there)
+      image pinned in staging by #122). The archive and its re-run pass in
+      staging since 2026-11-17 (ADR-0047's notes). Still to see there: the
+      first delete from the live table, when the first archived hour turns
+      7 days old on 2026-11-24, and the bytes of a merged day
 - [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
       tailnet tag and ACL, and its runbook section; it points at staging
       first
