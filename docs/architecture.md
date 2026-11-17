@@ -172,7 +172,7 @@ NATS stores; Redpanda Connect reads and writes. The leaf node keeps events
 while the home link is down and the hub copies them when it returns, hours
 late.
 
-**No stream processor** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed, superseding ADR-0045's choice of
+**No stream processor** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted, superseding ADR-0045's choice of
 RisingWave). On the node, Redpanda Connect reads the hub through a durable
 consumer, a position the hub keeps for it, and writes each event to an
 append-only table in the `serving` database, acknowledging only after the
@@ -247,6 +247,22 @@ the class boundaries. Freshness of bronze (warn 2 h, error 6 h) is checked by
 `dbt source freshness`. CI lints and parses the project but runs no model: how
 to run it is in [`platform/warehouse/README.md`](../platform/warehouse/README.md).
 
+**The streaming showcase's views** are the same project on a second Postgres
+target, `serving`, the database of that name
+([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md),
+decision 3). Under it only `models/streaming/` is built, and it is built
+under no other target. A hook creates the live table `live.events` if it is
+missing (`UNLOGGED`, its key the event identifier, inserted into by Redpanda
+Connect and by nothing else); `streaming/` types the events into views;
+`metrics/` holds five views, each with an enforced contract, which are what
+Grafana reads: the link per minute (loss, median and 95th-percentile round
+trip, jitter), the link by hour of the day and day of the week, the link's
+outages, the source's health per minute, and the pipeline per minute (events
+against one a second, and how late). They group by `collected_at`, so a late
+event is counted by the next query. A test fails when any of the five streams
+held fewer than half its events over the last hour: it is what makes an
+emptied table loud.
+
 ## 7. Orchestration — Dagster
 
 Assets, lineage, backfill, declarative retries, native dbt and dlt integration.
@@ -270,6 +286,13 @@ read. Its first content is USGS on DuckLake:
   gives the read-only catalog role its `SELECT` grants;
 - the job `dashboards` after each successful `usgs` run: it renders the boards
   against the lake with read-only credentials and publishes them (§9).
+- the job `streaming` every hour at minute 45, only in an environment whose
+  values set `LAGOM_STREAMING: "true"`: `dbt build` on the `serving` target
+  (§6), as the database's owner `serving` and with no lake credential. A
+  failed contract or test fails the run and raises the alarm. The code is in
+  the image; no environment sets the variable yet, and staging gets it with
+  the hub and the writer
+  ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)).
 
 **One run at a time per environment**, of any job: the run queue starts a run
 only when the one before it has ended (`maxConcurrentRuns: 1` in
@@ -366,9 +389,13 @@ step of each run publishes the gold tables a board needs into it and fails the
 run if they differ from gold; streaming events will land in it directly and be
 archived to the lake. Each theme reads through its own read-only role, with a
 connection limit and a statement timeout. It is never a source: it can be
-dropped and published again from the lake. **It is built when such a server
-is,** not before: the static page of §9 is rendered inside the run and reads
-gold.
+dropped and published again from the lake, except the streaming events not
+yet archived, which the hub can replay. The static page of §9 is rendered
+inside the run and reads gold, so nothing of USGS is published into it.
+**It is created for the streaming showcase**
+([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)),
+staging first: its models and job are in the code (§6, §7); the database, its
+roles and the writer come with staging's manifests.
 
 **PgBouncer** — deferred with a trigger: it enters with the first external BI
 consumer. Each Postgres connection costs 5–10 MB, and BI tools open them
@@ -456,7 +483,7 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07 |
 | `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`platform/infra/dagster-prod/`](../platform/infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
 
-**Staging on or off** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed, replacing the four modes of
+**Staging on or off** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted, replacing the four modes of
 [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md); not built — the table above is how staging runs today, always on).
 Staging has two states:
 
@@ -794,7 +821,7 @@ That leaves **~2.5 GB** for jobs. Staging's ResourceQuota caps everything
 staging requests at 2432 MiB. Staging requests 1,708 MiB in all (Postgres 300,
 Dagster 640, its run 768; 1,932 until 2026-11-16, when its UI and backup
 went); under
-[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) (proposed)
+[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) (accepted)
 that becomes 1,900 with M6's hub and Connect process, and 0 while it is off
 (below).
 dlt and dbt do not appear above: they are ephemeral jobs, and their requests
@@ -846,7 +873,7 @@ On the 8 GB node it fits with about 1.5 GB to spare; that room is the margin
 the node allows, not a budget to fill (§1).
 
 **M6, streaming, and what makes room for it** ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md), accepted, and
-[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed, which takes the stream processor out of it). M6's local
+[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted, which takes the stream processor out of it). M6's local
 spikes measured RisingWave at a 768 MiB request, the NATS hub at 64 and a
 Redpanda Connect process at 128; Grafana's 128 is not measured. With a hub,
 RisingWave and Grafana per environment, M6 would have taken the total to

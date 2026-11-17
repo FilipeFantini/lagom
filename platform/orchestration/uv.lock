@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.13.*"
 
 [[package]]
@@ -702,6 +702,22 @@ wheels = [
 ]
 
 [[package]]
+name = "dbt-postgres"
+version = "1.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "agate" },
+    { name = "dbt-adapters" },
+    { name = "dbt-common" },
+    { name = "dbt-core" },
+    { name = "psycopg2-binary" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2f/54/0af71f917d47a03f244aad15510e5df7853676e88c82be5c6afcef5464be/dbt_postgres-1.11.0.tar.gz", hash = "sha256:0a8558e03776231969a9614075eb31eb7daca03bcee1db7bc36f85f027826965", size = 162279, upload-time = "2026-07-16T15:52:36.762Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/61/e92738b7bdc6e36de7f2450ded77b221fd2768f85a345e93ff412ac95c7c/dbt_postgres-1.11.0-py3-none-any.whl", hash = "sha256:b88f994dc2f00150579d62f8ff91af715428a3cfe064e067945359ca4509872c", size = 36790, upload-time = "2026-07-16T15:52:35.34Z" },
+]
+
+[[package]]
 name = "dbt-protos"
 version = "1.0.615"
 source = { registry = "https://pypi.org/simple" }
@@ -1193,6 +1209,7 @@ dependencies = [
     { name = "dagster-postgres" },
     { name = "dbt-core" },
     { name = "dbt-duckdb" },
+    { name = "dbt-postgres" },
     { name = "dlt", extra = ["ducklake", "postgres", "s3"] },
     { name = "duckdb" },
     { name = "psycopg", extra = ["binary"] },
@@ -1221,6 +1238,7 @@ requires-dist = [
     { name = "dagster-postgres", specifier = "==0.29.27" },
     { name = "dbt-core", specifier = "==1.12.6" },
     { name = "dbt-duckdb", specifier = "==1.11.1" },
+    { name = "dbt-postgres", specifier = "==1.11.0" },
     { name = "dlt", extras = ["ducklake", "s3", "postgres"], specifier = "==1.31.0" },
     { name = "duckdb", specifier = ">=1.5.5,<2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },

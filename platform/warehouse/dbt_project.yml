@@ -4,15 +4,23 @@ config-version: 2
 
 profile: lagom
 
+# The `serving` target builds the streaming showcase's table and views and
+# nothing else (ADR-0047); every other target builds everything but them. Each
+# folder below says which with `+enabled`.
+on-run-start:
+  - "{{ create_live_events() if target.name == 'serving' else '' }}"
+
 # Models, tests and macros are found by dbt's default paths.
 # Schemas are fixed by macros/generate_schema_name.sql: a model's `+schema`
 # is the schema name, with no target prefix.
 models:
   lagom:
     staging:
+      +enabled: "{{ target.name != 'serving' }}"
       +materialized: table
       +schema: silver
     marts:
+      +enabled: "{{ target.name != 'serving' }}"
       +materialized: table
       +schema: gold
       # The read-only group of every gold consumer (architecture.md §10). A
@@ -28,8 +36,25 @@ models:
       +grants: "{{ {'select': ['gold_reader']} if target.type == 'postgres' else {} }}"
       +post-hook: "{{ 'grant usage on schema ' ~ this.schema ~ ' to gold_reader' if target.type == 'postgres' else '' }}"
 
+    # The streaming showcase, in the database `serving` (ADR-0047). Views,
+    # computed when read: a late event is a row with an old `collected_at`,
+    # and the next query counts it. `streaming` holds the typed events, read
+    # only by the views; `metrics` holds the views Grafana reads, each with an
+    # enforced contract, so what computes a metric can change behind it
+    # without a panel being rewritten.
+    streaming:
+      +enabled: "{{ target.name == 'serving' }}"
+      +materialized: view
+      +schema: streaming
+      metrics:
+        +schema: metrics
+
 data_tests:
   lagom:
-    # Postgres only: DuckLake has no per-table grants (ADR-0023).
+    +enabled: "{{ target.name != 'serving' }}"
+    streaming:
+      +enabled: "{{ target.name == 'serving' }}"
+    # Postgres only: DuckLake has no per-table grants (ADR-0023). Not under
+    # `serving`, which has no gold.
     gold_reader_privileges:
-      +enabled: "{{ target.type == 'postgres' }}"
+      +enabled: "{{ target.type == 'postgres' and target.name != 'serving' }}"

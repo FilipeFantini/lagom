@@ -1,0 +1,18 @@
+version: 2
+
+unit_tests:
+  - name: stg_events__pings_has_no_round_trip_for_a_lost_ping
+    description: >
+      Whatever the payload carries for a lost ping, its round trip is null, so
+      it cannot enter a percentile.
+    model: stg_events__pings
+    given:
+      - input: source('live', 'events')
+        rows:
+          - {event_id: a, source: s, signal: ping, collected_at: "2026-11-17 10:00:00+00", received_at: "2026-11-17 10:00:00+00", payload: '{"target": "node", "lost": true, "rtt_ms": 0}'}
+          - {event_id: b, source: s, signal: ping, collected_at: "2026-11-17 10:00:01+00", received_at: "2026-11-17 10:00:01+00", payload: '{"target": "node", "lost": false, "rtt_ms": 12.5}'}
+          - {event_id: c, source: s, signal: health, collected_at: "2026-11-17 10:00:01+00", received_at: "2026-11-17 10:00:01+00", payload: '{"cpu_temp_c": 50}'}
+    expect:
+      rows:
+        - {event_id: a, ping_target: node, lost: true, rtt_ms: null}
+        - {event_id: b, ping_target: node, lost: false, rtt_ms: 12.5}

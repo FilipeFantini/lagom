@@ -423,3 +423,74 @@ def test_the_dashboards_job_is_queued_with_the_pipeline_and_in_its_own_group(def
     job = next(j for j in defs.resolve_all_job_defs() if j.name == "dashboards")
     assert job.tags["lagom/pipeline"] == "usgs"
     assert job.asset_layer.executable_asset_keys == {key}
+
+
+def _import_with(env_extra: dict[str, str], tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    """Import the code location in a process of its own, with the ping URL and `env_extra`."""
+    env = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(tmp_path),
+        "PYTHONPATH": os.pathsep.join(sys.path),
+        "HEARTBEAT_URL": "https://hc-ping.invalid/test",
+        **env_extra,
+    }
+    script = (
+        "from lagom_orchestration.definitions import defs\n"
+        "print(sorted(j.name for j in defs.resolve_all_job_defs()))\n"
+        "print(sorted((s.job_name, s.cron_schedule) for s in defs.schedules))\n"
+    )
+    return subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True)
+
+
+def test_the_streaming_job_is_absent_unless_the_environment_has_the_showcase(defs) -> None:  # type: ignore[no-untyped-def]
+    """Prod has no `serving` until ADR-0047's last steps: no job, no schedule, no alarm."""
+    assert "streaming" not in {j.name for j in defs.resolve_all_job_defs()}
+    assert "streaming" not in {s.job_name for s in defs.schedules}  # type: ignore[union-attr]
+
+
+def test_the_streaming_job_runs_hourly_where_the_showcase_is(defs, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    done = _import_with({"LAGOM_STREAMING": "true"}, tmp_path)
+    assert done.returncode == 0, done.stderr
+    jobs, schedules = done.stdout.splitlines()
+    assert "'streaming'" in jobs
+    assert "('streaming', '45 * * * *')" in schedules
+
+
+@pytest.mark.parametrize("value", ["True", "yes", "1", ""])
+def test_a_wrong_streaming_switch_stops_the_code_location(defs, tmp_path, value) -> None:  # type: ignore[no-untyped-def]
+    done = _import_with({"LAGOM_STREAMING": value}, tmp_path)
+    assert done.returncode != 0
+    assert "LAGOM_STREAMING must be 'true' or 'false'" in done.stderr
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_the_streaming_pod_holds_the_serving_owner_and_nothing_of_the_lake(  # type: ignore[no-untyped-def]
+    defs, environment
+) -> None:
+    """The real values of each environment, merged with the streaming job's real tag."""
+    from lagom_orchestration.definitions import RUN_RESOURCES, STREAMING_TAGS, streaming
+
+    pod = _run_pod_env(streaming, _code_server_env(environment))
+    names = [e.name for e in pod]
+    assert len(names) == len(set(names))
+    secrets = {
+        e.name: (e.value_from.secret_key_ref.name, e.value_from.secret_key_ref.key)
+        for e in pod
+        if e.value_from
+    }
+    assert secrets == {
+        "LAGOM_PG_USER": ("serving-credentials", "username"),
+        "LAGOM_PG_PASSWORD": ("serving-credentials", "password"),
+        "HEARTBEAT_URL": ("pipeline-heartbeat", "url"),
+        "DAGSTER_PG_PASSWORD": ("dagster-db", "postgresql-password"),
+    }
+    values = {e.name: e.value for e in pod}
+    assert values["LAGOM_PG_HOST"] == "postgres-rw"
+    assert values["LAGOM_PG_DBNAME"] == "serving"
+    assert values["LAGOM_PG_SSLMODE"] == "require"
+    assert "PG_URI" not in values and "LAGOM_LAKE_CATALOG" not in values
+    assert not any("R2" in n or "AWS" in n for n in names)
+    # One run's resources, and no pipeline tag: it waits in the global slot,
+    # not in the tag's.
+    assert STREAMING_TAGS["dagster-k8s/config"]["container_config"]["resources"] == RUN_RESOURCES
+    assert "lagom/pipeline" not in streaming.tags

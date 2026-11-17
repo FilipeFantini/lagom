@@ -26,6 +26,23 @@ lagom:
       # models are few and small.
       threads: 1
 
+    # The database `serving` in an environment's Postgres (ADR-0041, ADR-0047):
+    # the streaming showcase's events table and the views over it. Same
+    # variables as `dev`; the `streaming` job sets them in its run's Pod, as
+    # the role `serving`, which owns the database. The target's name is what
+    # dbt_project.yml reads: under it only models/streaming/ is built, and
+    # nothing else is built anywhere but under it.
+    serving:
+      type: postgres
+      host: "{{ env_var('LAGOM_PG_HOST') }}"
+      port: "{{ env_var('LAGOM_PG_PORT') | as_number }}"
+      user: "{{ env_var('LAGOM_PG_USER') }}"
+      password: "{{ env_var('LAGOM_PG_PASSWORD') }}"
+      dbname: "{{ env_var('LAGOM_PG_DBNAME') }}"
+      sslmode: "{{ env_var('LAGOM_PG_SSLMODE') }}"
+      schema: public
+      threads: 1
+
     # The SME stack (ADR-0023, ADR-0026): DuckDB in the dbt process, tables in
     # DuckLake. LAGOM_LAKE_CATALOG is the DuckLake catalog to attach
     # ("ducklake:postgres:<libpq string>" in the cluster, a local file in a
