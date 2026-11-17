@@ -118,6 +118,10 @@ jobs:
         uses: anthropics/claude-code-action@925afb53776cf1a2b738c6bdbed37b4d4000ef13 # v1.0.262
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The action refuses a run started by a bot unless it is listed
+          # here. Dependabot's pull requests are reviewed like any other
+          # (docs/adr/0049-the-reviewer-runs-on-dependabots-pull-requests.md).
+          allowed_bots: "dependabot[bot]"
           github_token: ${{ github.token }}
           # The step summary is public on a public repository; the verdict is
           # posted by the step below, after a check for leaked tokens.

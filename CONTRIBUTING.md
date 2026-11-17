@@ -257,7 +257,7 @@ them set again. Why each exists is in
 | Setting | State | Inspect with |
 |---|---|---|
 | Dependabot alerts and security updates | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom --jq .security_and_analysis` |
-| `CLAUDE_CODE_OAUTH_TOKEN` as a Dependabot secret, so `agent review` runs on Dependabot's pull requests | to set by the operator | `gh api repos/FilipeFantini/lagom/dependabot/secrets` |
+| No Dependabot secret: `agent review` gets the repository's token, and allows `dependabot[bot]` in its workflow ([ADR-0049](docs/adr/0049-the-reviewer-runs-on-dependabots-pull-requests.md)) | the copy made on 2026-11-16 to delete | `gh api repos/FilipeFantini/lagom/dependabot/secrets` (empty) |
 | CodeQL default setup, `actions` and `python`, on pull requests and weekly | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/default-setup` |
 | `main` ruleset: *Require code scanning results*, CodeQL, security *High or higher*, alerts *Errors* | to set | `gh api repos/FilipeFantini/lagom/rulesets/25948914` |
 | CodeQL alert #1 (`actions/untrusted-checkout/high` in `agent-review.yml`) dismissed as *won't fix* | dismissed on 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/alerts/1` |
