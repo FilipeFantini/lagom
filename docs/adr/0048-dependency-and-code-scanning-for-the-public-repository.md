@@ -11,6 +11,9 @@
   run; they are the architect's proposal, accepted with this ADR.
 - **Amends:** [ADR-0036](0036-the-reviewer-as-a-required-check.md)
   Decision 6 — the reviewer's token is also a Dependabot secret.
+- **Decision 2 superseded by:** [ADR-0049](0049-the-reviewer-runs-on-dependabots-pull-requests.md) —
+  the cause was the action refusing a bot, not a missing secret; no
+  Dependabot secret.
 
 ## Context and problem
 

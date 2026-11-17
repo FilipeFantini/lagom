@@ -17,7 +17,8 @@
   section no longer blocks.
   [ADR-0048](0048-dependency-and-code-scanning-for-the-public-repository.md) — Decision 6:
   the same token is also a Dependabot secret, so Dependabot's pull requests
-  are reviewed.
+  are reviewed. Reversed by [ADR-0049](0049-the-reviewer-runs-on-dependabots-pull-requests.md):
+  no Dependabot secret; the action allows `dependabot[bot]`.
 
 ## Context and problem
 
