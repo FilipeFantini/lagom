@@ -7,7 +7,8 @@
 # `lake_reader` roles, is identical to postgres-prod/cluster.yaml, and a change
 # to one is made to both.
 # The additions are `pg_hba` and the `lagom_dev` role, for the developer
-# (ADR-0014). The differences: no backup, since staging's data is rebuilt by
+# (ADR-0014), and, until the streaming showcase reaches prod, the roles
+# `serving` and `events_writer` (ADR-0047). The differences: no backup, since staging's data is rebuilt by
 # loading the source again and prod's backup is the protection (ADR-0046).
 # The reasoning behind each shared setting is written once, in the prod file.
 apiVersion: postgresql.cnpg.io/v1
@@ -116,3 +117,32 @@ spec:
         comment: read-only on the DuckLake catalog; granted by lake_maintenance
         passwordSecret:
           name: lake-reader-credentials
+      # The streaming showcase (ADR-0047), staging first. `serving` owns the
+      # database `serving` (database-serving.yaml) and everything in it; it
+      # is what Dagster's `streaming` job runs dbt as. `events_writer` is
+      # Redpanda Connect's: it may insert into `live.events` and nothing else,
+      # granted by dbt (platform/warehouse/macros/create_live_events.sql).
+      # Their passwords are random, generated and sealed by the operator in
+      # serving-credentials-sealed.yaml and events-writer-credentials-sealed.yaml.
+      # The connection limits keep both inside the Cluster's 25: dbt opens
+      # one at a time (`threads: 1`), Connect at most two (`conn_max_open`).
+      - name: serving
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        connectionLimit: 3
+        comment: owner of the database serving; dbt's streaming target
+        passwordSecret:
+          name: serving-credentials
+      - name: events_writer
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        connectionLimit: 3
+        comment: Redpanda Connect; insert into live.events only
+        passwordSecret:
+          name: events-writer-credentials

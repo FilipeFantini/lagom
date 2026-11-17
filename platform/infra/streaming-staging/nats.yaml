@@ -1,0 +1,161 @@
+# The NATS hub of staging (ADR-0045, decision 2; ADR-0047, decision 4): one
+# NATS server with JetStream, which keeps every event in the stream EVENTS on
+# its own volume. It is the record; the table in Postgres is a copy that can
+# be rebuilt from it (runbook: Rebuild the live table from the hub).
+#
+# Reachable inside the cluster only, and there by Redpanda Connect only
+# (NetworkPolicy below). No leaf node connects here yet: the Pi points at
+# staging in a later step, with its own listener and credential.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-hub
+data:
+  hub.conf: |
+    server_name: hub-staging
+    listen: 0.0.0.0:4222
+    # Monitoring, for the kubelet's probes and a port-forward. The
+    # NetworkPolicy admits no Pod to it.
+    http: 0.0.0.0:8222
+    jetstream {
+      store_dir: /data
+      domain: hub
+      max_memory_store: 16MB
+      # Inside the 4Gi volume, above the stream's own 2 GiB cap.
+      max_file_store: 3GB
+    }
+  # The stream, created or brought to this configuration by Connect's init
+  # container (connect.yaml) each time it starts. NATS keeps streams in its
+  # own state, not in its configuration file, so this is how Git holds it.
+  # - Subjects events.<source>.<signal>: whatever is published there is kept.
+  # - Retention by age, 7 days: as long as the live table keeps events, so the
+  #   table can always be rebuilt (ADR-0047, decision 4); never less.
+  # - And by size, 2 GiB: at 5 events a second and 458 bytes an event (the
+  #   spike's figure), 7 days are about 1.4 GiB. The oldest go first.
+  # - Duplicate window, 2 minutes: a message whose Nats-Msg-Id (the event
+  #   identifier) was seen inside it is dropped.
+  events-stream.json: |
+    {
+      "name": "EVENTS",
+      "subjects": ["events.>"],
+      "retention": "limits",
+      "storage": "file",
+      "discard": "old",
+      "max_age": 604800000000000,
+      "max_bytes": 2147483648,
+      "max_msgs": -1,
+      "max_msg_size": 65536,
+      "duplicate_window": 120000000000,
+      "num_replicas": 1
+    }
+  ensure-stream.sh: |
+    #!/bin/sh
+    # Creates the stream EVENTS on the hub, or brings it to the file's
+    # configuration. A hub that does not answer fails this, and the Pod
+    # waits and tries again.
+    set -eu
+    if nats --server "$NATS_URL" stream info EVENTS >/dev/null 2>&1; then
+      nats --server "$NATS_URL" stream edit EVENTS --config /etc/nats/events-stream.json --force
+    else
+      nats --server "$NATS_URL" stream add EVENTS --config /etc/nats/events-stream.json
+    fi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+spec:
+  selector: {app: nats-hub}
+  ports:
+    - {name: client, port: 4222, targetPort: client}
+---
+# A StatefulSet for the volume: its claim outlives the Pod, a deletion of the
+# StatefulSet and a sync that prunes it.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats-hub
+spec:
+  serviceName: nats
+  replicas: 1
+  selector:
+    matchLabels: {app: nats-hub}
+  template:
+    metadata:
+      labels: {app: nats-hub}
+      annotations:
+        # Bump with every change to hub.conf: the server reads it at start.
+        lagom.dev/config-revision: "1"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: nats
+          # 2.15.2, the version of the spikes (ADR-0045's notes); multi-arch,
+          # arm64 included.
+          image: nats:2.15.2-alpine@sha256:afae2fdbe2e326c65e1246cb83b9d05d319188734f3bd577ac8072daae78a10f
+          args: ["--config", "/etc/nats/hub.conf"]
+          env:
+            # Go runtime: return memory before the container limit is reached.
+            - name: GOMEMLIMIT
+              value: 96MiB
+          ports:
+            - {name: client, containerPort: 4222}
+            - {name: monitor, containerPort: 8222}
+          # The spike's hub reached 58 MiB of working set at this rate
+          # (ADR-0045's notes); re-set from 24 hours in staging (ADR-0047,
+          # decision 8).
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          # /healthz answers 200 once JetStream is up and its streams are read.
+          readinessProbe:
+            httpGet: {path: /healthz, port: monitor}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: "/healthz?js-enabled-only=true", port: monitor}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          volumeMounts:
+            - {name: config, mountPath: /etc/nats, readOnly: true}
+            - {name: data, mountPath: /data}
+      volumes:
+        - name: config
+          configMap: {name: nats-hub}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests: {storage: 4Gi}
+---
+# Only Redpanda Connect reaches the hub's client port; nothing reaches its
+# monitoring port. Staging has no namespace-wide policy, so without this any
+# Pod in the cluster could publish an event. As prod's policy records, the
+# kubelet's probes and `kubectl port-forward` are not blocked
+# (postgres-prod/networkpolicy.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nats-hub
+spec:
+  podSelector:
+    matchLabels: {app: nats-hub}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: connect}
+      ports:
+        - {port: 4222}

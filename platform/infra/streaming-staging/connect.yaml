@@ -1,0 +1,139 @@
+# One Redpanda Connect process in streams mode (ADR-0047, decision 2): the
+# synthetic producer and the writer to Postgres, in staging. Its streams are
+# connect-config.yaml.
+#
+# Before it starts, an init container makes sure the hub has the stream EVENTS
+# as nats.yaml declares it, so a changed retention reaches the hub with the
+# next start of this Pod.
+#
+# Only open-source components, as ADR-0045's spike notes correct decision 3:
+# checked in the source of redpanda-data/connect v4.116.1 on 2026-11-17,
+# `nats_jetstream` (input and output) and `sql_insert` are Apache-2.0
+# (internal/impl/nats, internal/impl/sql); `generate`, `mapping` and
+# `unarchive` are Benthos core, MIT (redpanda-data/benthos v4.84.0, the
+# spike's check). None is under the Redpanda Community License, and no
+# licence file is mounted.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connect
+spec:
+  replicas: 1
+  # One writer at a time: two would deliver from the same durable consumer,
+  # which is safe but makes the restart check meaningless.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: connect}
+  template:
+    metadata:
+      labels: {app: connect}
+      annotations:
+        # Bump with every change to connect-config.yaml or to the stream in
+        # nats.yaml: Connect reads its streams at start, and the init
+        # container sets the stream.
+        lagom.dev/config-revision: "1"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: ensure-stream
+          # 0.19.7, the NATS CLI; multi-arch, arm64 included.
+          image: natsio/nats-box:0.19.7-nonroot@sha256:e86b9681f330ab1aa45744dd5cb367d44205b28fac2519a2f74ca0255803161a
+          command: ["/bin/sh", "/etc/nats/ensure-stream.sh"]
+          env:
+            - name: NATS_URL
+              value: nats://nats:4222
+            # The CLI keeps its contexts under HOME; the root filesystem is
+            # read-only.
+            - name: HOME
+              value: /tmp
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: nats, mountPath: /etc/nats, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      containers:
+        - name: connect
+          # 4.116.1, the version of the spikes (ADR-0045's notes); multi-arch,
+          # arm64 included.
+          image: redpandadata/connect:4.116.1@sha256:47ff773082146b6e538c527509af1a736b53063e68f0eb1266253a0832b39396
+          # Telemetry is on by default and reports to the vendor (ADR-0045's
+          # spike notes, correction 3). --bind-http turns on the streams API,
+          # for the late hour of the runbook; the NetworkPolicy below keeps
+          # every Pod from it.
+          args:
+            - --disable-telemetry
+            - streams
+            - --bind-http
+            - --observability
+            - /etc/connect/root.yaml
+            - /etc/connect/producer.yaml
+            - /etc/connect/consumer.yaml
+          env:
+            - name: NATS_URL
+              value: nats://nats:4222
+            # CloudNativePG's read-write Service of staging's Cluster.
+            - name: PG_HOST
+              value: postgres-rw
+            - name: PG_SSLMODE
+              value: require
+            # The writer may insert into live.events and do nothing else
+            # (platform/warehouse/macros/create_live_events.sql).
+            - name: PG_USER
+              valueFrom: {secretKeyRef: {name: events-writer-credentials, key: username}}
+            - name: PG_PASSWORD
+              valueFrom: {secretKeyRef: {name: events-writer-credentials, key: password}}
+            # Go runtime: return memory before the container limit is reached.
+            - name: GOMEMLIMIT
+              value: 200MiB
+          ports:
+            - {name: http, containerPort: 4195}
+          # The spike's Connect reached 121 MiB of working set (ADR-0045's
+          # notes); re-set from 24 hours in staging (ADR-0047, decision 8).
+          resources:
+            requests: {cpu: 25m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          # /ready answers 200 once every stream's input and output are
+          # connected; /ping while the process answers at all.
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /ping, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - {name: connect, mountPath: /etc/connect, readOnly: true}
+      volumes:
+        - name: connect
+          configMap: {name: connect}
+        - name: nats
+          configMap: {name: nats-hub, defaultMode: 0555}
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}
+---
+# No Pod reaches Connect: it serves nothing to anyone, and its streams API
+# accepts a pipeline's configuration. The kubelet's probes and
+# `kubectl port-forward` are not blocked (postgres-prod/networkpolicy.yaml
+# records why).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: connect
+spec:
+  podSelector:
+    matchLabels: {app: connect}
+  policyTypes: [Ingress]
