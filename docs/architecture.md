@@ -62,7 +62,7 @@ through it.
 |---|---|
 | Hetzner CAX21 (4 ARM vCPU, 8 GB), `lagom-shared-02` in `fsn1` | control plane and main node; hosts the prod and staging namespaces since 2026-10-28 ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)) |
 | Hetzner CAX11 (2 ARM vCPU, 4 GB), `lagom-shared-01` in `nbg1` | the previous node, deleted on 2026-11-07 by the checklist in the runbook (*Disaster recovery*) |
-| Raspberry Pi 3B+ (1 GB), at the operator's home | an external source for the streaming showcase, outside the cluster: it produces events and forwards them over the tailnet ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed) |
+| Raspberry Pi 3 Model B rev 1.2 (1 GB), at the operator's home | an external source for the streaming showcase, outside the cluster: it produces events and forwards them over the tailnet ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed) |
 | `ofantini.com` domain, registered and served by Cloudflare | public entry: the site at the apex (M4), the operator's tools at `ops.ofantini.com`. It replaced `getlagom.app` on 2026-11-07 ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)) |
 
 Cost: the CAX11 was EUR 7.37/month, as shown in the Hetzner Console on
@@ -170,6 +170,15 @@ node:  NATS hub (stream sources the Pi's) -> Redpanda Connect -> Postgres, servi
                                                                     |-> views (dbt) -> Grafana (operator)
                                                                     |-> Dagster -> lake (history)
 ```
+
+**Step 5 implementation, deployment pending** ([ADR-0050](adr/0050-the-pi-streaming-runtime-and-private-hub-link.md)):
+`platform/edge/pi/` holds the clock-gated collector and local NATS services.
+The proposed hub configuration authenticates internal clients separately from
+the Pi and sources its 512 MiB `EDGE` buffer over a restricted leaf connection.
+Tailscale Serve on the node forwards private port 7422 to the NATS Service;
+its host setting is applied by the runbook, outside Argo CD. The temporary
+Pi-plus-synthetic load raises the hub's disk cap to 3 GiB in its existing 4 GiB
+volume. Requests are unchanged; real Pi and hub measurements are still required.
 
 NATS stores; Redpanda Connect reads and writes. The leaf node keeps events
 while the home link is down and the hub copies them when it returns, hours

@@ -395,7 +395,7 @@ This is where the platform proves it grows by composition: **if adding a source
 is only new configuration, the design worked.**
 
 The design is [ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed): a
-Raspberry Pi 3B+ at the operator's home is the source, outside the cluster,
+Raspberry Pi 3 Model B rev 1.2 at the operator's home is the source, outside the cluster,
 and NATS JetStream is the log. It replaces the earlier plan of joining the Pi
 to k3s as an agent node, which needed flannel moved to `tailscale0` on the
 node that carries prod. [ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)
@@ -439,7 +439,8 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
       7 days old on 2026-11-24, and the bytes of a merged day
 - [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
       tailnet tag and ACL, and its runbook section; it points at staging
-      first
+      first (runtime and integration tests in `platform/edge/pi/`; deployment,
+      Pi-only reconciliation and 24-hour measurements still pending, ADR-0050)
 - [ ] The hub and Connect in prod, and the Pi moved to it
 - [ ] The measurements written in the ADRs, as the source for an article on
       what streaming needs at this load and where a stream processor would

@@ -26,6 +26,8 @@
   8's starting 90 days of raw events in the lake were fixed at 30 from
   measurement, as that decision says (ADR-0047's notes, 2026-11-17).
 
+- **Implementation amendment proposed:** [ADR-0050](0050-the-pi-streaming-runtime-and-private-hub-link.md), the Pi runtime, private entry and corrections listed in the notes below.
+
 ## Context and problem
 
 The streaming showcase ([M6](../roadmap.md#m6--streaming)) needs a source of
@@ -359,3 +361,43 @@ requirements. RisingWave's licence, its arm64 image and the `dbt-risingwave`
 adapter are from memory and are checked in the spike. The JetStream source across domains and NATS's MQTT support were
 read in documentation, not run. Memory figures for Kafka, Flink and the
 k3s agent are from memory of their documentation, not measured.
+
+## Pi spike evidence recovered for step 5
+
+Recorded during the unpublished local M6 spike on 2026-11-15/16 (whose
+RisingWave half failed memory and was superseded by
+[ADR-0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md),
+so the spike branch was not merged). These are historical measurements from that
+unpublished local run, not new deployment evidence:
+
+- **Cross-domain NATS sourcing (`EDGE` → `EVENTS`)**: tested locally across a
+  4-minute cut (1,810 = 1,810), a cut with the leaf restarted while cut
+  (3,510 = 3,510), a 6-minute cut (6,155 = 6,155), and a 5-minute cut on the Pi
+  itself (19:08:20–19:13:21 UTC, leaf 2,085 = hub 2,085), checking every
+  message's `Nats-Msg-Id` and per-signal sequence with zero duplicates or gaps.
+  On the Pi, the leaf tried the hub's advertised container address when the link
+  returned, motivating `no_advertise: true` on the hub's leaf listener.
+- **Short-run resource sample on the Pi** (18 minutes, Debian 12 arm64, kernel
+  6.1.21, 909 MiB total RAM with at least 686 MiB available):
+
+| Measurement | Recorded result | Limit of the evidence |
+|---|---|---|
+| Pi link cut five minutes | leaf 2,085 = hub 2,085; zero duplicates or sequence gaps | Synthetic producer, temporary processes |
+| Pi NATS RSS | 14 to 34 MiB (anonymous 3.5 to 22 MiB) | 18 minutes, still growing |
+| Pi Connect RSS | 106 to 179 MiB (anonymous 16 to 54 MiB) | Same short run |
+| Leaf writes on Pi | 8.4 MiB/hour (`/proc/<pid>/io` `write_bytes`), ~200 MiB/day | Extrapolation, not a day-long sample |
+| Whole SD writes | 36.5 MiB/hour (`/proc/diskstats`) | Included setup; 18-minute sample |
+| Leaf/hub bytes per event | 375 / 458 (stream bytes ÷ messages) | Synthetic workload |
+
+The step-5 implementation adopts the technical corrections from those notes:
+(1) identifiers include the ping target; (2) MIT or Apache-2.0 components only;
+(3) Connect telemetry disabled; (8) leaf capped at 512 MiB, approximately three
+days at the recorded rate; (9) Pi 3 Model B rev 1.2, not 3B+. The old text above
+is retained as decision history; ADR-0050 describes the resulting proposal.
+The claimed earlier Pi hardening was not present in main's runbook: its new
+preflight explicitly requires checking it, rather than asserting it happened.
+Corrections specific to RisingWave are outside this implementation.
+
+Deployment evidence still required: real hardware collection, clock-gated
+boot, restricted tailnet access, cut/restore with exact Pi-only identifiers,
+24-hour memory and SD writes, and seven-day capacity at the combined rate.

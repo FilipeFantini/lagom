@@ -1,0 +1,32 @@
+[Unit]
+Description=Lagom edge event store
+Wants=network-online.target
+After=network-online.target tailscaled.service
+StartLimitIntervalSec=0
+
+[Service]
+User=lagom-nats
+Group=lagom-nats
+EnvironmentFile=/etc/lagom-pi/leaf.env
+Environment=GOMEMLIMIT=96MiB
+ExecStart=/usr/local/bin/nats-server --config /etc/lagom-pi/leaf.conf
+Restart=always
+RestartSec=5
+StateDirectory=lagom-nats
+StateDirectoryMode=0700
+MemoryMax=128M
+MemorySwapMax=0
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

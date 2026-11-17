@@ -89,6 +89,7 @@ every change reaches the cluster through a pull request.
 
 ```
 platform/   the shared backbone: cluster manifests, Argo CD apps, the dbt project
+  edge/pi/  Pi streaming runtime, applied by the runbook outside Argo CD
 services/   one directory per data source: ingestion, its tests and image
 products/   what people see: the dashboards (the site has its own repository)
 tools/      CI checks and operational scripts

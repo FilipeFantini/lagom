@@ -1434,7 +1434,7 @@ What runs ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-
 [`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)):
 
 - **The NATS hub** (`nats-hub-0`) is a message store. It keeps every event in the
-  stream `EVENTS` on its own 4Gi volume, for 7 days or 2 GiB, whichever
+  stream `EVENTS` on its own 4Gi volume, for 7 days or 3 GiB, whichever
   comes first. It is the record of the events.
 - **Redpanda Connect** (`connect-…`) runs two streams in one process:
   - `producer` publishes five synthetic events a second to the hub;
@@ -1497,12 +1497,20 @@ kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc \
 ```
 
 The writer has caught up when `num_pending` and `num_ack_pending` are 0.
-Then the hub's `messages` equals the table's count while the stream is less
-than 7 days old. After that the table also holds up to an hour the hub has
-already dropped (the archive deletes whole hours, below), so compare the
-count over the hub's own window instead: rows with `received_at` after the
-hub's first message (`.state.first_ts` in the same JSON).
+A message that fails the subject/identity contract in `consumer.yaml` is
+logged at `ERROR`, counted in Connect's Prometheus metric
+`events_rejected_total` (`localhost:4195/metrics` over a port-forward to
+`deploy/connect`), and dropped on its first delivery so `num_pending` and
+`num_ack_pending` still return to 0. With zero rejected events, the hub's
+`messages` equals the table's count while the stream is less than 7 days old.
+After that the table also holds up to an hour the hub has already dropped (the
+archive deletes whole hours, below), so compare the count over the hub's own
+window instead: rows with `received_at` after the hub's first message
+(`.state.first_ts` in the same JSON).
 In the spike an event took 458 bytes in the hub; locally 366.
+
+NATS CLI operations below require the internal authentication environment
+described in *The Raspberry Pi, Credentials*.
 
 **Rebuild the live table from the hub** (ADR-0047, decision 4). Do it after
 a crash of Postgres or a restore, both of which leave the `UNLOGGED` table
@@ -1630,6 +1638,212 @@ on 2026-11-17, with the rebuild above; the figures are in ADR-0047's *Notes*.
   - in `psql -d serving`, `\timing` on each `metrics` view over the whole
     table, which must stay under two seconds. The 7-day figure needs 7
     days of events.
+
+### The Raspberry Pi (M6 step 5)
+
+**Prepared, not yet deployed or measured on the real Pi.** This procedure
+requires the guarded PR's approval and its sealed credential before merge.
+Runtime files: [`platform/edge/pi/`](../platform/edge/pi/).
+Design and trade-offs: [ADR-0050](adr/0050-the-pi-streaming-runtime-and-private-hub-link.md).
+Agents carry out the remote work; the operator approves, supplies physical
+access if needed and seals credentials. Never paste credentials into chat.
+
+**Preflight on the Pi, before changing it.** Confirm the model from
+`/proc/device-tree/model`, Debian release, `uname -m`, clock synchronization,
+free disk and whether old spike processes still run. The recorded hardware is
+Pi 3 Model B rev 1.2 with Debian 12 and an arm64 userspace; recheck it rather
+than downloading a binary from the model name. Read `vcgencmd get_throttled`,
+the two sysfs paths in `health.sh`, and `df --output=size,used /`. If a required
+reading is unavailable, stop and fix the platform support; never substitute 0.
+The experiment recorded kernel 6.1.21: verify the installed kernel is receiving
+updates and resolve that before unattended operation. No prior Pi hardening
+is asserted by this runbook.
+
+Base hardening: operator's individual SSH key, root/password SSH login disabled,
+security updates configured, no public inbound port, no swap on the SD card.
+Verify another authorized SSH session works before changing SSH rules. Confirm
+`systemd-timesyncd` is the active clock service; this unit relies on its
+`/run/systemd/timesync/synchronized` marker. Enable `systemd-time-wait-sync`.
+Record the checks and any changes without recording addresses or account names.
+
+**Credentials — operator only.** Create two independent random hex passwords:
+`internal-password` and `pi-password`. Seal them as the Secret
+`staging/nats-credentials`, following *Sealed Secrets*, and commit the resulting
+`platform/infra/streaming-staging/nats-credentials-sealed.yaml` before merge:
+
+```bash
+{ f="platform/infra/streaming-staging/nats-credentials-sealed.yaml"
+  INT_PW=$(openssl rand -hex 24) && PI_PW=$(openssl rand -hex 24) \
+  && kubectl create secret generic nats-credentials -n staging \
+    --from-literal=internal-password="$INT_PW" --from-literal=pi-password="$PI_PW" \
+    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" \
+  && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset INT_PW PI_PW; }
+grep -Ec '(internal|pi)-password:' platform/infra/streaming-staging/nats-credentials-sealed.yaml
+```
+
+Only the Pi password reaches the Pi, in `/etc/lagom-pi/leaf.env` (root, mode 0600);
+read it from the cluster Secret once synced without printing it:
+
+```text
+LEAF_URL=nats-leaf://pi:<pi-password>@<node-name>.<tailnet>.ts.net:7422
+```
+
+Do not put the internal password into a URL: Connect uses its separate `auth`
+fields. For the NATS CLI commands elsewhere in this section, the operator
+loads `NATS_USER=internal` and `NATS_PASSWORD` into the local environment
+without echoing the value (`export NATS_USER=internal NATS_PASSWORD=$(kubectl -n staging get secret nats-credentials -o jsonpath='{.data.internal-password}' | base64 -d)`);
+never include it in a command argument or a report.
+After inspection, unset both variables. The Pi's local CLI needs no password.
+A credential rotation restarts the hub and its clients; use an approved PR and
+update the Pi file as one operation. Existing streams and consumer positions
+survive the restarts.
+
+**Tailnet policy.** Add these entries to the existing policy, preserving its
+operator rules. The Pi's tag is owned by `group:operators`; its outgoing
+application grant is NATS, with a separate ICMP measurement grant. Operator-to-Pi
+SSH is a separate incoming grant, not a permission for the Pi to reach the
+operator's devices.
+
+```jsonc
+// tagOwners
+"tag:lagom-pi": ["group:operators"]
+// grants
+{"src": ["tag:lagom-pi"], "dst": ["tag:lagom-node"], "ip": ["tcp:7422", "icmp:*"]},
+{"src": ["group:operators"], "dst": ["tag:lagom-pi"], "ip": ["tcp:22"]}
+// tests
+{"src": "tag:lagom-pi", "accept": ["tag:lagom-node:7422"],
+ "deny": ["tag:lagom-node:22", "tag:lagom-node:6443", "tag:lagom-node:4222", "tag:lagom-node:5432"]},
+{"src": "tag:lagom-pi", "proto": "icmp", "accept": ["tag:lagom-node:0"]},
+{"src": "<operator-tailscale-login>", "accept": ["tag:lagom-pi:22"],
+ "deny": ["tag:lagom-pi:4222", "tag:lagom-pi:8222"]}
+```
+
+The Pi's only application access to the node is NATS over TCP 7422. The
+separate ICMP grant permits `PING_NODE` to measure reachability to the node's
+tailnet address; it does not permit broker or other application access. Verify
+both flows independently: a ping to the configured node address and the NATS
+leaf connection, while the policy tests continue to deny the other listed
+ports.
+
+Before merging the hub manifests, de-risk the two transport premises on the
+node against staging's existing `nats` Service (`4222`, which already sits
+behind the `nats-hub` `NetworkPolicy`):
+
+```bash
+CLUSTER_IP=$(sudo k3s kubectl -n staging get svc nats -o jsonpath='{.spec.clusterIP}')
+nc -z -w 3 "$CLUSTER_IP" 4222 && echo "HOST_TO_POD_OK"
+sudo tailscale serve --bg --tcp=7422 "tcp://${CLUSTER_IP}:4222"
+nc -z -w 3 "$(tailscale ip -4)" 7422 && echo "SERVE_TCP_OK"
+sudo tailscale serve --tcp=7422 off
+```
+
+After the approved manifests reconcile, obtain staging's NATS Service address
+with `kubectl -n staging get service nats -o jsonpath='{.spec.clusterIP}'`.
+On the node, check `tailscale version` and `tailscale serve status`, then:
+
+```bash
+sudo tailscale serve --bg --tcp=7422 tcp://<staging-nats-cluster-ip>:7422
+```
+
+Confirm the forwarding destination in `tailscale serve status`. Test that the
+Pi reaches 7422, that an unrelated Pod cannot, and that public IPv4 and IPv6
+cannot (with a known-open control, as in *zero inbound ports*). Keep the public
+firewall unchanged. If the node cannot reach the Pod under the existing network
+policy, stop: do not open all Pod ingress to make it work. The address persists
+across Pod restarts, but a recreated Service may get another; reapply Serve then.
+
+**Install the runtime.** Pin NATS server 2.15.2 and Redpanda Connect 4.116.1,
+the tested versions. Download the upstream release archives matching the
+verified architecture and verify their published SHA256 checksums before
+extracting. Install only the binaries into `/usr/local/bin`, root-owned 0755;
+install the NATS CLI for the one-time stream configuration too (0.19.7 or the
+spike's 0.20.1). Require Bash, awk, coreutils, iputils-ping and the working
+`vcgencmd` package; do not replace the kernel blindly to obtain it.
+
+From a reviewed checkout copied to the Pi, create the service identities if
+absent, and install the files:
+
+```bash
+getent passwd lagom-nats || sudo useradd --system --no-create-home --shell /usr/sbin/nologin lagom-nats
+getent passwd lagom-connect || sudo useradd --system --no-create-home --shell /usr/sbin/nologin lagom-connect
+sudo install -d -m 0755 /etc/lagom-pi
+sudo install -m 0644 platform/edge/pi/{leaf.conf,edge-stream.json,connect.yaml,ping.awk,health.sh,ping.sh} /etc/lagom-pi/
+sudo install -m 0644 platform/edge/pi/lagom-{nats,connect}.service /etc/systemd/system/
+```
+
+Create `/etc/lagom-pi/targets.env` root-owned 0600, with literal target IPs and
+the physical network interface. Values never enter Git:
+
+```text
+PING_GATEWAY=<gateway-address>
+PING_RESOLVER_A=<resolver-a-address>
+PING_RESOLVER_B=<resolver-b-address>
+PING_NODE=<node-tailnet-address>
+HEALTH_INTERFACE=<physical-interface>
+```
+
+`lagom-connect` needs access to `/dev/vchiq` through group `video`, and its
+numeric group must fall inside `net.ipv4.ping_group_range`. Check the current
+range with `sysctl`; if it excludes that group, add only that group to an
+appropriate range in a reviewed local sysctl file. Test the datagram ping as
+that user with no capabilities; do not grant root to the collector.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now systemd-time-wait-sync.service lagom-nats.service
+nats --server nats://127.0.0.1:4222 --js-domain leaf stream add --config /etc/lagom-pi/edge-stream.json
+sudo systemctl enable --now lagom-connect.service
+```
+
+On subsequent deployments, use `stream edit EDGE --config ... --force` instead
+of `add`, and restart the two services after installing updated files. Never
+remove the stream to update it. Verify both service states, the absence of
+collection errors in the journal and `source='pi'` in `serving.live.events`.
+Reboot once and prove collection starts only after the clock synchronizes.
+The services retry on failure; an unavailable input must remain visibly missing,
+not be replaced with synthetic readings. Grafana's source selector separates
+`pi` from `synthetic`.
+
+**Cut and restore, with the collector still running.** Record a bounded Pi-only
+window, its event identifiers and per-stream counts before the cut. On the node,
+turn off only the forwarder:
+
+```bash
+sudo tailscale serve --tcp=7422 off
+```
+
+Confirm the leaf disconnects; wait several minutes while its `EDGE` message
+count rises. Restore the exact forwarder command above. Let the consumer catch
+up, then compare the Pi's identifiers in that window across `EDGE`, hub `EVENTS`
+and `live.events`, not just whole-stream totals. Require empty set differences,
+zero duplicate identifiers and zero pending/unacknowledged consumer messages.
+Check every ping target and health separately, including a minute inside the
+cut. Repeat with the leaf restarted during the cut. Retain sanitized counts,
+times and commands in ADR-0045 notes. The synthetic freshness test sums sources
+and cannot prove this; a green scheduled dbt run is insufficient.
+
+**Measurements before marking step 5 complete.** Over at least 24 hours,
+including normal operation and catch-up, record each service's `MemoryCurrent`
+and `MemoryPeak` through `systemctl show`. Also sample process RSS and
+`/proc/<pid>/io` write_bytes, recording PID changes; a counter reset is not a
+negative write rate. Read the SD device's sectors-written counter in
+`/proc/diskstats` at both ends (sectors are 512 bytes), exclude partitions to
+avoid double counting, and report both actual bytes and elapsed time. Compare
+steady-state writes with the experiment's short-run estimate. Record NATS hub,
+Connect and Postgres memory on the node and hub bytes per event/day; verify
+seven days fit its 3 GiB cap and free volume space remains. Re-measure lake
+bytes with real events before accepting its retention. Do not extrapolate
+synthetic compression as a measured physical workload.
+
+**Rollback and step 6.** Disable only Serve's 7422 entry, stop the collector,
+then the leaf, and revert the manifests by PR if necessary. Keep the state
+directory and volumes. Moving to prod changes `LEAF_URL`, restarts the leaf,
+validates delivery, decides whether prod alerts on `events_rejected_total` (in
+staging nothing scrapes Connect's `/metrics`, so rejections are checked via logs
+and port-forward during reconciliation), and removes staging's source, listener,
+credential and Serve entry. Never leave the Pi connected to both environments.
+Staging's synthetic producer stays. Do not delete staging's data until its
+archive is confirmed.
 
 ### Grafana
 

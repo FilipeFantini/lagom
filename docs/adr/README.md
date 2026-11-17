@@ -69,3 +69,4 @@ decision, consequences, and how to reverse it.
 | [0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) | Streaming without a stream processor: events in Postgres, and a staging that is on or off | Accepted (#106); being built |
 | [0048](0048-dependency-and-code-scanning-for-the-public-repository.md) | Dependency and code scanning for the public repository: Dependabot, CodeQL, pinned actions, approval for outside contributors' CI | Accepted; Decision 2 superseded by 0049 |
 | [0049](0049-the-reviewer-runs-on-dependabots-pull-requests.md) | The reviewer runs on Dependabot's pull requests: the action allows `dependabot[bot]`, and no Dependabot secret | Accepted |
+| [0050](0050-the-pi-streaming-runtime-and-private-hub-link.md) | The Pi streaming runtime and its private link to the hub | Proposed; deployment requires the operator's PR approval |

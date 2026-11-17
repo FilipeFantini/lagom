@@ -1,0 +1,13 @@
+{
+  "name": "EDGE",
+  "subjects": ["events.pi.>"],
+  "retention": "limits",
+  "storage": "file",
+  "discard": "old",
+  "max_bytes": 536870912,
+  "max_age": 0,
+  "max_msgs": -1,
+  "max_msg_size": 4096,
+  "duplicate_window": 120000000000,
+  "num_replicas": 1
+}
