@@ -427,7 +427,7 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
       staging's data source first; one panel per question of ADR-0045's
       decision 5
       (staging's built in the pull request that adds `platform/infra/grafana/`;
-      its panels fill once staging pins the image that grants the role, and
+      the image that grants the role pinned in staging by #119, and
       prod's data source comes with the hub and Connect in prod)
 - [ ] Archive to the lake on a schedule, with the raw events' retention,
       validated in staging

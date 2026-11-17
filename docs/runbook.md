@@ -1647,8 +1647,7 @@ grep -c 'password:' platform/infra/postgres-staging/grafana-reader-credentials-s
    Repeat it after anything that creates the role again: a rebuilt
    Cluster, or a restore.
 3. The grants arrive with the first `lagom-orchestration` image built from
-   this change, once staging's values pin its digest (the pull request after
-   this one). Until then every panel says `permission denied for schema
+   this change, once staging's values pin its digest (#119). Until then every panel says `permission denied for schema
    metrics`: the role exists, the grants do not yet. After the next
    `streaming` run at :45 the panels fill.
 
