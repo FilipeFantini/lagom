@@ -62,7 +62,11 @@ hub credential. M6 step 5 prepares these and points the Pi at staging first.
 8. Step 6 moves the Pi to prod permanently. Remove staging's Serve forwarder,
    source configuration, leaf listener and Pi credential then. Staging keeps
    its synthetic producer. Its aggregate freshness test is temporarily accepted;
-   acceptance in step 5 reconciles the Pi's identifiers independently.
+   acceptance in step 5 reconciles the Pi's identifiers independently. In
+   staging, nothing scrapes Connect's `events_rejected_total` counter, so a
+   rejected event is visible only in Connect's `ERROR` log or over a
+   port-forward during reconciliation; step 6 decides whether prod adds an
+   automated alert on rejected events.
 
 ## Alternatives and trade-offs
 

@@ -1725,12 +1725,17 @@ both flows independently: a ping to the configured node address and the NATS
 leaf connection, while the policy tests continue to deny the other listed
 ports.
 
-Before merging the hub manifests, you can de-risk the two transport premises
-on the node against staging's existing NATS port (or a throwaway ClusterIP
-target behind a NetworkPolicy): verify that `sudo tailscale serve --bg --tcp=7422 tcp://<cluster-ip>:<port>`
-is accepted by the node's Tailscale version and that a connection from the
-node reaches the Pod under k3s's NetworkPolicy, then turn it off with
-`sudo tailscale serve --tcp=7422 off`.
+Before merging the hub manifests, de-risk the two transport premises on the
+node against staging's existing `nats` Service (`4222`, which already sits
+behind the `nats-hub` `NetworkPolicy`):
+
+```bash
+CLUSTER_IP=$(sudo k3s kubectl -n staging get svc nats -o jsonpath='{.spec.clusterIP}')
+nc -z -w 3 "$CLUSTER_IP" 4222 && echo "HOST_TO_POD_OK"
+sudo tailscale serve --bg --tcp=7422 "tcp://${CLUSTER_IP}:4222"
+nc -z -w 3 "$(tailscale ip -4)" 7422 && echo "SERVE_TCP_OK"
+sudo tailscale serve --tcp=7422 off
+```
 
 After the approved manifests reconcile, obtain staging's NATS Service address
 with `kubectl -n staging get service nats -o jsonpath='{.spec.clusterIP}'`.
@@ -1833,9 +1838,12 @@ synthetic compression as a measured physical workload.
 **Rollback and step 6.** Disable only Serve's 7422 entry, stop the collector,
 then the leaf, and revert the manifests by PR if necessary. Keep the state
 directory and volumes. Moving to prod changes `LEAF_URL`, restarts the leaf,
-validates delivery, and removes staging's source, listener, credential and Serve
-entry. Never leave the Pi connected to both environments. Staging's synthetic
-producer stays. Do not delete staging's data until its archive is confirmed.
+validates delivery, decides whether prod alerts on `events_rejected_total` (in
+staging nothing scrapes Connect's `/metrics`, so rejections are checked via logs
+and port-forward during reconciliation), and removes staging's source, listener,
+credential and Serve entry. Never leave the Pi connected to both environments.
+Staging's synthetic producer stays. Do not delete staging's data until its
+archive is confirmed.
 
 ### Grafana
 
