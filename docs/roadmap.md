@@ -432,8 +432,9 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
 - [ ] Archive to the lake on a schedule, with the raw events' retention,
       validated in staging (the hourly `streaming_archive` job, 7 days live
       and 30 in the lake, in the pull request that adds
-      `platform/orchestration/lagom_orchestration/archive.py`; validated
-      once its image is pinned in staging)
+      `platform/orchestration/lagom_orchestration/archive.py`, #121; its
+      image pinned in staging by the pull request after it; validated once
+      it runs there)
 - [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
       tailnet tag and ACL, and its runbook section; it points at staging
       first
