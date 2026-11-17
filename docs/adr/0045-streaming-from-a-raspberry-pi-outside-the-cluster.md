@@ -22,7 +22,9 @@
 - **Superseded in part by:** [ADR-0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)
   (proposed): decision 6 is superseded, neither RisingWave nor the two-path
   fallback is built, and events are written to Postgres with their windows
-  computed when read; decisions 3, 7, 8 and 9 are amended to match.
+  computed when read; decisions 3, 7, 8 and 9 are amended to match. Decision
+  8's starting 90 days of raw events in the lake were fixed at 30 from
+  measurement, as that decision says (ADR-0047's notes, 2026-11-17).
 
 ## Context and problem
 

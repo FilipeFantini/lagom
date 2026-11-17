@@ -308,7 +308,7 @@ jobs:
           set -euo pipefail
           uv run --project platform/orchestration --locked pytest \
             platform/orchestration/tests/test_archive.py -rs | tee "$RUNNER_TEMP/archive.txt"
-          if grep -q -i skipped "$RUNNER_TEMP/archive.txt"; then
+          if grep -q -E '[0-9]+ skipped' "$RUNNER_TEMP/archive.txt"; then
             echo "an archive test was skipped" >&2
             exit 1
           fi
