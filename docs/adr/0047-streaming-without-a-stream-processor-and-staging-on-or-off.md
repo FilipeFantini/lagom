@@ -401,3 +401,31 @@ measured, without rewriting it.
 - **Open: the fifth criterion,** 24 hours of memory, the hub's size and the
   views' query times, from 09:04 UTC on 2026-11-17. The Postgres requests
   stay at 300 until it is read (decision 8 of ADR-0046, as amended here).
+- **2026-11-17 — Grafana, decision 7, built for staging.** One Grafana in
+  the namespace `grafana`, at `ops.ofantini.com/grafana`, reading staging's
+  `serving` as `grafana_reader` (`platform/infra/grafana/`; runbook: *The
+  streaming showcase in staging (M6), Grafana*). How decision 7 was carried
+  out, where the text left it open:
+  - *The role.* SELECT on the views of `metrics` only, granted by dbt on
+    every build and checked by a test of the `streaming` job; a connection
+    limit of 3 (Grafana's pool is 2); `pg_hba` refuses it every database
+    but `serving`. A view runs with its owner's rights, so the role reads
+    `live.events` through the views and is refused the table itself.
+  - *The statement timeout, 10 seconds,* is set by the operator with one
+    `ALTER ROLE`, since CloudNativePG's role spec (chart 0.29.1, operator
+    1.30.1) has no field for it and Grafana's PostgreSQL data source sets
+    none. The test fails every hour it is missing. It is a session default,
+    which a session may change with `SET`: it stops a slow dashboard query,
+    not SQL that a Viewer sends through Grafana by hand. The privileges,
+    `pg_hba` and the connection limit hold either way.
+  - *The NetworkPolicy.* Staging's Postgres had none, so every namespace
+    reached it; it now admits `staging`, the CloudNativePG operator, and
+    Grafana's Pod on port 5432.
+  - *The risk "the 386 MiB assume Grafana at 128"* is resolved against
+    this ADR's figure. Measured locally in Grafana 13.3.1's image under its
+    configuration: 185 MiB of working set at rest, 220 MiB after the
+    dashboard read 26 hours of events (356 MiB before the unused data
+    source processes and alerting were turned off). It is requested at
+    256, so the table in *What fits* becomes: today 5,182; prod with M6 and
+    staging on, **5,374, with 258 MiB to spare**; with both Postgres at
+    256, 5,286 and 346. The figure is read again on the node after a day.

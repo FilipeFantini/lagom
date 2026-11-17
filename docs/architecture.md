@@ -401,7 +401,11 @@ inside the run and reads gold, so nothing of USGS is published into it.
 staging first: **in staging since 2026-11-17**, owned by the role `serving`,
 which dbt runs as, with `events_writer` for Redpanda Connect
 ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)).
-No theme reads it yet; Grafana's read-only role comes with Grafana.
+Grafana reads the views of `metrics` through `grafana_reader`, in staging
+since this change: SELECT on those views only, granted by dbt on each build,
+3 connections, and `pg_hba` refusing it every other database; its 10-second
+statement timeout is a session default that stops a slow dashboard query,
+not a limit on SQL sent through Grafana by hand (runbook: *The streaming showcase in staging (M6), Grafana*).
 
 **PgBouncer** — deferred with a trigger: it enters with the first external BI
 consumer. Each Postgres connection costs 5–10 MB, and BI tools open them
@@ -421,7 +425,7 @@ is published as files. A server of our own was designed and stopped
 | **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
 | **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check are in `products/dashboards/`; the job `dashboards` renders and publishes them, built but not yet run in the cluster ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md), [ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) | 0 resident (a render is about 0.5 GiB at its peak on the CI fixture, in the built image, 2026-11-14) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
-| **Grafana** | time series, pipeline health, alerting — for the operator, behind Cloudflare Access ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)) | 150 MB (an estimate, not measured) | with the streaming showcase, reading its live store ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed), or with infrastructure observability, whichever comes first ([roadmap](roadmap.md#trigger-table)); the stack's other components are not in §11 until measured |
+| **Grafana** | time series and pipeline health for the operator, behind Cloudflare Access ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)); one instance for both environments, its dashboard and data sources files in Git, no login of its own (everyone past Access is a Viewer), alerting off until a rule exists, and only the PostgreSQL data source loaded ([`platform/infra/grafana/`](../platform/infra/grafana/)) | 256 MiB requested; 185 at rest and 220 after reading 26 hours of events, measured locally in its image on 2026-11-17, to be read on the node | entered with the streaming showcase, reading staging's `serving` (ADR-0047, decision 7); prod's data source comes with M6 in prod. Infrastructure observability would add its own sources ([roadmap](roadmap.md#trigger-table)) |
 
 **How a dashboard reaches a visitor**
 ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md),
@@ -486,7 +490,7 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | Environment | Where | What runs there |
 |---|---|---|
 | `dev` | code on the operator's machine, data in staging | dbt and dlt run from the machine's `uv` environments against the `lagom_dev` database in staging's Postgres, through `kubectl port-forward` over the tailnet; unit tests need no database; manifests are checked with a server-side dry run ([ADR-0014](adr/0014-develop-against-staging.md)); agents use `kubectl diff -n <namespace> -f`, since `apply` is denied to them ([CONTRIBUTING](../CONTRIBUTING.md#workflow)) |
-| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding three databases: `lagom` for staging's pipeline, `lagom_dev` for the developer, who cannot connect to `lagom`, and `serving` for the streaming showcase; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07. **The streaming showcase** since 2026-11-17 ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)): a NATS hub and one Redpanda Connect process, with a synthetic producer, writing to `serving` ([`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)) |
+| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding three databases: `lagom` for staging's pipeline, `lagom_dev` for the developer, who cannot connect to `lagom`, and `serving` for the streaming showcase; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07. **The streaming showcase** since 2026-11-17 ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)): a NATS hub and one Redpanda Connect process, with a synthetic producer, writing to `serving` ([`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)); with Grafana, the role `grafana_reader`, which Grafana reads `serving` as, and a NetworkPolicy on staging's Postgres that admits only `staging`, the CloudNativePG operator and Grafana's Pod |
 | `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`platform/infra/dagster-prod/`](../platform/infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
 
 **Staging on or off** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted, replacing the four modes of
@@ -637,8 +641,8 @@ path will serve partners' reports, each with its own Access application and
 policy.
 
 The operator's tools share one hostname, `ops.ofantini.com`, one path per
-tool (`/dagster`; `/dagster-staging` until staging's UI was removed on
-2026-11-16), so a new tool needs no DNS or Access
+tool (`/dagster`, `/grafana`; `/dagster-staging` until staging's UI was
+removed on 2026-11-16), so a new tool needs no DNS or Access
 change; each tool serves itself under its path. What the tunnel serves is the
 list of rules in
 [`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml); any
@@ -765,12 +769,12 @@ for k3s's growth over days and the shims of new Pods, which requests do not
 count ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It was 2.2 GB on
 the 4 GB node ([ADR-0016](adr/0016-ci-ceiling-2-2-gb.md)), where M3 did not
 fit, hence the move ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Today's
-total is 4,926 MiB: Dagster in both environments (800 resident in prod, 640 in
+total is 5,182 MiB: Dagster in both environments (800 resident in prod, 640 in
 staging, which has no UI, and 768 per run), `cloudflared`, 48, which serves their UIs behind a login
-([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)), and staging's
+([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)), staging's
 streaming showcase, 192 (the NATS hub 64, Redpanda Connect 128;
-[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)).
-It was 4,734 before the showcase, and 5,070
+[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)),
+and Grafana, 256. It was 4,926 before Grafana, 4,734 before the showcase, and 5,070
 until 2026-11-16, when `hello` (16), `argocd-server` (64), 32 of
 cert-manager's requests, staging's webserver (160) and staging's backup
 sidecar (64) went
@@ -814,9 +818,10 @@ adds that 70 MiB request as its allowance for components outside Git.
 | Backup: Barman Cloud plugin and cert-manager | 160 MB | plugin 32, cert-manager controller 48, cainjector 48, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB, and on 2026-11-16 the cert-manager three at 39, 35 and 22, from which the controller and cainjector came down from 64 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
 | Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
 | Dagster | 800 MB | in prod; staging 640, its webserver at zero replicas since 2026-11-16 ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
+| Grafana | 256 MB | one for both environments, in its own namespace ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), decision 7): request 256 MiB, limit 384 MiB, `GOMEMLIMIT` 300MiB. Measured locally on 2026-11-17, in its image and configuration: 185 MiB of working set at rest and 220 MiB after the dashboard read 26 hours of events. Grafana 13 runs each bundled data source as a process of about 30 MiB: with all fourteen loaded it held 356 MiB, so only PostgreSQL is loaded, and alerting, unused, is off (27 MiB). ADR-0047's 128 was a guess. Re-set from `kubectl top` after a day on the node |
 | `cloudflared` | 48 MB | the tunnel that serves the operator's UIs behind Cloudflare Access, both environments ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)): request 48 MiB, limit 128 MiB, `GOMEMLIMIT` 100MiB. Measured 24 MiB at start and 31 MiB a few minutes later, on 2026-11-07, idle (Cloudflare's figure is ~30 MB); the request is re-set from `kubectl top` after a week |
-| **Core requests** | **~2.20 GB** | |
-| **Left within the ceiling for ephemeral jobs** | **~3.4 GB** | |
+| **Core requests** | **~2.45 GB** | |
+| **Left within the ceiling for ephemeral jobs** | **~3.2 GB** | |
 
 Staging adds ~1.13 GB:
 
@@ -832,7 +837,7 @@ Staging adds ~1.13 GB:
   ([`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)).
   Both are re-set from 24 hours in staging (ADR-0047, decision 8).
 
-That leaves **~2.3 GB** for jobs. Staging's ResourceQuota caps everything
+That leaves **~2.0 GB** for jobs. Staging's ResourceQuota caps everything
 staging requests at 2432 MiB. Staging requests 1,900 MiB in all (Postgres 300,
 Dagster 640, its run 768, the hub and Connect 192; 1,708 before the
 showcase and 1,932 until 2026-11-16, when its UI and backup went); under
@@ -889,16 +894,17 @@ the node allows, not a budget to fill (§1).
 **M6, streaming, and what makes room for it** ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md), accepted, and
 [ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted, which takes the stream processor out of it). M6's local
 spikes measured RisingWave at a 768 MiB request, the NATS hub at 64 and a
-Redpanda Connect process at 128; Grafana's 128 is not measured. With a hub,
+Redpanda Connect process at 128; Grafana was guessed at 128 and is requested at 256,
+from a local measurement (above). With a hub,
 RisingWave and Grafana per environment, M6 would have taken the total to
 about 7,100 MiB. What makes it fit:
 
 - **no stream processor** (ADR-0047): events go to Postgres and their windows
   are computed when read (§4), so RisingWave's 768 MiB per environment are
-  not requested. M6 adds 320 MiB in prod (hub 64, Connect 128, Grafana 128)
+  not requested. M6 adds 448 MiB in prod (hub 64, Connect 128, Grafana 256)
   and 192 in staging (hub 64, and one Connect process, 128, running the
   synthetic producer and the consumer);
-- **one Grafana** for both environments, 128;
+- **one Grafana** for both environments, 256 (ADR-0047 planned 128);
 - **`hello` removed**, 16 (done on 2026-11-16);
 - **one run slot per environment for every batch job** (done on 2026-11-16):
   Dagster's run queue holds one run at a time (`maxConcurrentRuns: 1`; until
@@ -924,13 +930,15 @@ Requests in MiB:
 | Point | Total | Room under 5,632 |
 |---|---|---|
 | Before ADR-0046's first trims (2026-11-16) | 5,070 | 562 |
-| Today (`main` at `2a74ef2`, 2026-11-16) | 4,734 | 898 |
-| Prod with M6, staging off: what runs, not what the check counts | 3,346 | 2,286 |
-| … staging off, with RisingWave as an experiment (768; ADR-0047, decision 9) | 4,114 | 1,518 |
-| Prod with M6, staging on (1,900): what the check counts | **5,246** | **386** |
-| … with both Postgres at 256 | 5,158 | 474 |
+| `main` at `2a74ef2`, 2026-11-16 | 4,734 | 898 |
+| Today: the showcase in staging, and Grafana at 256 (2026-11-17) | 5,182 | 450 |
+| Prod with M6, staging off: what runs, not what the check counts | 3,474 | 2,158 |
+| … staging off, with RisingWave as an experiment (768; ADR-0047, decision 9) | 4,242 | 1,390 |
+| Prod with M6, staging on (1,900): what the check counts | **5,374** | **258** |
+| … with both Postgres at 256 | 5,286 | 346 |
 
-**Prod's permanent growth after M6 is bounded by 386 MiB.** The next room is
+ADR-0047 counted Grafana at 128 and found 386 MiB to spare; measured, Grafana
+takes 128 of them. **Prod's permanent growth after M6 is bounded by 258 MiB.** The next room is
 the Postgres trim, and then replacing Argo CD with Flux (about 400 to 450 of
 Argo CD's 544, not measured), whose spike is parked until a component does
 not fit (ADR-0047, decision 12).

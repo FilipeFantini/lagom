@@ -48,6 +48,15 @@ models:
       +schema: streaming
       metrics:
         +schema: metrics
+        # Grafana's read-only role (postgres-<env>/cluster.yaml) may read
+        # these views and nothing else of `serving`. A view is created again
+        # on each build without its grants, so they are given again here, as
+        # for gold_reader above; a view runs with its owner's rights, so the
+        # role needs no grant on `streaming` or `live`. If the role is
+        # missing, the GRANT fails the build, loudly.
+        # tests/streaming/grafana_reader_privileges.sql asserts the result.
+        +grants: {select: [grafana_reader]}
+        +post-hook: "grant usage on schema {{ this.schema }} to grafana_reader"
 
 data_tests:
   lagom:

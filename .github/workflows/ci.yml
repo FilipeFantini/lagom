@@ -241,7 +241,13 @@ jobs:
           psql -v ON_ERROR_STOP=1 \
             -c "create role serving login password 'ci-placeholder' connection limit 3" \
             -c "create role events_writer login connection limit 3" \
+            -c "create role grafana_reader login connection limit 3" \
+            -c "alter role grafana_reader set statement_timeout = '10s'" \
             -c "create database serving owner serving"
+      # grafana_reader's statement timeout is set by the operator in the
+      # cluster, since CloudNativePG's role spec has no field for it (runbook:
+      # The streaming showcase in staging (M6), Grafana); it is set here the
+      # same way, so the test grafana_reader_privileges runs as it does there.
       # dbt-postgres is locked in the orchestration project, the environment
       # the `streaming` job runs in.
       - name: dbt build (serving target), without the live-window test
@@ -271,6 +277,19 @@ jobs:
                            "select 1 from metrics.link_minute" "create table live.x (a int)"; do
             if psql -d serving -c "set role events_writer; $statement" 2>/dev/null; then
               echo "events_writer could: $statement" >&2
+              exit 1
+            fi
+          done
+      # Grafana's role reads the views of `metrics`, through the views'
+      # owner's rights, and nothing else. SET ROLE checks privileges only:
+      # `pg_hba` and the role's timeout apply at login, which this does not do.
+      - name: Grafana's role reads metrics, and nothing else
+        run: |
+          psql -d serving -v ON_ERROR_STOP=1 -c "set role grafana_reader; select count(*) from metrics.pipeline_minute"
+          for statement in "select 1 from live.events" "select 1 from streaming.stg_events__pings" \
+                           "insert into live.events (event_id) values ('x')" "create table metrics.x (a int)"; do
+            if psql -d serving -c "set role grafana_reader; $statement" 2>/dev/null; then
+              echo "grafana_reader could: $statement" >&2
               exit 1
             fi
           done
