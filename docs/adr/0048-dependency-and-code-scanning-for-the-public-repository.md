@@ -151,8 +151,9 @@ taken after reading the skill.
 - Decision 2 is shown when `agent review` reports a verdict on a Dependabot
   pull request, #107 or #108 re-run.
 - Decision 3: CodeQL reported on #109, Markdown only (`CodeQL`,
-  `Analyze (actions)` and `Analyze (python)` passed). A Dependabot pull
-  request reporting too is still to be shown, before the rule is set; then a
-  pull request lists the rule among its requirements.
+  `Analyze (actions)` and `Analyze (python)` passed). On Dependabot's #107
+  and #108, on 2026-11-17, CodeQL reported `NEUTRAL` with no analysis job,
+  so the precondition is not met and the rule stays unset: it would likely
+  block every Dependabot pull request.
 - Decision 5 is shown when CodeQL and every workflow still run after the
   setting is on.
