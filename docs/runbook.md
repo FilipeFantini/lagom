@@ -1497,11 +1497,16 @@ kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc \
 ```
 
 The writer has caught up when `num_pending` and `num_ack_pending` are 0.
-Then the hub's `messages` equals the table's count while the stream is less
-than 7 days old. After that the table also holds up to an hour the hub has
-already dropped (the archive deletes whole hours, below), so compare the
-count over the hub's own window instead: rows with `received_at` after the
-hub's first message (`.state.first_ts` in the same JSON).
+A message that fails the subject/identity contract in `consumer.yaml` is
+logged at `ERROR`, counted in Connect's Prometheus metric
+`events_rejected_total` (`localhost:4195/metrics` over a port-forward to
+`deploy/connect`), and dropped on its first delivery so `num_pending` and
+`num_ack_pending` still return to 0. With zero rejected events, the hub's
+`messages` equals the table's count while the stream is less than 7 days old.
+After that the table also holds up to an hour the hub has already dropped (the
+archive deletes whole hours, below), so compare the count over the hub's own
+window instead: rows with `received_at` after the hub's first message
+(`.state.first_ts` in the same JSON).
 In the spike an event took 458 bytes in the hub; locally 366.
 
 NATS CLI operations below require the internal authentication environment
@@ -1664,8 +1669,20 @@ Record the checks and any changes without recording addresses or account names.
 **Credentials — operator only.** Create two independent random hex passwords:
 `internal-password` and `pi-password`. Seal them as the Secret
 `staging/nats-credentials`, following *Sealed Secrets*, and commit the resulting
-`platform/infra/streaming-staging/nats-credentials-sealed.yaml` before merge.
-Only the Pi password reaches the Pi, in `/etc/lagom-pi/leaf.env` (root, mode 0600):
+`platform/infra/streaming-staging/nats-credentials-sealed.yaml` before merge:
+
+```bash
+{ f="platform/infra/streaming-staging/nats-credentials-sealed.yaml"
+  INT_PW=$(openssl rand -hex 24) && PI_PW=$(openssl rand -hex 24) \
+  && kubectl create secret generic nats-credentials -n staging \
+    --from-literal=internal-password="$INT_PW" --from-literal=pi-password="$PI_PW" \
+    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" \
+  && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset INT_PW PI_PW; }
+grep -Ec '(internal|pi)-password:' platform/infra/streaming-staging/nats-credentials-sealed.yaml   # 2
+```
+
+Only the Pi password reaches the Pi, in `/etc/lagom-pi/leaf.env` (root, mode 0600);
+read it from the cluster Secret once synced without printing it:
 
 ```text
 LEAF_URL=nats-leaf://pi:<pi-password>@<node-name>.<tailnet>.ts.net:7422
@@ -1674,7 +1691,8 @@ LEAF_URL=nats-leaf://pi:<pi-password>@<node-name>.<tailnet>.ts.net:7422
 Do not put the internal password into a URL: Connect uses its separate `auth`
 fields. For the NATS CLI commands elsewhere in this section, the operator
 loads `NATS_USER=internal` and `NATS_PASSWORD` into the local environment
-without echoing the value; never include it in a command argument or a report.
+without echoing the value (`export NATS_USER=internal NATS_PASSWORD=$(kubectl -n staging get secret nats-credentials -o jsonpath='{.data.internal-password}' | base64 -d)`);
+never include it in a command argument or a report.
 After inspection, unset both variables. The Pi's local CLI needs no password.
 A credential rotation restarts the hub and its clients; use an approved PR and
 update the Pi file as one operation. Existing streams and consumer positions
@@ -1706,6 +1724,13 @@ tailnet address; it does not permit broker or other application access. Verify
 both flows independently: a ping to the configured node address and the NATS
 leaf connection, while the policy tests continue to deny the other listed
 ports.
+
+Before merging the hub manifests, you can de-risk the two transport premises
+on the node against staging's existing NATS port (or a throwaway ClusterIP
+target behind a NetworkPolicy): verify that `sudo tailscale serve --bg --tcp=7422 tcp://<cluster-ip>:<port>`
+is accepted by the node's Tailscale version and that a connection from the
+node reaches the Pod under k3s's NetworkPolicy, then turn it off with
+`sudo tailscale serve --tcp=7422 off`.
 
 After the approved manifests reconcile, obtain staging's NATS Service address
 with `kubectl -n staging get service nats -o jsonpath='{.spec.clusterIP}'`.

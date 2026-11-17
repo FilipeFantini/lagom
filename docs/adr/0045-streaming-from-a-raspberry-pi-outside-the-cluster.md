@@ -364,18 +364,30 @@ k3s agent are from memory of their documentation, not measured.
 
 ## Pi spike evidence recovered for step 5
 
-Recovered from local spike commit `93265c17cd9dded945e012eece9532e878b4b491`,
-2026-11-15/16. These are historical measurements, not new deployment evidence.
-The discarded RisingWave implementation is not imported.
+Recorded during the unpublished local M6 spike on 2026-11-15/16 (whose
+RisingWave half failed memory and was superseded by
+[ADR-0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md),
+so the spike branch was not merged). These are historical measurements from that
+unpublished local run, not new deployment evidence:
+
+- **Cross-domain NATS sourcing (`EDGE` → `EVENTS`)**: tested locally across a
+  4-minute cut (1,810 = 1,810), a cut with the leaf restarted while cut
+  (3,510 = 3,510), a 6-minute cut (6,155 = 6,155), and a 5-minute cut on the Pi
+  itself (19:08:20–19:13:21 UTC, leaf 2,085 = hub 2,085), checking every
+  message's `Nats-Msg-Id` and per-signal sequence with zero duplicates or gaps.
+  On the Pi, the leaf tried the hub's advertised container address when the link
+  returned, motivating `no_advertise: true` on the hub's leaf listener.
+- **Short-run resource sample on the Pi** (18 minutes, Debian 12 arm64, kernel
+  6.1.21, 909 MiB total RAM with at least 686 MiB available):
 
 | Measurement | Recorded result | Limit of the evidence |
 |---|---|---|
 | Pi link cut five minutes | leaf 2,085 = hub 2,085; zero duplicates or sequence gaps | Synthetic producer, temporary processes |
-| Pi NATS RSS | 14 to 34 MiB | 18 minutes, still growing |
-| Pi Connect RSS | 106 to 179 MiB | Same short run |
-| Leaf writes on Pi | 8.4 MiB/hour, approximately 200 MiB/day | Extrapolation, not a day-long sample |
-| Whole SD writes | 36.5 MiB/hour | Included setup; 18-minute sample |
-| Leaf/hub bytes per event | 375 / 458 | Synthetic workload |
+| Pi NATS RSS | 14 to 34 MiB (anonymous 3.5 to 22 MiB) | 18 minutes, still growing |
+| Pi Connect RSS | 106 to 179 MiB (anonymous 16 to 54 MiB) | Same short run |
+| Leaf writes on Pi | 8.4 MiB/hour (`/proc/<pid>/io` `write_bytes`), ~200 MiB/day | Extrapolation, not a day-long sample |
+| Whole SD writes | 36.5 MiB/hour (`/proc/diskstats`) | Included setup; 18-minute sample |
+| Leaf/hub bytes per event | 375 / 458 (stream bytes ÷ messages) | Synthetic workload |
 
 The step-5 implementation adopts the technical corrections from those notes:
 (1) identifiers include the ping target; (2) MIT or Apache-2.0 components only;

@@ -3,6 +3,7 @@ set -euo pipefail
 REPO_DIR="$(git rev-parse --show-toplevel)"
 export REPO_DIR
 LAB_DIR="$(mktemp -d)"
+chmod 0755 "$LAB_DIR"
 export LAB_DIR
 project="lagom-pi-test-$$"
 compose=(docker compose -p "$project" -f "$REPO_DIR/platform/edge/pi/tests/compose.yaml")

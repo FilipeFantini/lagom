@@ -6,6 +6,7 @@ import socket
 import struct
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 ROOT = Path("/repo")
@@ -173,7 +174,16 @@ def stream_messages(client: Client, domain: str, stream: str) -> int:
     return int(state["messages"])
 
 
-def settle(expected: int, rows_expected: int | None = None, pending: int = 0) -> None:
+def rejected_count() -> int:
+    with urllib.request.urlopen("http://connect:4195/metrics", timeout=3) as resp:
+        text = resp.read().decode()
+    for line in text.splitlines():
+        if line.startswith("events_rejected_total"):
+            return int(float(line.split()[-1]))
+    return 0
+
+
+def settle(expected: int, rows_expected: int | None = None, rejected: int = 0) -> None:
     if rows_expected is None:
         rows_expected = expected
     deadline = time.monotonic() + 45
@@ -189,8 +199,10 @@ def settle(expected: int, rows_expected: int | None = None, pending: int = 0) ->
         caught_up = (
             "error" not in consumer
             and consumer.get("num_pending") == 0
-            and consumer.get("num_ack_pending") == pending
+            and consumer.get("num_ack_pending") == 0
+            and consumer.get("num_redelivered") == 0
             and seq >= expected
+            and rejected_count() == rejected
         )
         if count == expected and len(rows) == rows_expected and caught_up:
             actual = {r[0] for r in rows}
@@ -198,12 +210,16 @@ def settle(expected: int, rows_expected: int | None = None, pending: int = 0) ->
                 str(event(0, "synthetic")["event_id"])
             }
             assert actual == wanted, (actual, wanted)
-            print(f"PASS: hub={count}, table={len(rows)}, exact identifiers match", flush=True)
+            print(
+                f"PASS: hub={count}, table={len(rows)}, rejected={rejected}, "
+                "pending=0, exact identifiers match",
+                flush=True,
+            )
             return
         time.sleep(0.5)
     raise AssertionError(
         f"catch-up failed: hub={count}, table={len(rows)}, "
-        f"expected hub={expected}, rows={rows_expected}"
+        f"expected hub={expected}, rows={rows_expected}, rejected={rejected}"
     )
 
 
@@ -264,10 +280,10 @@ if __name__ == "__main__":
         while time.monotonic() < deadline:
             count = stream_messages(hub, "hub", "EVENTS")
             if count == 21:
-                settle(21)
+                settle(21, rejected=0)
                 break
             if count == 22:
-                settle(22, rows_expected=21, pending=1)
+                settle(22, rows_expected=21, rejected=1)
                 break
             time.sleep(0.5)
         else:
