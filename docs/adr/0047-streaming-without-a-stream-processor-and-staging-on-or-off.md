@@ -367,7 +367,8 @@ measured, without rewriting it.
     unacknowledged. The table was read a moment after the hub, while events
     arrived; the primary key keeps any event from being stored twice.
   - *Postgres's Pod deleted:* once it was back, hub 20,225 and table 20,225,
-    nothing pending; five messages unacknowledged, a batch in flight.
+    nothing pending; five messages unacknowledged at that reading, most
+    likely a batch in flight. Every later reading had none.
   - *Table emptied and rebuilt from the hub:* over the rows collected before
     a cut-off, the count and an MD5 of every column, `received_at` included,
     were the same before and after: 21,015 rows. Then hub 22,675 and table
@@ -375,24 +376,26 @@ measured, without rewriting it.
     one: a durable consumer deleted and created again reads the stream from
     its first message. The other, that dbt enforces a contract on a view, is
     not exercised by these checks.
-  - *An hour held back and released:* the producer stopped at 11:29:14 UTC
-    and came back at 12:29:24, with the backfill. The held hour holds
-    18,000 rows, 3,600 seconds of five streams; each of its 59 whole minutes
-    has 60 events per stream (295 rows of `pipeline_minute`, none other than
+  - *An hour held back and released:* the producer stopped at about
+    11:29:14 UTC (the start of the hold was not printed; it is read back from
+    the counts below, within a second) and came back at 12:29:24, with the
+    backfill. The held hour holds 18,000 rows, 3,600 seconds of five
+    streams; each of its 59 whole minutes has 60 events per stream (295 rows of `pipeline_minute`, none other than
     60); the outages at 11:37 and 12:07 are in `link_outages`, 20 lost pings
     on each of the three targets that drop. Per stream, 3,508 of the window's
     3,590 events are late: the others were collected less than a minute
     before the release, or published after it. Hub 79,455, table 79,455,
-    nothing pending. The 12:45 `streaming` run, whose `live_window_is_full`
-    reads 11:43 to 12:43, a window empty until the release, passed
-    (`PASS=27`).
-  - A first attempt, at 10:23, was void. The producer's `DELETE` went
-    through a port-forward still tied to the Connect Pod that the rebuild
-    had replaced, and `curl -s` printed nothing; the producer kept running,
-    and the backfill added a second set of events, with their own keys,
-    beside it. From 10:23:08 to 11:23:08 staging's table holds two events a
-    second per stream (36,000 rows), and `link_minute` counts 120 pings in
-    those minutes. It is synthetic data in staging and is left as it is: the
+    nothing pending. The 12:45 `streaming` run passed (`PASS=27`); its
+    `live_window_is_full` reads 11:43 to 12:43, where the live producer
+    alone gave about 840 of the 1,800 events per stream needed.
+  - A first attempt, at 10:23, was void: the producer kept running, up
+    since the Connect Pod started at 10:18, and its restart was refused as
+    `Stream already exists`. Most likely the `DELETE` went through a
+    port-forward still tied to the Pod that the rebuild had replaced. The
+    producer kept publishing, and the backfill added a second set of
+    events, with their own keys, beside it. From 10:23:08 to 11:23:08 staging's table holds two events a
+    second per stream (36,000 rows), so `link_minute` would count 120 pings
+    a minute there. It is synthetic data in staging and is left as it is: the
     hub would bring it back on a rebuild until it ages out, on 2026-11-24.
     The runbook now checks the answer and the stream list before the wait.
 - **Open: the fifth criterion,** 24 hours of memory, the hub's size and the

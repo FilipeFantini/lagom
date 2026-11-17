@@ -1539,7 +1539,8 @@ kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc "select t
 
 Check both answers before waiting. A port-forward to `deploy/connect` is tied
 to the Pod that was running when it started, and stops working when that Pod
-is replaced; `curl -s` then prints nothing, and the producer keeps running.
+is replaced: the `DELETE` then prints `000`, the list prints nothing, and the
+producer keeps running.
 Start a new port-forward after any restart of Connect.
 
 An hour later, release that hour and restart the producer:
