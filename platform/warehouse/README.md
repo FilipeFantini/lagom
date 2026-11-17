@@ -79,7 +79,7 @@ The CronJobs that ran it on Postgres were retired on 2026-11-07
 Per [ADR-0014](../../docs/adr/0014-develop-against-staging.md) the code runs on
 your machine and the data lives in `lagom_dev`, in staging's Postgres. Get the
 password into the shell and forward the port as the runbook describes
-([architecture.md, Postgres, Staging](../../docs/architecture.md#staging)); it
+([runbook.md, Postgres, Staging](../../docs/runbook.md#staging)); it
 holds the password in `PGPASSWORD`. Then, from the repository root:
 
 ```sh

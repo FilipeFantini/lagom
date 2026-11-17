@@ -58,7 +58,7 @@ Re-introducing a practice excluded in
       available in `nbg1`, EUR 7.37/month as shown in the Console
 - [x] Create the VPS with the settings below — `lagom-shared-01`, `nbg1`;
       steps and verification in the
-      [runbook](architecture.md#provision-the-node-m0)
+      [runbook](runbook.md#provision-the-node-m0)
 - [x] Point the domain at Cloudflare — `getlagom.app`, registered with
       Cloudflare Registrar, so registrar and DNS are the same account and there
       was nothing to repoint. Replaced on 2026-11-07 by `ofantini.com`, also
@@ -82,9 +82,9 @@ Re-introducing a practice excluded in
 | IPv6 | yes | free |
 | Private network | no | only links Hetzner servers; the Pi joins over Tailscale |
 | SSH key | existing ed25519 (1Password) | password auth never enabled; root gets the key but cannot use it |
-| Cloud config | [runbook](architecture.md#provision-the-node-m0) | creates a personal sudo user, disables root and password login |
+| Cloud config | [runbook](runbook.md#provision-the-node-m0) | creates a personal sudo user, disables root and password login |
 | Volume | no | 40 GB local is enough for megabytes in Postgres; disk pressure is a lakehouse trigger ([ADR-0008](adr/0008-postgres-for-all-layers.md)) |
-| Firewall | yes — inbound port 22 from the operator's IP only, until Tailscale is verified; then **no inbound rules** | runs outside the VM, so no RAM cost. **Never expose 6443.** Tailscale and Cloudflare Tunnel are outbound, so inbound drops to zero ([runbook](architecture.md#tailscale-acl-and-zero-inbound-ports-m1)) |
+| Firewall | yes — inbound port 22 from the operator's IP only, until Tailscale is verified; then **no inbound rules** | runs outside the VM, so no RAM cost. **Never expose 6443.** Tailscale and Cloudflare Tunnel are outbound, so inbound drops to zero ([runbook](runbook.md#tailscale-acl-and-zero-inbound-ports-m1)) |
 | Backups | no | VM rollback is not needed: the machine is reproducible from Git. Postgres is backed up on its own, to R2, since 2026-10-28 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)) |
 | Placement group | no | only spreads multiple servers across physical hosts |
 | Labels | `project=lagom`, `env=shared`, `role=k3s-server` | free, and saves effort in the CLI and the invoice |
@@ -106,13 +106,13 @@ Goal: prove that changing a YAML file on GitHub makes the cluster converge on
 its own.
 
 - [x] k3s on the VPS — `v1.36.5+k3s1`, see the
-      [runbook](architecture.md#install-k3s-m1)
+      [runbook](runbook.md#install-k3s-m1)
 - [x] Tailscale on the node and the operator's machine, `kubectl` over the
       tailnet
 - [x] Tailscale ACL: the node is `tag:lagom-node`; operators reach only SSH
       and the API, and the node reaches no one
 - [x] Public port 22 closed — zero inbound ports on IPv4 and IPv6; break-glass
-      in the [runbook](architecture.md#tailscale-acl-and-zero-inbound-ports-m1)
+      in the [runbook](runbook.md#tailscale-acl-and-zero-inbound-ports-m1)
 - [x] Decide whether the 2.6 GB request ceiling stands — it does; memory
       viability measured in a spike, with the 8 GB fallback criteria —
       [ADR-0011](adr/0011-memory-viability-on-4gb.md)
@@ -167,7 +167,7 @@ passes.
       Cluster; [ADR-0012](adr/0012-cloudnative-pg.md)
 - [x] Postgres `Cluster` for prod (no PgBouncer yet); budget check counts the
       `Cluster`'s resources, since its Pods are not in Git — PostgreSQL 18.6,
-      47 MiB idle; runbook section in [architecture.md](architecture.md#postgres-m2)
+      47 MiB idle; runbook section in [runbook.md](runbook.md#postgres-m2)
 - [x] Bronze in Postgres via dlt; set `max_table_nesting` against the real
       payload — on the real USGS payload a column hint on
       `geometry__coordinates` (`data_type: json`) does the job without
@@ -225,9 +225,9 @@ The node that M3 needs, and the orchestration every showcase uses.
       runbook shows, record the measured RTO
       ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Done 2026-10-28: 20 min
       31 s from the first command on the node to prod's first green run
-      ([runbook](architecture.md#disaster-recovery))
+      ([runbook](runbook.md#disaster-recovery))
 - [x] Delete `lagom-shared-01` — by the checklist in the
-      [runbook](architecture.md#retire-the-old-node); deleted by the operator
+      [runbook](runbook.md#retire-the-old-node); deleted by the operator
       on 2026-11-07
 - [x] Runbook: disaster recovery, written from the drill
 - [ ] Runbook: secret rotation — the drill rotated nothing, so it is written
@@ -267,7 +267,7 @@ The node that M3 needs, and the orchestration every showcase uses.
       ([ADR-0019](adr/0019-postgres-backup-deferred.md)). Barman Cloud plugin
       to R2 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)), in
       staging and prod since 2026-10-28; a restore in staging was tested
-      ([runbook](architecture.md#backup-and-restore-m3))
+      ([runbook](runbook.md#backup-and-restore-m3))
 - [x] Check backup retention on 2026-11-05: staging's 7-day retention must
       delete its first expired backup without error. Passed on 2026-11-05
       (ADR-0025 notes)
@@ -275,12 +275,12 @@ The node that M3 needs, and the orchestration every showcase uses.
       ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)): the code
       location first (image `lagom-orchestration`), then each environment's
       instance, staging before prod. Staging since 2026-10-28, prod since
-      2026-11-05 ([runbook](architecture.md#dagster-m3))
+      2026-11-05 ([runbook](runbook.md#dagster-m3))
 - [x] Dagster's UI at `ops.ofantini.com/dagster` and
       `ops.ofantini.com/dagster-staging` behind a Cloudflare Access login, instead of
       `kubectl port-forward`
       ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md);
-      [runbook](architecture.md#operator-uis-behind-cloudflare-access-m3)).
+      [runbook](runbook.md#operator-uis-behind-cloudflare-access-m3)).
       Live since 2026-11-07; the operator logged in to both
 - [x] dlt and dbt assets — USGS on DuckLake, run by Dagster in staging and
       prod. Staging's first week: 372 of 373 runs succeeded; prod's first run,

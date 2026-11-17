@@ -72,7 +72,8 @@ come later, as the comparison that shows where the small one stops.
 
 | Read | For |
 |---|---|
-| [`docs/architecture.md`](docs/architecture.md) | how it is built, the memory budget, and the runbook |
+| [`docs/architecture.md`](docs/architecture.md) | how it is built, and the memory budget |
+| [`docs/runbook.md`](docs/runbook.md) | how to provision, deploy, back up, and recover it |
 | [`docs/roadmap.md`](docs/roadmap.md) | what exists, what comes next, and what is left out on purpose |
 | [`docs/adr/`](docs/adr/) | why things are the way they are |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the workflow, before a first pull request |
@@ -80,7 +81,7 @@ come later, as the comparison that shows where the small one stops.
 
 ## Running it
 
-The [runbook](docs/architecture.md#13-runbook) takes an empty server to the
+The [runbook](docs/runbook.md) takes an empty server to the
 platform as it stands, step by step, with commands that were actually run. After that,
 every change reaches the cluster through a pull request.
 
