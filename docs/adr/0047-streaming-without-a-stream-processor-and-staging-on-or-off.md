@@ -460,7 +460,8 @@ measured, without rewriting it.
     stands: none is built before a measurement asks for it. The run's time in
     staging is read too.
   - *ADR-0045's 90 days of raw events in the lake become 30,* fixed from the
-    measurement as its decision 8 says. Locally, the synthetic producer's
+    measurement as its decision 8 says, and confirmed by the operator on
+    2026-11-17. Locally, the synthetic producer's
     events (432,000 a day) took 8.86 MB a day in Parquet, 20.5 bytes an
     event, in hourly files, and 8.38 MB, 19.4 bytes, once merged into one
     file a day. The spike's 15.6 bytes measured typed columns, not the JSON
