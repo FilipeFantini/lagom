@@ -5,7 +5,9 @@ sources:
     description: >
       The streaming showcase's live table in the database `serving`
       (ADR-0047), written by Redpanda Connect from the NATS hub and created by
-      macros/create_live_events.sql. It holds about the last 7 days.
+      macros/create_live_events.sql. Nothing deletes from it until the archive
+      job exists (ADR-0047, decision 6; the brief's step 4): until then it
+      keeps every event since the start, while the hub keeps 7 days.
     # Under `serving` only, like the models that read it.
     config:
       enabled: "{{ target.name == 'serving' }}"

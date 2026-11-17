@@ -1,0 +1,172 @@
+# Redpanda Connect's configuration in staging: one process in streams mode
+# (ADR-0047, decision 2), running two streams side by side.
+# - producer.yaml: the synthetic source (ADR-0045, Environments), five events
+#   a second published to the hub.
+# - consumer.yaml: the hub to Postgres, `serving.live.events`.
+# - backfill.yaml is not started: it is the late hour of ADR-0047's decision
+#   8, posted to the streams API by hand (runbook: Hold the synthetic
+#   events back for an hour).
+# Tested as they are on 2026-11-17 against a local Postgres 18 and NATS
+# 2.15.2 (platform/warehouse/README.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: connect
+data:
+  root.yaml: |
+    # Service-wide settings (streams mode's root config).
+    # 0.0.0.0 for the kubelet's probes and a port-forward; the NetworkPolicy
+    # below admits no Pod. The streams API (--bind-http) is served here too.
+    http:
+      address: 0.0.0.0:4195
+    logger:
+      level: INFO
+      format: logfmt
+    metrics:
+      prometheus: {}
+  synthetic.blobl: |
+    # The synthetic source's five events for one second (ADR-0045, decision 4),
+    # from {"at": <timestamp>, "seq": <n>}: one health reading and one ping result
+    # for each of the four targets, labelled `synthetic`. Shared by producer.yaml,
+    # which emits the present, and backfill.yaml, which emits a past hour late.
+    #
+    # `seq` counts seconds since the producer started: synthetic only, so a check
+    # can find a gap or a repeat per stream.
+    #
+    # A deterministic outage, so the outage view has something to find: in every
+    # half hour, at minute 7 (and 37), the first 20 seconds lose every ping beyond
+    # the gateway, a fault of the provider with the home network up.
+    #
+    # The identifier is source, signal and collected_at; a ping's signal carries
+    # its target, or the four pings of one second would share one identifier and
+    # JetStream would drop three as duplicates (ADR-0045, spike notes).
+    map synthetic_events {
+      let ts = this.at.ts_format("2006-01-02T15:04:05.000Z", "UTC")
+      let minute = this.at.ts_format("04", "UTC").number()
+      let second = this.at.ts_format("05", "UTC").number()
+      let outage = $minute % 30 == 7 && $second < 20
+      let base = {"source": "synthetic", "collected_at": $ts, "seq": this.seq}
+
+      let health = $base.merge({
+        "signal": "health",
+        "cpu_temp_c": 45 + random_int(min: 0, max: 150) / 10,
+        "cpu_freq_mhz": if random_int(min: 0, max: 9) < 3 { 1400 } else { 600 },
+        "throttled": false,
+        "under_voltage": false,
+        "load_1m": random_int(min: 0, max: 200) / 100,
+        "mem_used_bytes": 300000000 + random_int(min: 0, max: 50000000),
+        "mem_total_bytes": 953000000,
+        "disk_used_bytes": 2300000000 + this.seq * 10,
+        "disk_total_bytes": 13800000000
+      })
+      let gateway = $base.merge({"signal": "ping", "target": "gateway", "lost": false,
+        "rtt_ms": 1 + random_int(min: 0, max: 40) / 10})
+      let resolver_a = $base.merge({"signal": "ping", "target": "resolver-a", "lost": $outage,
+        "rtt_ms": if $outage { null } else { 10 + random_int(min: 0, max: 120) / 10 }})
+      let resolver_b = $base.merge({"signal": "ping", "target": "resolver-b", "lost": $outage,
+        "rtt_ms": if $outage { null } else { 12 + random_int(min: 0, max: 150) / 10 }})
+      let node = $base.merge({"signal": "ping", "target": "node", "lost": $outage,
+        "rtt_ms": if $outage { null } else { 30 + random_int(min: 0, max: 200) / 10 }})
+
+      root = [$health, $gateway, $resolver_a, $resolver_b, $node].map_each(event -> event.merge({
+        "event_id": "%s/%s/%s".format(event.source,
+          if event.signal == "ping" { "ping." + event.target } else { event.signal }, event.collected_at)
+      }))
+    }
+  producer.yaml: |
+    # The synthetic producer of staging (ADR-0045, Environments): five events a
+    # second, published to the hub with the event identifier as Nats-Msg-Id, so
+    # the hub drops one it has seen in its two-minute duplicate window.
+    input:
+      generate:
+        interval: 1s
+        count: 0
+        mapping: |
+          import "/etc/connect/synthetic.blobl"
+          root = {"at": now(), "seq": counter()}.apply("synthetic_events")
+    pipeline:
+      processors:
+        - unarchive:
+            format: json_array
+        - mapping: |
+            root = this
+            meta nats_subject = "events.%s.%s".format(this.source,
+              if this.signal == "ping" { "ping." + this.target } else { this.signal })
+    output:
+      nats_jetstream:
+        urls: ["${NATS_URL}"]
+        subject: ${! @nats_subject }
+        headers:
+          Nats-Msg-Id: ${! this.event_id }
+        max_in_flight: 64
+  consumer.yaml: |
+    # The hub to Postgres (ADR-0047, decision 2). A durable consumer: the hub
+    # keeps its position, so a restart resumes where it stopped. A message is
+    # acknowledged only after its batch is written, so a failed write is
+    # delivered again; the insert ignores a row whose key exists, so delivering
+    # it twice stores it once. Deleting the consumer makes this read the stream
+    # from its start (deliver: all), which is how the table is rebuilt.
+    input:
+      nats_jetstream:
+        urls: ["${NATS_URL}"]
+        stream: EVENTS
+        durable: serving-writer
+        deliver: all
+        ack_wait: 60s
+        max_ack_pending: 2000
+    pipeline:
+      processors:
+        # When the hub stored the message: the event's received_at, the same on a
+        # replay.
+        - mapping: |
+            root = this
+            let stored = @nats_timestamp_unix_nano.number() / 1000000000
+            meta received_at = $stored.ts_format("2006-01-02T15:04:05.000000Z07:00", "UTC")
+    output:
+      sql_insert:
+        driver: postgres
+        dsn: "host=${PG_HOST} port=5432 dbname=serving user=${PG_USER} password=${PG_PASSWORD} sslmode=${PG_SSLMODE}"
+        table: live.events
+        columns: [event_id, source, signal, collected_at, received_at, payload]
+        args_mapping: |
+          root = [this.event_id, this.source, this.signal, this.collected_at, @received_at,
+            content().string()]
+        # No conflict target: naming `(event_id)` would need SELECT on it, and
+        # this role may only insert. The primary key is the table's one unique
+        # constraint, so the meaning is the same.
+        suffix: ON CONFLICT DO NOTHING
+        conn_max_open: 2
+        max_in_flight: 1
+        batching:
+          count: 200
+          period: 1s
+  backfill.yaml: |
+    # Not loaded at start. The late hour of decision 8 (ADR-0047): after the
+    # producer has been stopped for an hour, this emits that hour's events at
+    # once, as a Pi does when its link comes back. ${HOLD_FROM} is the first
+    # second not produced, in RFC 3339 UTC; the runbook writes it in and posts
+    # this to Connect's API. It ends after 3,600 seconds' worth.
+    input:
+      generate:
+        interval: ""
+        count: 3600
+        mapping: |
+          import "/etc/connect/synthetic.blobl"
+          let n = counter()
+          let from = "${HOLD_FROM}".ts_parse("2006-01-02T15:04:05Z07:00").ts_unix()
+          root = {"at": $from + $n - 1, "seq": 0 - $n}.apply("synthetic_events")
+    pipeline:
+      processors:
+        - unarchive:
+            format: json_array
+        - mapping: |
+            root = this
+            meta nats_subject = "events.%s.%s".format(this.source,
+              if this.signal == "ping" { "ping." + this.target } else { this.signal })
+    output:
+      nats_jetstream:
+        urls: ["${NATS_URL}"]
+        subject: ${! @nats_subject }
+        headers:
+          Nats-Msg-Id: ${! this.event_id }
+        max_in_flight: 64

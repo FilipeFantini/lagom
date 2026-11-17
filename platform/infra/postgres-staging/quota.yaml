@@ -6,13 +6,19 @@
 #   Dagster daemon and code server (ADR-0026; no
 #   webserver since ADR-0046)                           640 / 1536
 #   one Dagster run, its own tag in the code location   768 / 1024
+#   NATS hub and Redpanda Connect (ADR-0047)            192 /  384
 #                                                       ----   ----
-#                                                       1708 / 3072
+#                                                       1900 / 3456
 # The hard figures below were set for 1932 / 3712 (with the sidecar and the
-# webserver), rounded up to 2432 / 4608 for a manual run; they are lowered
-# with staging's modes (ADR-0046, decision 1). The CronJob usgs-pipeline (256 / 512) counted here until it was
-# retired on 2026-11-07 (ADR-0033); the quota was left as it was. Dagster's figures are measured (architecture.md section 11). The budget check counts the same workloads against the node's
-# ceiling (architecture.md section 11); the quota keeps staging inside them.
+# webserver), rounded up to 2432 / 4608 for a manual run, and still hold the
+# streaming components. They come down to staging's `on` total plus a small
+# margin when staging can be switched off (ADR-0047, decision 10). Pods: 3
+# resident before ADR-0047, 5 with the hub and Connect, plus one run. The
+# CronJob usgs-pipeline (256 / 512) counted here until it was retired on
+# 2026-11-07 (ADR-0033); the quota was left as it was. Dagster's figures are
+# measured (architecture.md section 11). The budget check counts the same
+# workloads against the node's ceiling (architecture.md section 11); the quota
+# keeps staging inside them.
 apiVersion: v1
 kind: ResourceQuota
 metadata:

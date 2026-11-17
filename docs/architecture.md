@@ -158,7 +158,10 @@ replay requirement. If a source is polled every 20 seconds, Redpanda Connect
 can write straight to the destination and NATS adds nothing functionally.
 
 **The streaming showcase meets the trigger** ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md),
-proposed; not built). Its source is a Raspberry Pi outside the cluster:
+proposed). Its source is a Raspberry Pi outside the cluster; **in staging,
+the hub, Redpanda Connect and the table run since 2026-11-17, fed by a
+synthetic producer in the same Connect process** (no leaf, no Pi yet;
+runbook: *The streaming showcase in staging*):
 
 ```
 Pi:    sensors, ping -> Redpanda Connect -> NATS leaf node (stream on disk)
@@ -181,9 +184,11 @@ once. The table is `UNLOGGED`, so the events stay out of the backup and R2;
 a crash of Postgres empties it, and a dbt test on a schedule makes that
 loud. The windows over event time are views, defined in dbt and computed when
 read, so a late event is counted by the next query and each metric is defined
-once, behind a dbt contract that Grafana's panels read. The hub keeps events
-at least as long as the table does, so the table can be rebuilt by reading
-the stream again. This is aggregation on read, not stream processing.
+once, behind a dbt contract that Grafana's panels read. The hub keeps 7
+days, and the table is to keep the same 7 days, so the table can be rebuilt
+by reading the stream again. **Until the archive job exists** (ADR-0047,
+decision 6) nothing deletes from the table: it keeps every event since the
+start, and a rebuild restores only the hub's last 7 days. This is aggregation on read, not stream processing.
 RisingWave is tried next, as a second consumer of the same hub, in the room
 staging frees while it is off (§9a), and stays only if the comparison earns
 its memory.
@@ -289,9 +294,8 @@ read. Its first content is USGS on DuckLake:
 - the job `streaming` every hour at minute 45, only in an environment whose
   values set `LAGOM_STREAMING: "true"`: `dbt build` on the `serving` target
   (§6), as the database's owner `serving` and with no lake credential. A
-  failed contract or test fails the run and raises the alarm. The code is in
-  the image; no environment sets the variable yet, and staging gets it with
-  the hub and the writer
+  failed contract or test fails the run and raises the alarm. Staging sets
+  the variable since 2026-11-17; prod does not, until the showcase reaches it
   ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)).
 
 **One run at a time per environment**, of any job: the run queue starts a run
@@ -380,7 +384,7 @@ engine for every layer** ([ADR-0008](adr/0008-postgres-for-all-layers.md)).
 Afterwards it returns to holding only the small final result, with raw history
 in the table format.
 
-**The `serving` database** (decided, not built:
+**The `serving` database** (decided; built in staging for the streaming showcase:
 [ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by
 [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). It is what a server resident on the node
 reads when it answers visitors: a database named `serving` in the
@@ -394,8 +398,10 @@ yet archived, which the hub can replay. The static page of §9 is rendered
 inside the run and reads gold, so nothing of USGS is published into it.
 **It is created for the streaming showcase**
 ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)),
-staging first: its models and job are in the code (§6, §7); the database, its
-roles and the writer come with staging's manifests.
+staging first: **in staging since 2026-11-17**, owned by the role `serving`,
+which dbt runs as, with `events_writer` for Redpanda Connect
+([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)).
+No theme reads it yet; Grafana's read-only role comes with Grafana.
 
 **PgBouncer** — deferred with a trigger: it enters with the first external BI
 consumer. Each Postgres connection costs 5–10 MB, and BI tools open them
@@ -480,7 +486,7 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | Environment | Where | What runs there |
 |---|---|---|
 | `dev` | code on the operator's machine, data in staging | dbt and dlt run from the machine's `uv` environments against the `lagom_dev` database in staging's Postgres, through `kubectl port-forward` over the tailnet; unit tests need no database; manifests are checked with a server-side dry run ([ADR-0014](adr/0014-develop-against-staging.md)); agents use `kubectl diff -n <namespace> -f`, since `apply` is denied to them ([CONTRIBUTING](../CONTRIBUTING.md#workflow)) |
-| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07 |
+| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding three databases: `lagom` for staging's pipeline, `lagom_dev` for the developer, who cannot connect to `lagom`, and `serving` for the streaming showcase; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07. **The streaming showcase** since 2026-11-17 ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)): a NATS hub and one Redpanda Connect process, with a synthetic producer, writing to `serving` ([`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)) |
 | `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`platform/infra/dagster-prod/`](../platform/infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
 
 **Staging on or off** ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted, replacing the four modes of
@@ -758,9 +764,12 @@ for k3s's growth over days and the shims of new Pods, which requests do not
 count ([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It was 2.2 GB on
 the 4 GB node ([ADR-0016](adr/0016-ci-ceiling-2-2-gb.md)), where M3 did not
 fit, hence the move ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). Today's
-total is 4,734 MiB: Dagster in both environments (800 resident in prod, 640 in
-staging, which has no UI, and 768 per run) and `cloudflared`, 48, which serves their UIs behind a login
-([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). It was 5,070
+total is 4,926 MiB: Dagster in both environments (800 resident in prod, 640 in
+staging, which has no UI, and 768 per run), `cloudflared`, 48, which serves their UIs behind a login
+([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)), and staging's
+streaming showcase, 192 (the NATS hub 64, Redpanda Connect 128;
+[ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)).
+It was 4,734 before the showcase, and 5,070
 until 2026-11-16, when `hello` (16), `argocd-server` (64), 32 of
 cert-manager's requests, staging's webserver (160) and staging's backup
 sidecar (64) went
@@ -808,22 +817,26 @@ adds that 70 MiB request as its allowance for components outside Git.
 | **Core requests** | **~2.20 GB** | |
 | **Left within the ceiling for ephemeral jobs** | **~3.4 GB** | |
 
-Staging adds ~0.94 GB:
+Staging adds ~1.13 GB:
 
 - its own Postgres, 300 MB ([ADR-0007](adr/0007-three-environments.md)): a
   second `Cluster` with the same request and limit as prod's
   ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/cluster.yaml)),
   with no backup sidecar since 2026-11-16;
 - its own Dagster, 640 MB: daemon and code server, with no webserver since
-  2026-11-16.
+  2026-11-16;
+- the streaming showcase, 192 MB: the NATS hub (request 64, limit 128,
+  `GOMEMLIMIT` 96MiB) and one Redpanda Connect process (request 128, limit
+  256, `GOMEMLIMIT` 200MiB), from the spikes' 58 and 121 MiB of working set
+  ([`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)).
+  Both are re-set from 24 hours in staging (ADR-0047, decision 8).
 
-That leaves **~2.5 GB** for jobs. Staging's ResourceQuota caps everything
-staging requests at 2432 MiB. Staging requests 1,708 MiB in all (Postgres 300,
-Dagster 640, its run 768; 1,932 until 2026-11-16, when its UI and backup
-went); under
+That leaves **~2.3 GB** for jobs. Staging's ResourceQuota caps everything
+staging requests at 2432 MiB. Staging requests 1,900 MiB in all (Postgres 300,
+Dagster 640, its run 768, the hub and Connect 192; 1,708 before the
+showcase and 1,932 until 2026-11-16, when its UI and backup went); under
 [ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) (accepted)
-that becomes 1,900 with M6's hub and Connect process, and 0 while it is off
-(below).
+it will be 0 while staging is off (below).
 dlt and dbt do not appear above: they are ephemeral jobs, and their requests
 count against what is left. Since 2026-11-07 they run inside each Dagster
 run (768 MiB, above). Until then they ran as one Pod per environment, the
@@ -2383,6 +2396,157 @@ environment's values since its CronJob was retired (both on 2026-11-07). An imag
 whose values do not set it: its code server would not start.
 
 **Memory** of each Pod and of a run, measured, is in §11.
+
+### The streaming showcase in staging (M6)
+
+What runs ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md);
+[`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)):
+
+- **The NATS hub** (`nats-hub-0`) is a message store. It keeps every event in the
+  stream `EVENTS` on its own 4Gi volume, for 7 days or 2 GiB, whichever
+  comes first. It is the record of the events.
+- **Redpanda Connect** (`connect-…`) runs two streams in one process:
+  - `producer` publishes five synthetic events a second to the hub;
+  - `consumer` reads the hub through the durable consumer `serving-writer`, a
+    position the hub keeps for it, and inserts each event into
+    `serving.live.events`. It acknowledges a message only after the write.
+- **Dagster's `streaming` job** runs hourly at :45. It creates that table if
+  it is missing, builds the views and tests them. The test
+  `live_window_is_full` fails, and the alarm e-mails, when the last hour
+  holds fewer than half its events.
+
+Think of the hub as a tape recorder and the table as a whiteboard copied from
+the tape. Wiping the whiteboard loses nothing: the tape is played again.
+
+**Seal the two passwords, before the change is merged.** `serving` owns the
+database and is what dbt runs as. `events_writer` may only insert. They are
+generated and sealed in one pipe, as in *The catalog's read-only role*:
+
+```bash
+for pair in serving:serving-credentials events_writer:events-writer-credentials; do
+  user="${pair%%:*}"; name="${pair##*:}"; f="platform/infra/postgres-staging/$name-sealed.yaml"
+  openssl rand -hex 24 | { read -r PW && kubectl create secret generic "$name" -n staging \
+    --type=kubernetes.io/basic-auth --from-literal=username="$user" --from-literal=password="$PW" \
+    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset PW; }
+done
+```
+
+**After Argo CD syncs**, in this order:
+
+1. CloudNativePG creates the two roles and the database `serving`.
+2. The hub starts. Connect's init container creates the stream, and Connect
+   starts publishing.
+3. Until the first `streaming` run at :45 creates `live.events`, Connect's
+   log repeats `relation "live.events" does not exist`. The hub keeps every
+   event meanwhile, and the writer catches up within seconds of the table
+   appearing.
+4. That first run's `live_window_is_full` may fail, since the table holds
+   less than an hour: one alarm e-mail. The next run passes.
+
+```bash
+kubectl -n staging get pods -l 'app in (nats-hub, connect)'          # 1/1 Running each
+kubectl -n staging get database serving -o jsonpath='{.status.applied}'  # true
+kubectl -n staging logs deploy/connect --tail=20                     # no error after the table exists
+```
+
+**Read the state.** On the hub, from its monitoring port:
+
+```bash
+kubectl -n staging port-forward pod/nats-hub-0 8222:8222 &   # the Service lists 4222 only
+curl -s "localhost:8222/jsz?streams=true&consumers=true" | jq '.account_details[].stream_detail[]
+  | {name, messages: .state.messages, bytes: .state.bytes,
+     consumers: [.consumer_detail[] | {name, num_pending, num_ack_pending, num_redelivered}]}'
+```
+
+And in the table, as Postgres's superuser over the Pod's local socket:
+
+```bash
+kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc \
+  "select count(*), max(collected_at), max(received_at - collected_at) from live.events"
+```
+
+The writer has caught up when `num_pending` and `num_ack_pending` are 0.
+Then the hub's `messages` equals the table's count while the stream is less
+than 7 days old. After that, until the archive job exists, the table also
+holds what the hub has already dropped, so compare the count over the
+hub's own window instead: rows with `received_at` after the hub's first
+message (`.state.first_ts` in the same JSON).
+In the spike an event took 458 bytes in the hub; locally 366.
+
+**Rebuild the live table from the hub** (ADR-0047, decision 4). Do it after
+a crash of Postgres or a restore, both of which leave the `UNLOGGED` table
+empty, or to prove the rebuild. It needs the NATS CLI on your machine
+(`brew install nats-io/nats-tools/nats`):
+
+```bash
+kubectl -n staging port-forward svc/nats 4222:4222 &
+kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -c "truncate live.events"
+nats --server nats://127.0.0.1:4222 consumer rm EVENTS serving-writer -f
+kubectl -n staging delete pod -l app=connect
+```
+
+Connect's new Pod finds no consumer and creates it with `deliver: all`, so it
+reads the stream from its first message. Rows written between the truncate
+and the restart are written again unchanged, since the insert ignores a key it
+has. It restores only what the hub still holds, the last 7 days: until the
+archive job exists, events older than that are not in the lake either, and
+are gone. `received_at` is the hub's timestamp, so the rebuilt rows equal the
+old ones. Wait until `num_pending` is 0, then compare the counts as above.
+Deleting the consumer is the step that matters: a Connect restart alone
+resumes from the consumer's position (ADR-0045's spike notes, correction 5).
+
+**Hold the synthetic events back for an hour** (ADR-0047, decision 8, the
+second criterion). It reproduces what the Pi does when its link comes back:
+an hour of events that arrive an hour late, all at once. It uses Connect's
+streams API, which `--bind-http` enables and the NetworkPolicy keeps from
+every Pod; a port-forward reaches it.
+
+```bash
+kubectl -n staging port-forward deploy/connect 4195:4195 &
+curl -s -X DELETE localhost:4195/streams/producer      # 200: no more events
+# A few seconds later, once the writer has caught up: the first second not produced.
+kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc "select to_char(
+  (date_trunc('second', max(collected_at)) + interval '1 second') at time zone 'UTC',
+  'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') from live.events where source = 'synthetic'"
+```
+
+An hour later, release that hour and restart the producer:
+
+```bash
+HOLD_FROM=<the time the query above printed>
+kubectl -n staging get configmap connect -o jsonpath='{.data.backfill\.yaml}' \
+  | sed "s/\${HOLD_FROM}/$HOLD_FROM/" > /tmp/backfill.yaml
+kubectl -n staging get configmap connect -o jsonpath='{.data.producer\.yaml}' > /tmp/producer.yaml
+curl -s -X POST --data-binary @/tmp/backfill.yaml localhost:4195/streams/backfill   # 200
+curl -s -X POST --data-binary @/tmp/producer.yaml localhost:4195/streams/producer   # 200
+curl -s localhost:4195/streams | jq 'map_values(.active)'   # backfill false once done; producer true
+curl -s -X DELETE localhost:4195/streams/backfill
+```
+
+The backfill emits 3,600 seconds of events and stops: 18,000 rows. Then
+check, for the held hour, that `metrics.pipeline_minute` holds 60 events per
+minute and stream, all counted as late, and that the hour's synthetic outages
+(minutes 7 and 37) are in `metrics.link_outages`. A Pod restart before the
+release brings the producer back from its file, which ends the hold early.
+Exercised against a local hub on 2026-11-17: 18,000 rows in 2 s, then
+`PASS=23`.
+
+**The other criteria of decision 8**, each read as above: hub and table
+counts equal, and no pending or unacknowledged message.
+
+- **Connect restarted while events flow:** `kubectl -n staging delete pod -l app=connect`.
+- **Postgres's Pod deleted while events flow:**
+  `kubectl -n staging delete pod postgres-1`. CloudNativePG creates it again,
+  and Connect retries its batch until Postgres answers. A Pod that is deleted
+  shuts Postgres down cleanly, which keeps an `UNLOGGED` table; only a crash
+  empties it.
+- **24 hours:**
+  - `kubectl top pod -n staging` for the hub, Connect and `postgres-1`
+    against their requests;
+  - the hub's `bytes` above;
+  - in `psql -d serving`, `\timing` on each `metrics` view over the whole
+    table, which must stay under two seconds. The 7-day figure needs 7
+    days of events.
 
 ### Disaster recovery
 

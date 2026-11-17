@@ -412,8 +412,9 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
 - [ ] In staging: the hub, one Redpanda Connect process (the synthetic
       producer and the consumer), the `serving` database with its unlogged
       `events` table, and the views in dbt with their contracts and tests
-      (the views, their tests and the `streaming` job are in the code since
-      2026-11-17, tested against a local Postgres; the manifests follow)
+      (the views, their tests and the `streaming` job since 2026-11-17, #113;
+      the manifests, with a CI job building the `serving` target on Postgres,
+      in the pull request that follows it)
 - [ ] The criteria of ADR-0047's decision 8, in staging: a restart, a cut
       link, Postgres deleted, the table rebuilt from the hub, and 24 hours
       of memory, the hub's size on disk and query times

@@ -1,0 +1,26 @@
+# The streaming showcase in staging (ADR-0047): the NATS hub that keeps the
+# events, and one Redpanda Connect process that produces synthetic events and
+# writes them to the database `serving` of staging's Postgres
+# (postgres-staging/). The views over them are dbt models, built by Dagster's
+# `streaming` job (dagster-staging/values.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: streaming-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/FilipeFantini/lagom.git
+    targetRevision: main
+    path: platform/infra/streaming-staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      # The hub's stream is on a volume a StatefulSet claims: Argo CD does not
+      # prune a StatefulSet's PersistentVolumeClaims, so removing a file here
+      # never deletes the events. The table can always be rebuilt from them.
+      prune: true
+      selfHeal: true

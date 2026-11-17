@@ -199,6 +199,82 @@ jobs:
           LAGOM_R2_SECRET_ACCESS_KEY: ci-placeholder
           LAGOM_R2_ENDPOINT: https://ci-placeholder.invalid
 
+  warehouse-serving:
+    # What this proves: the streaming showcase's dbt target (`serving`,
+    # ADR-0047) builds on a real Postgres, the version staging runs: the hook
+    # creates the live table, the views compile, their contracts hold, the
+    # unit tests pass, and on an empty table the test that makes an emptied
+    # table loud fails, as it must in the cluster. The roles are created as
+    # CloudNativePG creates them, so the hook's grants are checked too.
+    # What it does not prove: anything about real events, Redpanda Connect or
+    # the hub. The password is a placeholder for a throwaway container that
+    # only this job reaches.
+    name: warehouse (serving target)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # 18.1, multi-arch; staging runs CloudNativePG's 18 image.
+        image: postgres:18.1-alpine@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s
+          --health-timeout 5s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ci-placeholder
+      LAGOM_PG_HOST: localhost
+      LAGOM_PG_PORT: "5432"
+      LAGOM_PG_USER: serving
+      LAGOM_PG_PASSWORD: ci-placeholder
+      LAGOM_PG_DBNAME: serving
+      LAGOM_PG_SSLMODE: disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: roles and database, as postgres-staging/ declares them
+        run: |
+          psql -v ON_ERROR_STOP=1 \
+            -c "create role serving login password 'ci-placeholder' connection limit 3" \
+            -c "create role events_writer login connection limit 3" \
+            -c "create database serving owner serving"
+      # dbt-postgres is locked in the orchestration project, the environment
+      # the `streaming` job runs in.
+      - name: dbt build (serving target), without the live-window test
+        run: >
+          uv run --project platform/orchestration --locked dbt build
+          --target serving --no-partial-parse --exclude live_window_is_full
+          --project-dir platform/warehouse --profiles-dir platform/warehouse
+      - name: the live-window test fails on an empty table
+        run: |
+          if uv run --project platform/orchestration --locked dbt test \
+               --target serving --select live_window_is_full \
+               --project-dir platform/warehouse --profiles-dir platform/warehouse; then
+            echo "live_window_is_full passed on an empty table" >&2
+            exit 1
+          fi
+      - name: the writer may insert, and nothing else
+        run: |
+          psql -d serving -v ON_ERROR_STOP=1 <<'SQL'
+          set role events_writer;
+          insert into live.events values ('ci/1', 'ci', 'ping', now(), now(), '{}')
+            on conflict do nothing;
+          insert into live.events values ('ci/1', 'ci', 'ping', now(), now(), '{}')
+            on conflict do nothing;
+          SQL
+          for statement in "select 1 from live.events" "delete from live.events" \
+                           "update live.events set source = 'x'" "truncate live.events" \
+                           "select 1 from metrics.link_minute" "create table live.x (a int)"; do
+            if psql -d serving -c "set role events_writer; $statement" 2>/dev/null; then
+              echo "events_writer could: $statement" >&2
+              exit 1
+            fi
+          done
+
   dashboards:
     # What this proves: the boards under products/dashboards validate, render
     # against a lake built as the `warehouse` job builds it (gold in Parquet

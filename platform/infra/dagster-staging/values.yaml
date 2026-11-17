@@ -118,12 +118,12 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at 4620b83 (PR #98, map
-        # cards that fit, in the site's paper; PR #96 before it, the short
-        # board an article frames). The `dashboards` job came in PR #83
-        # (ADR-0044); its memory peak is logged since PR #90. The code location
-        # needs HEARTBEAT_URL, set below.
-        tag: "4620b83cebcfdb98438111556680ed6afd87ea38@sha256:9c975956677a7d17d8dd3e19c2284ac9f9bf609a497b8bedd5981b1064d362f9"
+        # Pinned by digest (ADR-0015): built from main at 50324eb (PR #113,
+        # the `streaming` job and dbt's `serving` target, ADR-0047; before it
+        # 4620b83, PR #98). The `dashboards` job came in PR #83 (ADR-0044);
+        # its memory peak is logged since PR #90. The code location needs
+        # HEARTBEAT_URL, set below, and reads LAGOM_STREAMING.
+        tag: "50324ebd2a8c90ade6f99ab3b93f28bb820a7a7f@sha256:c01b2468b35a65db76c7622f0d1d01b1edce1c5a98fd0737aae8842c3c339e03"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
@@ -198,3 +198,10 @@ dagster-user-deployments:
         # (ADR-0033, decision 5).
         - name: HEARTBEAT_URL
           valueFrom: {secretKeyRef: {name: pipeline-heartbeat, key: url}}
+        # The streaming showcase runs here (ADR-0047): the `streaming` job and
+        # its hourly schedule exist only where this is "true", and anything
+        # but "true" or "false" stops the code location. Its credentials come
+        # from the job's tag (SERVING_ENV), not from here. Prod leaves it
+        # unset until the showcase reaches it.
+        - name: LAGOM_STREAMING
+          value: "true"
