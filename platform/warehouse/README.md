@@ -128,13 +128,45 @@ settings are listed in `profiles.yml` and in the code location's
 - **Partial parsing can carry one target's result into the other.** Pass
   `--no-partial-parse` when switching targets in the same checkout.
 
+## The `serving` target: the streaming showcase
+
+A third target, on the database `serving` of an environment's Postgres
+([ADR-0047](../../docs/adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)).
+It reads the same `LAGOM_PG_*` variables as `dev`. `dbt_project.yml` gives
+each folder `+enabled` by target name: under `serving` only
+`models/streaming/` and `tests/streaming/` are built, and under every other
+target they are not.
+
+| What | Where | What it guarantees |
+|---|---|---|
+| live table | `live.events`, created by the `on-run-start` hook (`macros/create_live_events.sql`) if it is missing, never altered | `UNLOGGED`; one row per event, its key the event identifier; `received_at` is when the hub stored it, so a replay writes the same rows; the writer `events_writer` may insert and nothing else |
+| typed events | `streaming.stg_events__pings`, `stg_events__health` (views) | the payload's fields, typed |
+| metrics | `metrics.*` (views), **contract enforced** | `link_minute`, `link_hour_profile`, `link_outages`, `source_health_minute`, `pipeline_minute`: what Grafana reads; grouped by `collected_at`, in UTC |
+
+Views, not tables: each is computed when read, so a late event is a row with
+an old `collected_at` that the next query counts. Their tests are `not_null`,
+`accepted_values`, `value_between` and `unique_combination` (the grain of each
+view, `tests/generic/`), and `tests/streaming/live_window_is_full.sql`: it
+fails when, over the last 60 whole minutes (less the last two), one of the
+five streams holds fewer than 1,800 events of 3,600. It reads
+`pipeline_minute`, so it runs last and stops no view. The table has no tests:
+its primary key and `NOT NULL` hold them, and a test would scan a week of
+rows.
+
+**Tested on 2026-11-17 against a local Postgres 18**, with a NATS hub and
+Redpanda Connect writing synthetic events (the configuration of the staging
+manifests): `dbt build --target serving` passed 23 of 23 with an hour of
+events; with six minutes of events only `live_window_is_full` failed, as it
+should. No CI job runs this target yet: it needs a Postgres.
+
 ## Image
 
 No image of its own since 2026-11-07: `lagom-warehouse` ran only in the
 CronJobs on Postgres, retired that day
 ([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)). The
 project is bundled into `lagom-orchestration`, whose `warehouse` asset runs
-`dbt build` on the `lake` target ([`platform/orchestration/`](../orchestration/README.md)).
+`dbt build` on the `lake` target, and whose `streaming` job runs it on
+`serving` ([`platform/orchestration/`](../orchestration/README.md)).
 
 ## Known limits
 

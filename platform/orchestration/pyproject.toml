@@ -25,6 +25,8 @@ dependencies = [
     # The dashboards' upload to R2 (dashboards.py). Already in the image through
     # dlt's s3 extra (aiobotocore pins it); declared because the code imports it.
     "botocore>=1.43",
+    # The `streaming` job's dbt target, `serving` in Postgres (ADR-0047).
+    "dbt-postgres==1.11.0",
 ]
 
 [dependency-groups]

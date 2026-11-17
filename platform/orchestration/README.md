@@ -34,10 +34,25 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
   Every command has a timeout, and `dct` runs with the lake's variables only.
   A failed run is covered by `run_failure_alarm`.
 
-All three carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
+- `streaming`, hourly at minute 45, **only where `LAGOM_STREAMING` is
+  `"true"`** in the code server's environment (the environment's values): the
+  op `build_live_views` runs `dbt build` on the warehouse's `serving` target,
+  which creates the live table if it is missing, builds the streaming views,
+  checks their contracts and runs their tests
+  ([ADR-0047](../../docs/adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md);
+  [`platform/warehouse/`](../warehouse/README.md)). It holds the owner of
+  `serving` (`SERVING_ENV`, from `serving-credentials`) and nothing of the
+  lake's. Unset, the job and its schedule are not defined, which is prod until
+  ADR-0047's last steps; any value but `"true"` or `"false"` stops the code
+  location, so a typo cannot drop the job and its alarm silently. A failed
+  test, the emptied-table one included, is covered by `run_failure_alarm`.
+
+The first three carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
 run at a time (so the render waits for the pipeline, and the budget does not change), and a `dagster-k8s/config` tag with the memory of the run's Pod
 (`RUN_RESOURCES`) and the Secrets it gets (`WRITER_ENV`, below). Without it a run would inherit the code server's, which is
-about half of what a run needs. Each environment's Application declares
+about half of what a run needs. `streaming` carries the same resources with
+its own Secrets (`SERVING_ENV`) and no pipeline tag: it touches neither dlt's
+cursor nor the lake, and the instance's one run slot still keeps it apart. Each environment's Application declares
 the same request for the budget check, and the tests fail if they differ.
 Steps run in the run's own process (`in_process_executor`); dbt is still a
 process of its own.
@@ -83,6 +98,8 @@ its own tag, and a run's Pod gets the two lists together
 | `DESTINATION__DUCKLAKE__CREDENTIALS__*` (`DUCKLAKE_NAME`, `METADATA_SCHEMA`, `STORAGE__BUCKET_URL`, `REGION_NAME`) | the environment's values | dlt's DuckLake destination: what is not secret |
 | `LAGOM_LAKE_DATA_PATH`, `LAGOM_LAKE_METADATA_SCHEMA`, `PGSSLMODE` | the environment's values | the lake's bucket and schema, for dbt and maintenance |
 | `HEARTBEAT_URL` | the environment's values, from the Secret `pipeline-heartbeat` | the check's ping URL (a secret): required by the code location, so every run Pod holds it (ADR-0033 decision 5, still true) |
+| `LAGOM_STREAMING` | the environment's values (`"true"` or `"false"`; unset is `"false"`) | whether the `streaming` job and its schedule exist |
+| `LAGOM_PG_HOST`, `LAGOM_PG_PORT`, `LAGOM_PG_DBNAME`, `LAGOM_PG_SSLMODE`; `LAGOM_PG_USER`, `LAGOM_PG_PASSWORD` | the `streaming` job's tag (`SERVING_ENV`); the last two from `serving-credentials` | dbt's `serving` target, as the owner of `serving` |
 | `LAGOM_DASHBOARDS_BUCKET` | the environment's values | the bucket the pages are published to (`lagom-<env>-dashboards`) |
 | `PG_URI` | each job's tag (`WRITER_ENV`), from `postgres-app` | the catalog owner's connection string |
 | `LAGOM_R2_ACCESS_KEY_ID`, `LAGOM_R2_SECRET_ACCESS_KEY`, `LAGOM_R2_ENDPOINT` | each job's tag, from `r2-lake` | the environment's R2 write token |

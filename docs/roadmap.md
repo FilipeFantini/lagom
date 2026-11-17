@@ -29,7 +29,7 @@ dbt, Postgres, Dagster.
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | dbt Charts (the dashboards) | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)); replaced Evidence on 2026-11-10 ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)). Its static page is the target again since 2026-11-14 ([ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)) |
-| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). In M6 it is created to hold the streaming showcase's events ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), proposed) |
+| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). In M6 it is created to hold the streaming showcase's events ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted) |
 | Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `ops.ofantini.com/<tool>` ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
 | NATS | second consumer of the same stream, or a replay requirement. The streaming showcase (M6) meets it ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed) |
 | Streamlit | an interactive app a static page cannot serve |
@@ -399,7 +399,7 @@ Raspberry Pi 3B+ at the operator's home is the source, outside the cluster,
 and NATS JetStream is the log. It replaces the earlier plan of joining the Pi
 to k3s as an agent node, which needed flannel moved to `tailscale0` on the
 node that carries prod. [ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)
-(proposed) takes the stream processor out of it: Redpanda Connect writes the
+(accepted) takes the stream processor out of it: Redpanda Connect writes the
 events to Postgres, their windows are views computed when read, and
 RisingWave is tried afterwards, as a second consumer of the same hub.
 
@@ -412,6 +412,8 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
 - [ ] In staging: the hub, one Redpanda Connect process (the synthetic
       producer and the consumer), the `serving` database with its unlogged
       `events` table, and the views in dbt with their contracts and tests
+      (the views, their tests and the `streaming` job are in the code since
+      2026-11-17, tested against a local Postgres; the manifests follow)
 - [ ] The criteria of ADR-0047's decision 8, in staging: a restart, a cut
       link, Postgres deleted, the table rebuilt from the hub, and 24 hours
       of memory, the hub's size on disk and query times

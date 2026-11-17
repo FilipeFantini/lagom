@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: live
+    description: >
+      The streaming showcase's live table in the database `serving`
+      (ADR-0047), written by Redpanda Connect from the NATS hub and created by
+      macros/create_live_events.sql. It holds about the last 7 days.
+    # Under `serving` only, like the models that read it.
+    config:
+      enabled: "{{ target.name == 'serving' }}"
+    tables:
+      - name: events
+        description: >
+          One row per event, its key the event identifier: source, signal (with
+          the ping's target) and `collected_at`. Append-only.
+        # No tests here: the primary key and NOT NULL constraints already hold
+        # what `unique` and `not_null` would, and a test would scan every row
+        # of the week on each run.

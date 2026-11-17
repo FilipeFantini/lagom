@@ -1,6 +1,6 @@
 # ADR-0047 — Streaming without a stream processor: events in Postgres, and a staging that is on or off
 
-- **Status:** Proposed. Taken by the operator in conversation on 2026-11-16:
+- **Status:** Accepted (#106, merged 2026-11-16). Taken by the operator in conversation on 2026-11-16:
   the essential pipeline first, with no stream processor in it; a staging
   that can be hibernated, in two states, so that the node has room to try an
   idea; an events table that a crash may empty, which a personal project
