@@ -165,3 +165,72 @@ models:
       - unique_combination:
           arguments:
             columns: [minute_start, source, event_stream]
+
+# Given rows and expected rows for the logic the contracts cannot see: the
+# outage islands, jitter, the minute cut, percentiles and the late rule. Times
+# are UTC. They run with `dbt build` on the `serving` target, before the views.
+unit_tests:
+  - name: link_outages_splits_runs_at_answers_and_at_gaps
+    description: >
+      Runs of lost pings per target. An answered ping ends a run; so does a gap
+      of more than five seconds with no events, since nothing says the link
+      stayed down across it. Two targets never share a run.
+    model: link_outages
+    given:
+      - input: ref('stg_events__pings')
+        rows:
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:00+00", lost: false}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:01+00", lost: true}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:02+00", lost: true}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:03+00", lost: false}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:04+00", lost: true}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 12:00:05+00", lost: true}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 12:00:06+00", lost: false}
+          - {source: s, ping_target: gateway, collected_at: "2026-11-17 10:00:01+00", lost: true}
+    expect:
+      rows:
+        - {ping_target: node, started_at: "2026-11-17 10:00:01+00", duration_seconds: 2, lost_pings: 2}
+        - {ping_target: node, started_at: "2026-11-17 10:00:04+00", duration_seconds: 1, lost_pings: 1}
+        - {ping_target: node, started_at: "2026-11-17 12:00:05+00", duration_seconds: 1, lost_pings: 1}
+        - {ping_target: gateway, started_at: "2026-11-17 10:00:01+00", duration_seconds: 1, lost_pings: 1}
+
+  - name: link_minute_jitter_between_close_answers
+    description: >
+      A ping belongs to the minute of its collected_at. Jitter counts the step
+      from the previous answered ping when it is at most five seconds back,
+      across a minute boundary and across a lost ping, and not after a longer
+      gap. A minute with no answered ping has no latency.
+    model: link_minute
+    given:
+      - input: ref('stg_events__pings')
+        rows:
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:58+00", lost: false, rtt_ms: 10}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:59+00", lost: false, rtt_ms: 14}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:01:00+00", lost: false, rtt_ms: 11}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:01:01+00", lost: true, rtt_ms: null}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:01:02+00", lost: false, rtt_ms: 20}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:01:30+00", lost: false, rtt_ms: 50}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:02:00+00", lost: true, rtt_ms: null}
+    expect:
+      rows:
+        - {minute_start: "2026-11-17 10:00:00+00", pings: 2, lost_pings: 0, rtt_p50_ms: 12, rtt_p95_ms: 13.8, jitter_ms: 4}
+        - {minute_start: "2026-11-17 10:01:00+00", pings: 4, lost_pings: 1, rtt_p50_ms: 20, rtt_p95_ms: 47, jitter_ms: 6}
+        - {minute_start: "2026-11-17 10:02:00+00", pings: 1, lost_pings: 1, rtt_p50_ms: null, rtt_p95_ms: null, jitter_ms: null}
+
+  - name: pipeline_minute_counts_late_after_a_minute
+    description: >
+      An event is late when the hub stored it more than a minute after it was
+      collected: exactly a minute is on time. A ping's stream names its target.
+    model: pipeline_minute
+    given:
+      - input: ref('stg_events__pings')
+        rows:
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:00+00", received_at: "2026-11-17 10:01:00+00"}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:01+00", received_at: "2026-11-17 10:01:02+00"}
+      - input: ref('stg_events__health')
+        rows:
+          - {source: s, collected_at: "2026-11-17 10:00:00+00", received_at: "2026-11-17 10:00:00.5+00"}
+    expect:
+      rows:
+        - {minute_start: "2026-11-17 10:00:00+00", event_stream: ping.node, events: 2, late_events: 1, lateness_max_seconds: 61}
+        - {minute_start: "2026-11-17 10:00:00+00", event_stream: health, events: 1, late_events: 0, lateness_max_seconds: 0.5}

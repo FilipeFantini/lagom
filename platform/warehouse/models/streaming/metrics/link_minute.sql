@@ -8,9 +8,13 @@
 -- a target).
 --
 -- Jitter is the mean absolute difference between consecutive answered round
--- trips to the same target (RFC 3550's idea, without its smoothing).
+-- trips to the same target (RFC 3550's idea, without its smoothing); a pair
+-- more than `gap` seconds apart (lost pings or no events between them) is not
+-- consecutive and is left out.
 -- Percentiles are exact (percentile_cont) over the minute's answered pings; a
 -- minute with none has null latencies.
+
+{% set gap = 5 %}
 
 with pings as (
     select
@@ -23,16 +27,28 @@ with pings as (
     from {{ ref('stg_events__pings') }}
 ),
 
+answered as (
+    select
+        minute_start,
+        source,
+        ping_target,
+        collected_at,
+        rtt_ms,
+        lag(rtt_ms) over by_target as previous_rtt_ms,
+        lag(collected_at) over by_target as previous_at
+    from pings
+    where not lost
+    window by_target as (partition by source, ping_target order by collected_at)
+),
+
 steps as (
     select
         minute_start,
         source,
         ping_target,
-        abs(
-            rtt_ms - lag(rtt_ms) over (partition by source, ping_target order by collected_at)
-        ) as rtt_step_ms
-    from pings
-    where not lost
+        abs(rtt_ms - previous_rtt_ms) as rtt_step_ms
+    from answered
+    where collected_at - previous_at <= interval '{{ gap }} seconds'
 ),
 
 jitter as (

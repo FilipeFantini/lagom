@@ -144,7 +144,17 @@ target they are not.
 | metrics | `metrics.*` (views), **contract enforced** | `link_minute`, `link_hour_profile`, `link_outages`, `source_health_minute`, `pipeline_minute`: what Grafana reads; grouped by `collected_at`, in UTC |
 
 Views, not tables: each is computed when read, so a late event is a row with
-an old `collected_at` that the next query counts. Their tests are `not_null`,
+an old `collected_at` that the next query counts. Two rules the views decide:
+a lost ping has no round trip whatever its payload says, so it never enters
+a percentile; and two pings to a target more than five seconds apart are not
+consecutive, so an outage does not run across a gap with no events (the
+source down) and jitter does not measure across one.
+
+**Unit tests** (`unit_tests:` in the two YAML files) give rows and expect rows
+for that logic: a lost ping's round trip; outages split by an answer and by a
+gap, per target; the minute cut, percentiles and jitter across a minute
+boundary and a lost ping; and the late rule at exactly one minute. Their
+other tests are `not_null`,
 `accepted_values`, `value_between` and `unique_combination` (the grain of each
 view, `tests/generic/`), and `tests/streaming/live_window_is_full.sql`: it
 fails when, over the last 60 whole minutes (less the last two), one of the
@@ -155,9 +165,9 @@ rows.
 
 **Tested on 2026-11-17 against a local Postgres 18**, with a NATS hub and
 Redpanda Connect writing synthetic events (the configuration of the staging
-manifests): `dbt build --target serving` passed 23 of 23 with an hour of
-events; with six minutes of events only `live_window_is_full` failed, as it
-should. No CI job runs this target yet: it needs a Postgres.
+manifests): `dbt build --target serving` passed 27 of 27 with an hour of
+events, the four unit tests included; with six minutes of events only
+`live_window_is_full` failed, as it should. No CI job runs this target yet: it needs a Postgres.
 
 ## Image
 
