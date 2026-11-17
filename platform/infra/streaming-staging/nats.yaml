@@ -3,9 +3,8 @@
 # its own volume. It is the record; the table in Postgres is a copy that can
 # be rebuilt from it (runbook: Rebuild the live table from the hub).
 #
-# Reachable inside the cluster only, and there by Redpanda Connect only
-# (NetworkPolicy below). No leaf node connects here yet: the Pi points at
-# staging in a later step, with its own listener and credential.
+# Clients remain inside the cluster. The leaf listener is reached through
+# Tailscale Serve on the node, never through a public Service (runbook).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -14,6 +13,27 @@ data:
   hub.conf: |
     server_name: hub-staging
     listen: 0.0.0.0:4222
+    ping_interval: 10s
+    ping_max: 3
+    # A leaf without its own authorization block uses these user permissions.
+    # Duplicating users under leafnodes.authorization would lose permissions.
+    authorization {
+      users: [
+        { user: internal, password: $NATS_INTERNAL_PASSWORD },
+        { user: pi, password: $NATS_PI_PASSWORD, permissions: {
+          publish: { allow: ["PI.DELIVER.>", "$JSC.R.>"] },
+          subscribe: { allow: [
+            "$JS.leaf.API.CONSUMER.CREATE.EDGE",
+            "$JS.leaf.API.CONSUMER.CREATE.EDGE.>",
+            "$JS.FC.EDGE.>", "$JS.FC.*.*.EDGE.>"
+          ] }
+        } }
+      ]
+    }
+    leafnodes {
+      listen: 0.0.0.0:7422
+      no_advertise: true
+    }
     # Monitoring, for the kubelet's probes and a port-forward. The
     # NetworkPolicy admits no Pod to it.
     http: 0.0.0.0:8222
@@ -21,8 +41,8 @@ data:
       store_dir: /data
       domain: hub
       max_memory_store: 16MB
-      # Inside the 4Gi volume, above the stream's own 2 GiB cap.
-      max_file_store: 3GB
+      # Inside the existing 4Gi volume. Two producers temporarily share staging.
+      max_file_store: 3584MB
     }
   # The stream, created or brought to this configuration by Connect's init
   # container (connect.yaml) each time it starts. NATS keeps streams in its
@@ -35,8 +55,9 @@ data:
   #   lake (ADR-0047, decision 6), and platform/orchestration's
   #   tests/test_archive.py fails if this keeps less than that job's
   #   LIVE_RETENTION.
-  # - And by size, 2 GiB: at 5 events a second and 458 bytes an event (the
-  #   spike's figure), 7 days are about 1.4 GiB. The oldest go first.
+  # - And by size, 3 GiB: Pi plus synthetic at 10 events/s and 458 B/event
+  #   need about 2.58 GiB for 7 days. Measure again with real Pi events.
+  #   The oldest go first if either bound is reached.
   # - Duplicate window, 2 minutes: a message whose Nats-Msg-Id (the event
   #   identifier) was seen inside it is dropped.
   events-stream.json: |
@@ -47,11 +68,16 @@ data:
       "storage": "file",
       "discard": "old",
       "max_age": 604800000000000,
-      "max_bytes": 2147483648,
+      "max_bytes": 3221225472,
       "max_msgs": -1,
       "max_msg_size": 65536,
       "duplicate_window": 120000000000,
-      "num_replicas": 1
+      "num_replicas": 1,
+      "sources": [{
+        "name": "EDGE",
+        "filter_subject": "events.pi.>",
+        "external": {"api": "$JS.leaf.API", "deliver": "PI.DELIVER"}
+      }]
     }
   ensure-stream.sh: |
     #!/bin/sh
@@ -59,6 +85,7 @@ data:
     # configuration. A hub that does not answer fails this, and the Pod
     # waits and tries again.
     set -eu
+    export NATS_USER=internal NATS_PASSWORD="$NATS_INTERNAL_PASSWORD"
     if nats --server "$NATS_URL" stream info EVENTS >/dev/null 2>&1; then
       nats --server "$NATS_URL" stream edit EVENTS --config /etc/nats/events-stream.json --force
     else
@@ -73,6 +100,7 @@ spec:
   selector: {app: nats-hub}
   ports:
     - {name: client, port: 4222, targetPort: client}
+    - {name: leaf, port: 7422, targetPort: leaf}
 ---
 # A StatefulSet for the volume: its claim outlives the Pod, a deletion of the
 # StatefulSet and a sync that prunes it.
@@ -90,7 +118,7 @@ spec:
       labels: {app: nats-hub}
       annotations:
         # Bump with every change to hub.conf: the server reads it at start.
-        lagom.dev/config-revision: "1"
+        lagom.dev/config-revision: "2"
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -106,11 +134,16 @@ spec:
           image: nats:2.15.2-alpine@sha256:afae2fdbe2e326c65e1246cb83b9d05d319188734f3bd577ac8072daae78a10f
           args: ["--config", "/etc/nats/hub.conf"]
           env:
+            - name: NATS_INTERNAL_PASSWORD
+              valueFrom: {secretKeyRef: {name: nats-credentials, key: internal-password}}
+            - name: NATS_PI_PASSWORD
+              valueFrom: {secretKeyRef: {name: nats-credentials, key: pi-password}}
             # Go runtime: return memory before the container limit is reached.
             - name: GOMEMLIMIT
               value: 96MiB
           ports:
             - {name: client, containerPort: 4222}
+            - {name: leaf, containerPort: 7422}
             - {name: monitor, containerPort: 8222}
           # The spike's hub reached 58 MiB of working set at this rate
           # (ADR-0045's notes); re-set from 24 hours in staging (ADR-0047,

@@ -14,6 +14,16 @@ permissions:
 # the tree they just fetched; a later step has no use for the credential.
 
 jobs:
+  pi-streaming:
+    name: Pi streaming lab
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run isolated Pi streaming lab
+        run: bash platform/edge/pi/tests/run.sh
+
   tools:
     name: tools (lint, types, tests)
     runs-on: ubuntu-latest

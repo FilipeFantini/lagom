@@ -95,6 +95,9 @@ data:
     output:
       nats_jetstream:
         urls: ["${NATS_URL}"]
+        auth:
+          user: internal
+          password: ${NATS_INTERNAL_PASSWORD}
         subject: ${! @nats_subject }
         headers:
           Nats-Msg-Id: ${! this.event_id }
@@ -109,6 +112,9 @@ data:
     input:
       nats_jetstream:
         urls: ["${NATS_URL}"]
+        auth:
+          user: internal
+          password: ${NATS_INTERNAL_PASSWORD}
         stream: EVENTS
         durable: serving-writer
         deliver: all
@@ -122,24 +128,42 @@ data:
             root = this
             let stored = @nats_timestamp_unix_nano.number() / 1000000000
             meta received_at = $stored.ts_format("2006-01-02T15:04:05.000000Z07:00", "UTC")
+        # The leaf may only source events.pi.>, but it controls payload bytes
+        # and the subject suffix delivered through PI.DELIVER. Bind the stored
+        # identity to the subject before SQL so a forged source or key cannot
+        # preempt a legitimate row under ON CONFLICT DO NOTHING.
+        - mapping: |
+            let kind = if this.signal == "ping" { "ping." + this.target } else { this.signal }
+            let expected_subject = "events.%s.%s".format(this.source, $kind)
+            let expected_id = "%s/%s/%s".format(this.source, $kind, this.collected_at)
+            root = if this.source != "synthetic" && this.source != "pi" {
+              throw("event source is not allowed: " + this.source.or(""))
+            } else if @nats_subject != $expected_subject {
+              throw("event source/signal/target does not match NATS subject")
+            } else if this.event_id != $expected_id {
+              throw("event_id does not match source/signal/target/collected_at")
+            } else {
+              this
+            }
     output:
-      sql_insert:
-        driver: postgres
-        dsn: "host=${PG_HOST} port=5432 dbname=serving user=${PG_USER} password=${PG_PASSWORD} sslmode=${PG_SSLMODE}"
-        table: live.events
-        columns: [event_id, source, signal, collected_at, received_at, payload]
-        args_mapping: |
-          root = [this.event_id, this.source, this.signal, this.collected_at, @received_at,
-            content().string()]
-        # No conflict target: naming `(event_id)` would need SELECT on it, and
-        # this role may only insert. The primary key is the table's one unique
-        # constraint, so the meaning is the same.
-        suffix: ON CONFLICT DO NOTHING
-        conn_max_open: 2
-        max_in_flight: 1
-        batching:
-          count: 200
-          period: 1s
+      reject_errored:
+        sql_insert:
+          driver: postgres
+          dsn: "host=${PG_HOST} port=5432 dbname=serving user=${PG_USER} password=${PG_PASSWORD} sslmode=${PG_SSLMODE}"
+          table: live.events
+          columns: [event_id, source, signal, collected_at, received_at, payload]
+          args_mapping: |
+            root = [this.event_id, this.source, this.signal, this.collected_at, @received_at,
+              content().string()]
+          # No conflict target: naming `(event_id)` would need SELECT on it, and
+          # this role may only insert. The primary key is the table's one unique
+          # constraint, so the meaning is the same.
+          suffix: ON CONFLICT DO NOTHING
+          conn_max_open: 2
+          max_in_flight: 1
+          batching:
+            count: 200
+            period: 1s
   backfill.yaml: |
     # Not loaded at start. The late hour of decision 8 (ADR-0047): after the
     # producer has been stopped for an hour, this emits that hour's events at
@@ -166,6 +190,9 @@ data:
     output:
       nats_jetstream:
         urls: ["${NATS_URL}"]
+        auth:
+          user: internal
+          password: ${NATS_INTERNAL_PASSWORD}
         subject: ${! @nats_subject }
         headers:
           Nats-Msg-Id: ${! this.event_id }

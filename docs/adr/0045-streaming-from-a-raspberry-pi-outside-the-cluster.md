@@ -26,6 +26,8 @@
   8's starting 90 days of raw events in the lake were fixed at 30 from
   measurement, as that decision says (ADR-0047's notes, 2026-11-17).
 
+- **Implementation amendment proposed:** [ADR-0050](0050-the-pi-streaming-runtime-and-private-hub-link.md), the Pi runtime, private entry and corrections listed in the notes below.
+
 ## Context and problem
 
 The streaming showcase ([M6](../roadmap.md#m6--streaming)) needs a source of
@@ -359,3 +361,31 @@ requirements. RisingWave's licence, its arm64 image and the `dbt-risingwave`
 adapter are from memory and are checked in the spike. The JetStream source across domains and NATS's MQTT support were
 read in documentation, not run. Memory figures for Kafka, Flink and the
 k3s agent are from memory of their documentation, not measured.
+
+## Pi spike evidence recovered for step 5
+
+Recovered from local spike commit `93265c17cd9dded945e012eece9532e878b4b491`,
+2026-11-15/16. These are historical measurements, not new deployment evidence.
+The discarded RisingWave implementation is not imported.
+
+| Measurement | Recorded result | Limit of the evidence |
+|---|---|---|
+| Pi link cut five minutes | leaf 2,085 = hub 2,085; zero duplicates or sequence gaps | Synthetic producer, temporary processes |
+| Pi NATS RSS | 14 to 34 MiB | 18 minutes, still growing |
+| Pi Connect RSS | 106 to 179 MiB | Same short run |
+| Leaf writes on Pi | 8.4 MiB/hour, approximately 200 MiB/day | Extrapolation, not a day-long sample |
+| Whole SD writes | 36.5 MiB/hour | Included setup; 18-minute sample |
+| Leaf/hub bytes per event | 375 / 458 | Synthetic workload |
+
+The step-5 implementation adopts the technical corrections from those notes:
+(1) identifiers include the ping target; (2) MIT or Apache-2.0 components only;
+(3) Connect telemetry disabled; (8) leaf capped at 512 MiB, approximately three
+days at the recorded rate; (9) Pi 3 Model B rev 1.2, not 3B+. The old text above
+is retained as decision history; ADR-0050 describes the resulting proposal.
+The claimed earlier Pi hardening was not present in main's runbook: its new
+preflight explicitly requires checking it, rather than asserting it happened.
+Corrections specific to RisingWave are outside this implementation.
+
+Deployment evidence still required: real hardware collection, clock-gated
+boot, restricted tailnet access, cut/restore with exact Pi-only identifiers,
+24-hour memory and SD writes, and seven-day capacity at the combined rate.

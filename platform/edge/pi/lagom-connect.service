@@ -1,0 +1,35 @@
+[Unit]
+Description=Lagom Pi event collector
+Wants=network-online.target systemd-time-wait-sync.service
+Requires=lagom-nats.service
+After=network-online.target lagom-nats.service systemd-time-wait-sync.service
+StartLimitIntervalSec=0
+
+[Service]
+User=lagom-connect
+Group=lagom-connect
+SupplementaryGroups=video
+EnvironmentFile=/etc/lagom-pi/targets.env
+Environment=GOMEMLIMIT=200MiB
+Environment=LC_ALL=C
+ExecStartPre=/usr/bin/test -e /run/systemd/timesync/synchronized
+ExecStart=/usr/local/bin/redpanda-connect --disable-telemetry run /etc/lagom-pi/connect.yaml
+Restart=always
+RestartSec=5
+MemoryMax=256M
+MemorySwapMax=0
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# vcgencmd needs /dev/vchiq. Do not use PrivateDevices here.
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Debian's ping uses datagram ICMP sockets; ping_group_range must admit this group.
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

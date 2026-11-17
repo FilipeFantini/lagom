@@ -31,7 +31,7 @@ spec:
         # Bump with every change to connect-config.yaml or to the stream in
         # nats.yaml: Connect reads its streams at start, and the init
         # container sets the stream.
-        lagom.dev/config-revision: "1"
+        lagom.dev/config-revision: "2"
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -45,6 +45,8 @@ spec:
           image: natsio/nats-box:0.19.7-nonroot@sha256:e86b9681f330ab1aa45744dd5cb367d44205b28fac2519a2f74ca0255803161a
           command: ["/bin/sh", "/etc/nats/ensure-stream.sh"]
           env:
+            - name: NATS_INTERNAL_PASSWORD
+              valueFrom: {secretKeyRef: {name: nats-credentials, key: internal-password}}
             - name: NATS_URL
               value: nats://nats:4222
             # The CLI keeps its contexts under HOME; the root filesystem is
@@ -79,6 +81,8 @@ spec:
             - /etc/connect/producer.yaml
             - /etc/connect/consumer.yaml
           env:
+            - name: NATS_INTERNAL_PASSWORD
+              valueFrom: {secretKeyRef: {name: nats-credentials, key: internal-password}}
             - name: NATS_URL
               value: nats://nats:4222
             # CloudNativePG's read-write Service of staging's Cluster.
