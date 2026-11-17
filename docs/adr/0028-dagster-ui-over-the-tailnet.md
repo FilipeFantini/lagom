@@ -26,7 +26,7 @@ control.
 The node has no inbound port open to the internet. The operator reaches it
 over Tailscale, where the node is `tag:lagom-node` and the ACL grants
 operators SSH and the Kubernetes API only
-([runbook](../architecture.md#tailscale-acl-and-zero-inbound-ports-m1)).
+([runbook](../runbook.md#tailscale-acl-and-zero-inbound-ports-m1)).
 
 Memory is tight right now. Today's declared total is 3,966 MiB of the 5,632
 MiB CI ceiling. Prod's Dagster brings it to about 5,534, leaving ~100 MiB

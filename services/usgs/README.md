@@ -176,7 +176,7 @@ never in this repository: the environment variable
 `.dlt/secrets.toml` at the repository root, which is git-ignored. Do not create
 `secrets.toml` anywhere else: the ignore rule is anchored to the root. The
 connection goes through `kubectl port-forward`
-([architecture.md, Staging](../../docs/architecture.md#staging)).
+([architecture.md, Staging](../../docs/runbook.md#staging)).
 
 dlt sends anonymous usage telemetry unless `RUNTIME__DLTHUB_TELEMETRY=false` is
 set. The tests set it; set it wherever the pipeline runs.

@@ -112,7 +112,7 @@ without rewriting it.
   to M6; trigger 1 is otherwise unchanged, and Dagster's metastore (M3) is still
   the expected first.
 - **2026-10-28 — the re-load, run** in the move to `lagom-shared-02`
-  ([runbook](../architecture.md#disaster-recovery)). It worked as written
+  ([runbook](../runbook.md#disaster-recovery)). It worked as written
   for the last 30 days, and found what "untested" above hid: **the USGS API
   filters by origin time, not only by `updatedafter`.** With no `starttime`
   it returns only events whose origin is in the last 30 days (`count` on

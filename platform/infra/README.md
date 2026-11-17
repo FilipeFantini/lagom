@@ -23,4 +23,4 @@ bootstrap — merge to `main` and Argo CD converges.
 
 How it fits together, and why: [ADR-0009](../../docs/adr/0009-argocd-bootstrap-and-self-management.md).
 Bootstrap and recovery commands: the runbook in
-[`docs/architecture.md`](../../docs/architecture.md#13-runbook).
+[`docs/architecture.md`](../../docs/runbook.md).
