@@ -185,10 +185,15 @@ a crash of Postgres empties it, and a dbt test on a schedule makes that
 loud. The windows over event time are views, defined in dbt and computed when
 read, so a late event is counted by the next query and each metric is defined
 once, behind a dbt contract that Grafana's panels read. The hub keeps 7
-days, and the table is to keep the same 7 days, so the table can be rebuilt
-by reading the stream again. **Until the archive job exists** (ADR-0047,
-decision 6) nothing deletes from the table: it keeps every event since the
-start, and a rebuild restores only the hub's last 7 days. This is aggregation on read, not stream processing.
+days, and so does the table, so the table can be rebuilt by reading the
+stream again. **The history is in the lake** (ADR-0047, decision 6, in staging
+since 2026-11-17): every hour Dagster's `streaming_archive` copies the
+closed hours of `received_at` to `bronze.streaming_events` in DuckLake, as
+zstd Parquet partitioned by UTC day, confirms each row there by its
+identifier, and only then deletes from the table an hour whose rows are all
+older than 7 days; the lake keeps the raw events 30 days, inside the
+showcase's 1 GB of R2 (the arithmetic is in ADR-0047's notes). A failed
+archive deletes nothing (§7). This is aggregation on read, not stream processing.
 RisingWave is tried next, as a second consumer of the same hub, in the room
 staging frees while it is off (§9a), and stays only if the comparison earns
 its memory.
@@ -297,6 +302,13 @@ read. Its first content is USGS on DuckLake:
   failed contract or test fails the run and raises the alarm. Staging sets
   the variable since 2026-11-17; prod does not, until the showcase reaches it
   ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)).
+- the job `streaming_archive` every hour at minute 20, where `streaming`
+  runs: it copies the showcase's closed hours from `serving` to the lake,
+  confirms every row there by `event_id`, deletes from the live table the
+  hours older than 7 days and from the lake the days older than 30, and
+  fails the run, before any delete, on any difference
+  ([`archive.py`](../platform/orchestration/lagom_orchestration/archive.py)).
+  It holds the lake writer's credentials and the owner of `serving`.
 
 **One run at a time per environment**, of any job: the run queue starts a run
 only when the one before it has ended (`maxConcurrentRuns: 1` in
@@ -836,6 +848,12 @@ Staging adds ~1.13 GB:
   256, `GOMEMLIMIT` 200MiB), from the spikes' 58 and 121 MiB of working set
   ([`platform/infra/streaming-staging/`](../platform/infra/streaming-staging/)).
   Both are re-set from 24 hours in staging (ADR-0047, decision 8).
+  Its archive job (§7) is a run like any other, in the run slot counted
+  below: it adds no request. Measured locally on 2026-11-17, the archive
+  alone (Python and DuckDB, without Dagster's process around it) peaked at
+  160 MiB for a normal hour and 216 MiB for a first catch-up of 192 hours;
+  DuckDB is capped at 256 MB and spills to `/tmp` above it. The run's own
+  peak, Dagster included, is logged by each run.
 
 That leaves **~2.0 GB** for jobs. Staging's ResourceQuota caps everything
 staging requests at 2432 MiB. Staging requests 1,900 MiB in all (Postgres 300,

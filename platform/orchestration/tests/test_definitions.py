@@ -442,18 +442,20 @@ def _import_with(env_extra: dict[str, str], tmp_path: Path) -> subprocess.Comple
     return subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True)
 
 
-def test_the_streaming_job_is_absent_unless_the_environment_has_the_showcase(defs) -> None:  # type: ignore[no-untyped-def]
+def test_the_streaming_jobs_are_absent_unless_the_environment_has_the_showcase(defs) -> None:  # type: ignore[no-untyped-def]
     """Prod has no `serving` until ADR-0047's last steps: no job, no schedule, no alarm."""
-    assert "streaming" not in {j.name for j in defs.resolve_all_job_defs()}
-    assert "streaming" not in {s.job_name for s in defs.schedules}  # type: ignore[union-attr]
+    for name in ("streaming", "streaming_archive"):
+        assert name not in {j.name for j in defs.resolve_all_job_defs()}
+        assert name not in {s.job_name for s in defs.schedules}  # type: ignore[union-attr]
 
 
-def test_the_streaming_job_runs_hourly_where_the_showcase_is(defs, tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_the_streaming_jobs_run_hourly_where_the_showcase_is(defs, tmp_path) -> None:  # type: ignore[no-untyped-def]
     done = _import_with({"LAGOM_STREAMING": "true"}, tmp_path)
     assert done.returncode == 0, done.stderr
     jobs, schedules = done.stdout.splitlines()
-    assert "'streaming'" in jobs
+    assert "'streaming'" in jobs and "'streaming_archive'" in jobs
     assert "('streaming', '45 * * * *')" in schedules
+    assert "('streaming_archive', '20 * * * *')" in schedules
 
 
 @pytest.mark.parametrize("value", ["True", "yes", "1", ""])
@@ -494,3 +496,40 @@ def test_the_streaming_pod_holds_the_serving_owner_and_nothing_of_the_lake(  # t
     # not in the tag's.
     assert STREAMING_TAGS["dagster-k8s/config"]["container_config"]["resources"] == RUN_RESOURCES
     assert "lagom/pipeline" not in streaming.tags
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_the_archive_pod_holds_the_lake_writer_and_the_serving_owner_only(  # type: ignore[no-untyped-def]
+    defs, environment
+) -> None:
+    """It moves rows from `serving` to the lake: both owners, nothing of the readers or dlt."""
+    from lagom_orchestration.definitions import ARCHIVE_TAGS, RUN_RESOURCES, streaming_archive
+
+    pod = _run_pod_env(streaming_archive, _code_server_env(environment))
+    names = [e.name for e in pod]
+    assert len(names) == len(set(names))
+    secrets = {
+        e.name: (e.value_from.secret_key_ref.name, e.value_from.secret_key_ref.key)
+        for e in pod
+        if e.value_from
+    }
+    assert secrets == {
+        **WRITER_SECRETS,
+        "LAGOM_PG_USER": ("serving-credentials", "username"),
+        "LAGOM_PG_PASSWORD": ("serving-credentials", "password"),
+        "HEARTBEAT_URL": ("pipeline-heartbeat", "url"),
+        "DAGSTER_PG_PASSWORD": ("dagster-db", "postgresql-password"),
+    }
+    values = {e.name: e.value for e in pod}
+    assert values["LAGOM_PG_DBNAME"] == "serving" and values["LAGOM_PG_HOST"] == "postgres-rw"
+    assert values["LAGOM_LAKE_CATALOG"] == "ducklake:postgres:$(PG_URI)?sslmode=require"
+    assert values["LAGOM_LAKE_DATA_PATH"] == f"s3://lagom-{environment}-lake/"
+    # dlt's composed credentials are not needed; the code server's own
+    # (non-secret) DESTINATION__ settings may stay.
+    assert not [n for n in names if n.startswith("DESTINATION__") and "CREDENTIALS__CATALOG" in n]
+    assert not [n for n in names if "AWS_SECRET_ACCESS_KEY" in n or "AWS_ACCESS_KEY_ID" in n]
+    for index, (name, value) in enumerate(values.items()):
+        for reference in re.findall(r"\$\((\w+)\)", value or ""):
+            assert reference in names[:index], (name, reference)
+    assert ARCHIVE_TAGS["dagster-k8s/config"]["container_config"]["resources"] == RUN_RESOURCES
+    assert "lagom/pipeline" not in streaming_archive.tags

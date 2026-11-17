@@ -205,10 +205,14 @@ jobs:
     # creates the live table, the views compile, their contracts hold, the
     # unit tests pass, and on an empty table the test that makes an emptied
     # table loud fails, as it must in the cluster. The roles are created as
-    # CloudNativePG creates them, so the hook's grants are checked too.
+    # CloudNativePG creates them, so the hook's grants are checked too. Last,
+    # the archive job's tests (platform/orchestration/tests/test_archive.py)
+    # run against the live table the hook created, with a DuckLake on the
+    # runner's disk: what it copies, confirms and deletes, and that it fails
+    # before deleting on a mismatch.
     # What it does not prove: anything about real events, Redpanda Connect or
-    # the hub. The password is a placeholder for a throwaway container that
-    # only this job reaches.
+    # the hub, or R2 (the lake is local). The password is a placeholder for a
+    # throwaway container that only this job reaches.
     name: warehouse (serving target)
     runs-on: ubuntu-latest
     services:
@@ -293,6 +297,21 @@ jobs:
               exit 1
             fi
           done
+      # The archive's tests empty live.events; nothing after this step reads it.
+      - name: the archive copies, confirms and deletes (test_archive.py)
+        env:
+          LAGOM_ARCHIVE_TEST_PG: >-
+            host=localhost port=5432 dbname=serving user=serving
+            password=ci-placeholder sslmode=disable
+        # A test skipped here would be one that ran nowhere: the step fails.
+        run: |
+          set -euo pipefail
+          uv run --project platform/orchestration --locked pytest \
+            platform/orchestration/tests/test_archive.py -rs | tee "$RUNNER_TEMP/archive.txt"
+          if grep -q -i skipped "$RUNNER_TEMP/archive.txt"; then
+            echo "an archive test was skipped" >&2
+            exit 1
+          fi
 
   dashboards:
     # What this proves: the boards under products/dashboards validate, render

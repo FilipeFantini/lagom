@@ -139,7 +139,7 @@ target they are not.
 
 | What | Where | What it guarantees |
 |---|---|---|
-| live table | `live.events`, created by the `on-run-start` hook (`macros/create_live_events.sql`) if it is missing, never altered | `UNLOGGED`; one row per event, its key the event identifier; `received_at` is when the hub stored it, so a replay writes the same rows; the writer `events_writer` may insert and nothing else |
+| live table | `live.events`, created by the `on-run-start` hook (`macros/create_live_events.sql`) if it is missing, never altered | `UNLOGGED`; one row per event, its key the event identifier; `received_at` is when the hub stored it, so a replay writes the same rows; the writer `events_writer` may insert and nothing else; an hour leaves it once all of it is older than 7 days and its rows are confirmed in the lake, by Dagster's `streaming_archive` ([`platform/orchestration/`](../orchestration/README.md)) |
 | typed events | `streaming.stg_events__pings`, `stg_events__health` (views) | the payload's fields, typed |
 | metrics | `metrics.*` (views), **contract enforced** | `link_minute`, `link_hour_profile`, `link_outages`, `source_health_minute`, `pipeline_minute`: what Grafana reads; grouped by `collected_at`, in UTC; SELECT on each, and USAGE on the schema, granted to Grafana's role `grafana_reader` on every build |
 

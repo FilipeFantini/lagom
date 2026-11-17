@@ -5,7 +5,8 @@ downstream of the sources they read. One job loads and builds, every 30
 minutes; another keeps DuckLake compact, daily; a third renders the
 dashboards and publishes them, after each successful pipeline run
 (lagom_orchestration/dashboards.py). In an environment with the streaming
-showcase, a fourth builds and tests its views in `serving`, hourly. Two
+showcase, a fourth builds and tests its views in `serving`, hourly, and a fifth
+archives its events to the lake, hourly (lagom_orchestration/archive.py). Two
 sensors raise the alarm through Healthchecks.io (lagom_orchestration/alarm.py).
 
 Paths are relative to the repository layout, which the image keeps under /app.
@@ -13,6 +14,7 @@ Paths are relative to the repository layout, which the image keeps under /app.
 
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,7 @@ from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from services.usgs.assets import usgs_events
 
 from lagom_orchestration.alarm import build_alarm_sensors
+from lagom_orchestration.archive import archive_from_environment
 from lagom_orchestration.dashboards import build_render_trigger, memory_peak_mib, run_dashboards
 from lagom_orchestration.lake import attach_lake, grant_reader_access, run_maintenance
 
@@ -227,6 +230,49 @@ def streaming() -> None:
     build_live_views()
 
 
+# The archive of the showcase's events (ADR-0045 decision 7, ADR-0047
+# decision 6): it reads and deletes in `serving`, as its owner, and writes the
+# lake, as the catalog's owner with the R2 write token. So it holds both sets:
+# the writers' Secrets without dlt's variables, which it does not use, and the
+# `serving` owner's. No pipeline tag: it touches neither dlt's cursor nor
+# the lake's USGS tables, and waits its turn in the one run slot.
+ARCHIVE_ENV = [
+    *(e for e in WRITER_ENV if not e["name"].startswith("DESTINATION__")),
+    *SERVING_ENV,
+]
+ARCHIVE_TAGS = {
+    "dagster-k8s/config": {"container_config": {"resources": RUN_RESOURCES, "env": ARCHIVE_ENV}},
+}
+
+
+@op
+def archive_events(context: OpExecutionContext) -> None:
+    """Copy the closed hours of `live.events` to the lake; delete what is confirmed and expired."""
+    report = archive_from_environment(datetime.now(UTC))
+    for window in report.windows:
+        context.log.info(window.describe())
+    if not report.windows:
+        context.log.info("no window to archive or delete")
+    archived = sum(w.inserted for w in report.windows)
+    deleted = sum(w.deleted for w in report.windows)
+    days = ", ".join(f"{day} {size:,} B" for day, size in report.bytes_by_day.items())
+    context.log.info(
+        f"{len(report.windows)} window(s): {archived} rows archived, {deleted} deleted from the "
+        f"live table, {report.lake_deleted} deleted from the lake by its retention; the lake "
+        f"holds {report.lake_rows} rows in {report.lake_bytes:,} bytes of Parquet ({days})"
+    )
+    peak = memory_peak_mib()
+    context.log.info(
+        "memory peak of the run's container: "
+        + (f"{peak:.0f} MiB" if peak is not None else "not reported by the kernel")
+    )
+
+
+@job(tags=ARCHIVE_TAGS)
+def streaming_archive() -> None:
+    archive_events()
+
+
 # Whether this environment has the streaming showcase: its hub, its writer and
 # the database `serving`. Set in the environment's values.yaml, not in code,
 # because one image serves both environments and prod gets the showcase last
@@ -251,7 +297,12 @@ defs = Definitions(
     # and dbt's imports a second time. The steps run one after the other
     # anyway, so nothing is lost. dbt still runs as its own process.
     executor=in_process_executor,
-    jobs=[usgs_job, lake_maintenance, dashboards_job, *([streaming] if STREAMING else [])],
+    jobs=[
+        usgs_job,
+        lake_maintenance,
+        dashboards_job,
+        *([streaming, streaming_archive] if STREAMING else []),
+    ],
     schedules=[
         # Every 30 minutes, as the CronJob: USGS publishes ~9 events an hour.
         ScheduleDefinition(
@@ -276,7 +327,15 @@ defs = Definitions(
                     cron_schedule="45 * * * *",
                     execution_timezone="UTC",
                     default_status=DefaultScheduleStatus.RUNNING,
-                )
+                ),
+                # Hourly, 20 minutes past: the hour before is closed (archive.py,
+                # GRACE), and the slot is free between the pipeline's half hours.
+                ScheduleDefinition(
+                    job=streaming_archive,
+                    cron_schedule="20 * * * *",
+                    execution_timezone="UTC",
+                    default_status=DefaultScheduleStatus.RUNNING,
+                ),
             ]
             if STREAMING
             else []
