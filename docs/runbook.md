@@ -1678,7 +1678,7 @@ Record the checks and any changes without recording addresses or account names.
     --from-literal=internal-password="$INT_PW" --from-literal=pi-password="$PI_PW" \
     --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" \
   && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset INT_PW PI_PW; }
-grep -Ec '(internal|pi)-password:' platform/infra/streaming-staging/nats-credentials-sealed.yaml   # 2
+grep -Ec '(internal|pi)-password:' platform/infra/streaming-staging/nats-credentials-sealed.yaml
 ```
 
 Only the Pi password reaches the Pi, in `/etc/lagom-pi/leaf.env` (root, mode 0600);
