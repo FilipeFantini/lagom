@@ -1605,7 +1605,10 @@ decision 7; [`platform/infra/grafana/`](../platform/infra/grafana/)):
   Git; a change is a pull request.
 - It reads staging's database `serving` as **`grafana_reader`**, a role that
   may read the views of the schema `metrics` and nothing else, with at most
-  3 connections and 10 seconds per query. `pg_hba` refuses it every other
+  3 connections, and 10 seconds per query by default. The timeout stops a
+  slow dashboard query; it is a default a session can change with `SET`, so
+  it is no limit on someone who sends their own SQL through Grafana (a
+  Viewer can). That someone is the operator, behind Access. `pg_hba` refuses it every other
   database, and a NetworkPolicy lets Grafana's Pod reach staging's Postgres
   on port 5432 and nowhere else in `staging`. Since this policy, staging's
   Postgres admits only `staging`, the CloudNativePG operator and Grafana.

@@ -414,7 +414,10 @@ measured, without rewriting it.
   - *The statement timeout, 10 seconds,* is set by the operator with one
     `ALTER ROLE`, since CloudNativePG's role spec (chart 0.29.1, operator
     1.30.1) has no field for it and Grafana's PostgreSQL data source sets
-    none. The test fails every hour it is missing.
+    none. The test fails every hour it is missing. It is a session default,
+    which a session may change with `SET`: it stops a slow dashboard query,
+    not SQL that a Viewer sends through Grafana by hand. The privileges,
+    `pg_hba` and the connection limit hold either way.
   - *The NetworkPolicy.* Staging's Postgres had none, so every namespace
     reached it; it now admits `staging`, the CloudNativePG operator, and
     Grafana's Pod on port 5432.

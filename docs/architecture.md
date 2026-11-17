@@ -403,8 +403,9 @@ which dbt runs as, with `events_writer` for Redpanda Connect
 ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)).
 Grafana reads the views of `metrics` through `grafana_reader`, in staging
 since this change: SELECT on those views only, granted by dbt on each build,
-3 connections, a 10-second statement timeout, and `pg_hba` refusing it every
-other database (runbook: *The streaming showcase in staging (M6), Grafana*).
+3 connections, and `pg_hba` refusing it every other database; its 10-second
+statement timeout is a session default that stops a slow dashboard query,
+not a limit on SQL sent through Grafana by hand (runbook: *The streaming showcase in staging (M6), Grafana*).
 
 **PgBouncer** — deferred with a trigger: it enters with the first external BI
 consumer. Each Postgres connection costs 5–10 MB, and BI tools open them

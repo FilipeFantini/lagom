@@ -28,8 +28,11 @@ data:
     # anonymous Viewer: it can open the dashboard and run its queries, and
     # change nothing. No admin user is created and no login form is shown,
     # so there is no Grafana password to keep. What a Viewer can still do is
-    # send a query to the data source; the database role is what limits it
-    # (postgres-staging/cluster.yaml).
+    # send any query to the data source; the database role is what limits
+    # it (postgres-staging/cluster.yaml): what it may read, that it may write
+    # nothing, and its connections. The role's statement timeout is only a
+    # default a session may change with SET: it stops a slow dashboard query,
+    # not a Viewer who means harm. That Viewer is the operator, behind Access.
     [security]
     disable_initial_admin_creation = true
     disable_gravatar = true
