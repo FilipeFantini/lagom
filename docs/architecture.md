@@ -184,9 +184,11 @@ once. The table is `UNLOGGED`, so the events stay out of the backup and R2;
 a crash of Postgres empties it, and a dbt test on a schedule makes that
 loud. The windows over event time are views, defined in dbt and computed when
 read, so a late event is counted by the next query and each metric is defined
-once, behind a dbt contract that Grafana's panels read. The hub keeps events
-at least as long as the table does, so the table can be rebuilt by reading
-the stream again. This is aggregation on read, not stream processing.
+once, behind a dbt contract that Grafana's panels read. The hub keeps 7
+days, and the table is to keep the same 7 days, so the table can be rebuilt
+by reading the stream again. **Until the archive job exists** (ADR-0047,
+decision 6) nothing deletes from the table: it keeps every event since the
+start, and a rebuild restores only the hub's last 7 days. This is aggregation on read, not stream processing.
 RisingWave is tried next, as a second consumer of the same hub, in the room
 staging frees while it is off (§9a), and stays only if the comparison earns
 its memory.
@@ -2464,7 +2466,11 @@ kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -Atc \
 ```
 
 The writer has caught up when `num_pending` and `num_ack_pending` are 0.
-Then the hub's `messages` equals the table's count, since both keep 7 days.
+Then the hub's `messages` equals the table's count while the stream is less
+than 7 days old. After that, until the archive job exists, the table also
+holds what the hub has already dropped, so compare the count over the
+hub's own window instead: rows with `received_at` after the hub's first
+message (`.state.first_ts` in the same JSON).
 In the spike an event took 458 bytes in the hub; locally 366.
 
 **Rebuild the live table from the hub** (ADR-0047, decision 4). Do it after
@@ -2482,7 +2488,9 @@ kubectl -n staging delete pod -l app=connect
 Connect's new Pod finds no consumer and creates it with `deliver: all`, so it
 reads the stream from its first message. Rows written between the truncate
 and the restart are written again unchanged, since the insert ignores a key it
-has. `received_at` is the hub's timestamp, so the rebuilt rows equal the
+has. It restores only what the hub still holds, the last 7 days: until the
+archive job exists, events older than that are not in the lake either, and
+are gone. `received_at` is the hub's timestamp, so the rebuilt rows equal the
 old ones. Wait until `num_pending` is 0, then compare the counts as above.
 Deleting the consumer is the step that matters: a Connect restart alone
 resumes from the consumer's position (ADR-0045's spike notes, correction 5).
