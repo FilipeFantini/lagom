@@ -619,7 +619,9 @@ measured, without rewriting it.
   - *Budget.* No new component and no new request. At 7 days the tables
     take 29 MB (`ping_minute`, 42,804 rows) and 1.8 MB (`health_minute`), and
     the indexes take 37 and 69 MB, beside the live table's 1,723 MB. All are
-    `UNLOGGED`, so the backup gains nothing.
+    `UNLOGGED`, so the backup gains nothing. During the final local review
+    run, the live table held 3,210,005 events after a trim and subsequent
+    backfill. The two tables occupied 28 MB and 1,736 kB at that point.
   - *Measured locally on 2026-11-18* against Postgres 18.1 in Docker, with
     staging's settings (`shared_buffers` 96MB, `work_mem` 4MB, a 512 MiB
     memory limit), on an Apple M5. The data: 7 days and an hour of synthetic
@@ -647,7 +649,10 @@ measured, without rewriting it.
     The Mac is faster than the node: per day of events, staging's one-day
     reading of the first query took 1.6 to 1.7 times the local one. So the
     node may take about twice these times, which are still under two
-    seconds. They are read again in staging after the merge.
+    seconds. Staging must first pin the orchestration image published from
+    this merge. After the first hourly `streaming` build on that image, run
+    the same queries in staging. The criterion needs seven days of live
+    events there.
   - *Equal to the views it replaces.* Over the same 7 days, each of the five
     views returned the same rows as the SQL on `main`: 0 rows differed, of
     40,564 minutes, 6,585 outages, 672 cells, 10,141 health minutes and

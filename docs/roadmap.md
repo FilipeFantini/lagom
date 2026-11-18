@@ -420,8 +420,9 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
       of memory, the hub's size on disk and query times (memory and the hub
       pass, read on 2026-11-18; query times did not: every view scanned the
       whole table. Decision 8's second remedy, tables of minutes behind the
-      views, is in draft #127, handed off for review and its reading in staging: every panel query under 0.9 s over 7
-      days of events locally, to be read again in staging; ADR-0047's notes)
+      views (#127), kept every panel query under 0.9 s locally over 7 days
+      of events. Pin the new orchestration image in staging and repeat the
+      reading there after its first hourly build; ADR-0047's notes)
 - [ ] Measure before deploying: memory of NATS and Redpanda Connect on the
       Pi, the events' size per day in the live table and in the lake, what
       the showcase adds to R2 (limit: 1 GB of the free tier's 10), bytes
