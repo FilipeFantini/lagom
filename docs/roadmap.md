@@ -417,10 +417,12 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
       in the pull request that follows it)
 - [ ] The criteria of ADR-0047's decision 8, in staging: a restart, a cut
       link, Postgres deleted, the table rebuilt from the hub, and 24 hours
-      of memory, the hub's size on disk and query times (all pass but two
-      panels' queries, read on 2026-11-18: `link_minute` and `link_outages`
-      scan the whole table, 1.8 s at one day of events. Next: decision 8's
-      incremental table, then the queries read again)
+      of memory, the hub's size on disk and query times (memory and the hub
+      pass, read on 2026-11-18; query times do not: every view scans the
+      whole table, 1.8 s for `link_minute` and `link_outages` at one day of
+      events, and seven days would put more panels over two seconds. Next:
+      decision 8's incremental table, then every panel measured over seven
+      days)
 - [ ] Measure before deploying: memory of NATS and Redpanda Connect on the
       Pi, the events' size per day in the live table and in the lake, what
       the showcase adds to R2 (limit: 1 GB of the free tier's 10), bytes

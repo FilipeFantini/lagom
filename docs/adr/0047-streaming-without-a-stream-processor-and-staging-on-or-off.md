@@ -424,7 +424,7 @@ measured, without rewriting it.
     367 bytes an event (366 in the local spike), with nothing pending or
     unacknowledged on `serving-writer`. At this rate seven days take about
     1.2 GB, inside the stream's 3 GiB cap and the 4 GiB volume.
-  - *Query times,* every query of the dashboard's ten panels and its
+  - *Query times,* the ten queries of the dashboard's nine panels and its
     `source` variable, as `grafana_reader`, with Grafana's macros replaced
     for a 7-day range (`$__timeGroupAlias` as 10-minute bins, the target
     `node`), over the 24 hours the table held. Server-side time from
@@ -441,14 +441,20 @@ measured, without rewriting it.
     | At which hours is the link worse | 232 ms |
     | The three health panels | 140 to 148 ms |
 
-    Two panels fail. `link_minute` and `link_outages` run window functions
-    over every ping in the table, so a filter on time cannot reach the scan
-    and their cost grows with the table, not the range shown: at one day
-    they take 1.8 s, and seven days of events would take about seven times
-    as long, past Grafana's 10-second statement timeout. An index cannot
-    help a query that reads every row, so decision 8's second remedy
-    applies: a table built by a dbt incremental model. It is built next,
-    before the Pi or prod.
+    The criterion is over seven days, and one day of events cannot show it
+    directly; what it shows is that every view reads the whole table, so a
+    query's cost grows with the table, not with the range shown. Seven days
+    hold about seven times these rows. `link_minute` and `link_outages` run
+    window functions over every ping, so a filter on time cannot reach the
+    scan: at 1.8 s for one day, seven would pass Grafana's 10-second
+    statement timeout. Scaled the same way, the video-call panel (on
+    `link_minute`, 0.9 s) and the three `pipeline_minute` queries (0.36 to
+    0.45 s) would also pass two seconds, and `link_hour_profile` (0.23 s)
+    would come close. An index cannot help a query that reads every row, so
+    decision 8's second remedy applies: a table built by a dbt incremental
+    model, for every view the seven-day projection puts over two seconds.
+    It is built next, before the Pi or prod, and every panel is measured
+    again over seven days of events.
 - **2026-11-17 — Grafana, decision 7, built for staging.** One Grafana in
   the namespace `grafana`, at `ops.ofantini.com/grafana`, reading staging's
   `serving` as `grafana_reader` (`platform/infra/grafana/`; runbook: *The
