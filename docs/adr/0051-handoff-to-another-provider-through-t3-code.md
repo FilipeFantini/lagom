@@ -78,8 +78,11 @@ change.
 **3. The rules still bind it where its harness does not enforce them.** It
 never runs a command that `.claude/settings.json` denies — no `kubectl`
 write, no `helm` or `argocd` change, no force push or push to `main`, no
-destructive `git` — and changes the cluster only through Git and Argo CD. The
-operator may mirror those rules in each harness's own command settings; that
+destructive `git` — and changes the cluster only through Git and Argo CD.
+Three more things it never does, which the deny list does not name: change
+a ruleset, branch protection or environment through `gh api`; approve the
+`guardrail` environment; or open an SSH session to the node or the Pi. The
+operator may mirror these rules in each harness's own command settings; that
 is a second layer, not the boundary.
 
 **4. The repository is the handoff.** Before handing off, the architect
@@ -104,9 +107,14 @@ a copy of the chat.
   cluster-admin kubeconfig or reach the node over SSH. Decision 3 is an
   instruction, not an enforcement. The operator accepts this risk for a
   sequential handoff they watch.
-- **The GitHub gates are the boundary for `main`.** They hold: a required
-  check, the reviewer in CI, and CODEOWNERS with the `guardrail` environment,
-  which no agent's token can approve.
+- **For an agent on the Mac, the GitHub gates hold by convention.** The
+  required checks, the reviewer in CI and the `guardrail` environment stop a
+  pull request, but the Mac's token is the operator's broader one, with
+  `repo` and `workflow`: as administrator it could edit the ruleset or the
+  environment ([ADR-0035](0035-agents-use-the-operators-scoped-token.md),
+  *The Mac session's token is broader*). Decision 3 forbids it; nothing
+  enforces it. The same holds for Claude Code today, whose deny list does
+  not cover `gh api` either.
 - **What each harness sends to its provider** includes what it reads on the
   Mac, as with Claude Code today (ADR-0029, Consequences).
 
