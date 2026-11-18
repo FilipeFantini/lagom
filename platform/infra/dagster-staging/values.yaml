@@ -118,14 +118,11 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at 371b851 (PR #121,
-        # the `streaming_archive` job, ADR-0047 decision 6; before it f57216a,
-        # PR #118, the grants to Grafana's role on the `metrics` views; before
-        # that 50324eb, PR #113, the `streaming` job and dbt's `serving`
-        # target; before that 4620b83, PR #98). The `dashboards` job came in PR #83 (ADR-0044);
-        # its memory peak is logged since PR #90. The code location needs
-        # HEARTBEAT_URL, set below, and reads LAGOM_STREAMING.
-        tag: "371b851c812d3c826bba34ea36ffd4da571a61bf@sha256:782b425a11aa97eb757ea22fe1c85261e7f9d979f33dd8883e323672a02a708d"
+        # Pinned by digest (ADR-0015): built from main at 6de3cfe (PR #127,
+        # the incremental minute tables, ADR-0047 decision 8; before it
+        # 371b851, PR #121, the `streaming_archive` job, decision 6). The code
+        # location needs HEARTBEAT_URL, set below, and reads LAGOM_STREAMING.
+        tag: "6de3cfe394051964892ea126b1965a0e36c658e6@sha256:fabb201d0e19c4b6e0a858ba3ea32ddf84333aa4342543a2f1bf249e9d471db9"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
