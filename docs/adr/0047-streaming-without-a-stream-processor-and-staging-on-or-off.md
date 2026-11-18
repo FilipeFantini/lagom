@@ -669,3 +669,39 @@ measured, without rewriting it.
     the test (58 rows), and `--full-refresh` repaired it. A second build
     changed no row, and after several incremental builds a full refresh gave
     the same tables, with 0 rows different.
+
+- **2026-11-18 — the minute tables run in staging.** #128 pinned the
+  orchestration image from #127 (`6de3cfe`). Argo CD reported the deployment
+  synced and healthy, and the code server and first run used the published
+  digest. The 11:45 UTC run `f8d54cd2-ebc3-42e9-807b-43917dc3f195` succeeded.
+  dbt took 15.54 s and reported `PASS=38 WARN=0 ERROR=0 SKIP=0`. It built
+  6,408 ping minutes and 1,602 health minutes. The test comparing the minutes
+  with the full computation passed in 4.20 s. The reader privileges and
+  live-window tests also passed. Both new indexes appeared in `pg_indexes`;
+  the startup hook took 0.67 s. The hub's `serving-writer` had zero pending,
+  unacknowledged and redelivered messages after the build.
+
+  Read the dashboard immediately after the build, at 11:45 UTC, using
+  Grafana's staging data source as `grafana_reader`. The figures are
+  server-side medians of three `EXPLAIN (ANALYZE, TIMING OFF)` runs per
+  query. Dashboard macros were expanded for a seven-day range with
+  10-minute bins, source `synthetic` and target `node`, as above.
+  Available health data spanned 26 h 41 min
+  (09:04 UTC on November 17 to 11:45 UTC on November 18).
+
+  | Query | Median |
+  |---|---|
+  | Is it the home router or the provider | 230.79 ms |
+  | Is it good enough for a video call | 190.12 ms |
+  | How long was the link down | 461.30 ms |
+  | At which hours is the link worse | 308.91 ms |
+  | Does the source get hot enough to slow down | 39.00 ms |
+  | Is the source's power supply adequate | 37.91 ms |
+  | When does the source's disk fill | 37.86 ms |
+  | How late is an event, end to end | 278.32 ms |
+  | How much arrived, and how much arrived late (queries A and B) | 282.03 and 275.49 ms |
+  | The `source` variable | 66.62 ms |
+
+  The slowest individual run took 466.50 ms. The seven-day result is still
+  pending. With continuous ingestion, staging will first hold a full week
+  on November 24. Repeat the same queries once that data is present.
