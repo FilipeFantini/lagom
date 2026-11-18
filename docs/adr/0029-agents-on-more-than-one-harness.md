@@ -15,6 +15,8 @@
   is enforced by an environment approval no agent's token can give.
   [ADR-0036](0036-the-reviewer-as-a-required-check.md) — the reviewer's
   APPROVE in Decision 4 becomes a required check.
+  [ADR-0051](0051-handoff-to-another-provider-through-t3-code.md) — Decision
+  3's sandbox is waived for the sequential handoff through T3 Code.
 
 ## Context and problem
 

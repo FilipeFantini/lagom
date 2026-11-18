@@ -204,6 +204,16 @@ harness with no sandbox is not used. Never turn the sandbox off or hand an
 agent a credential to get around it — ask the operator instead
 ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
 
+**The handoff through T3 Code** is the exception, for one agent at a time
+when Claude's limit is reached: Codex or Antigravity may run on the Mac
+without that sandbox, under the operator's accounts, and commit, push, open
+and merge pull requests under §6. It never runs a command
+`.claude/settings.json` denies, even where its harness does not enforce it.
+Before handing off, the architect session leaves the status in the
+repository — roadmap, ADR notes, the open pull request's body — and the next
+agent starts from there
+([ADR-0051](docs/adr/0051-handoff-to-another-provider-through-t3-code.md)).
+
 **An agent runner** (a program that runs several agents at once) runs each
 agent's commands in a container with network but no credential, or nowhere —
 never on the Mac. The agent clones the public repository there; no Mac folder

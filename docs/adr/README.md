@@ -48,7 +48,7 @@ decision, consequences, and how to reverse it.
 | [0026](0026-dagster-one-instance-per-environment.md) | Dagster, one instance per environment, running USGS on DuckLake | Accepted, UI access superseded by 0028, then 0030; heartbeat and CronJob retirement amended by 0033; staging's Dagster and the run queue amended by 0046 |
 | [0027](0027-hourly-wal-archiving-and-14-day-prod-retention.md) | WAL archived hourly, prod backups kept 14 days | Accepted |
 | [0028](0028-dagster-ui-over-the-tailnet.md) | Dagster's UI over the tailnet, by `tailscale serve` on the node | Superseded by 0030 |
-| [0029](0029-agents-on-more-than-one-harness.md) | Agents on more than one harness: one rulebook, and who may merge | Accepted; Decision 3 amended and Tucano's rejection reversed by 0032; Decision 4's guardrail go-ahead enforced by 0035; Decision 4 amended by 0036 |
+| [0029](0029-agents-on-more-than-one-harness.md) | Agents on more than one harness: one rulebook, and who may merge | Accepted; Decision 3 amended and Tucano's rejection reversed by 0032; Decision 4's guardrail go-ahead enforced by 0035; Decision 4 amended by 0036; Decision 3 waived for the handoff through T3 Code by 0051 |
 | [0030](0030-operator-uis-behind-cloudflare-access.md) | ofantini.com as the domain; operator UIs at ops.ofantini.com behind Cloudflare Access | Accepted; its paths amended by 0046 |
 | [0031](0031-repository-named-lagom.md) | The repository is named `lagom`; a rename to Robusta was tried and reverted | Accepted |
 | [0032](0032-agents-in-credential-free-containers.md) | Agents run in containers that hold no credential, whatever runner starts them | Accepted; Decisions 2, 4 and 5 amended by 0035 |
@@ -70,3 +70,4 @@ decision, consequences, and how to reverse it.
 | [0048](0048-dependency-and-code-scanning-for-the-public-repository.md) | Dependency and code scanning for the public repository: Dependabot, CodeQL, pinned actions, approval for outside contributors' CI | Accepted; Decision 2 superseded by 0049 |
 | [0049](0049-the-reviewer-runs-on-dependabots-pull-requests.md) | The reviewer runs on Dependabot's pull requests: the action allows `dependabot[bot]`, and no Dependabot secret | Accepted |
 | [0050](0050-the-pi-streaming-runtime-and-private-hub-link.md) | The Pi streaming runtime and its private link to the hub | Proposed; deployment requires the operator's PR approval |
+| [0051](0051-handoff-to-another-provider-through-t3-code.md) | Handing off to another provider through T3 Code, on the Mac | Proposed |
