@@ -650,7 +650,7 @@ measured, without rewriting it.
     seconds. They are read again in staging after the merge.
   - *Equal to the views it replaces.* Over the same 7 days, each of the five
     views returned the same rows as the SQL on `main`: 0 rows differed, of
-    40,564 minutes, 6,416 outages, 672 cells, 10,141 health minutes and
+    40,564 minutes, 6,585 outages, 672 cells, 10,141 health minutes and
     50,705 pipeline rows, with averages compared to nine decimals. Then a
     series of steps compared the views with that SQL before and after each
     build:
