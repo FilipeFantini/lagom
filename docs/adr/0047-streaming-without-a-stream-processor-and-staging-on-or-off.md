@@ -398,9 +398,57 @@ measured, without rewriting it.
     a minute there. It is synthetic data in staging and is left as it is: the
     hub would bring it back on a rebuild until it ages out, on 2026-11-24.
     The runbook now checks the answer and the stream list before the wait.
-- **Open: the fifth criterion,** 24 hours of memory, the hub's size and the
-  views' query times, from 09:04 UTC on 2026-11-17. The Postgres requests
-  stay at 300 until it is read (decision 8 of ADR-0046, as amended here).
+- **2026-11-18 — the fifth criterion, read in staging: memory and the hub
+  pass, two panels' queries fail.** Read at 09:24 UTC, 24 hours 20 minutes
+  after the first event, with the synthetic producer at about five events a
+  second. The hub and Connect had restarted at 21:22 UTC on 2026-11-17, when
+  #124 turned on NATS authentication, so their figures cover 12 hours; the
+  operator accepted 12 hours as enough to decide.
+  - *Memory,* from each container's cgroup on the node (`memory.current`,
+    `memory.peak` and `memory.stat`; working set is current less inactive
+    file cache, the figure `kubectl top` shows). The peak counts page cache
+    as well, so it is an upper bound on what the process held.
+
+    | Container | Request / limit | Working set | Peak since start |
+    |---|---|---|---|
+    | NATS hub | 64 / 128 MiB | 32 MiB | 110 MiB (12 h) |
+    | Redpanda Connect | 128 / 256 MiB | 70 MiB | 166 MiB (12 h) |
+    | Postgres (staging) | 300 / 512 MiB | 266 MiB | 511 MiB (23 h) |
+
+    Each working set is inside its request, so the requests stay. Postgres's
+    266 MiB, read with events being written, is above 256: the reading does
+    not confirm a 256 MiB request, and both Postgres stay at 300 (decision 8
+    of ADR-0046, as amended here). Its peak at the limit is page cache, which
+    the kernel reclaims under the limit; its anonymous memory was 33 MiB.
+  - *The hub on disk:* `EVENTS` held 456,145 messages in 167,226,509 bytes,
+    367 bytes an event (366 in the local spike), with nothing pending or
+    unacknowledged on `serving-writer`. At this rate seven days take about
+    1.2 GB, inside the stream's 3 GiB cap and the 4 GiB volume.
+  - *Query times,* every query of the dashboard's ten panels and its
+    `source` variable, as `grafana_reader`, with Grafana's macros replaced
+    for a 7-day range (`$__timeGroupAlias` as 10-minute bins, the target
+    `node`), over the 24 hours the table held. Server-side time from
+    `EXPLAIN (ANALYZE, TIMING OFF)`; the round trip over a port-forward added
+    about 0.2 s more.
+
+    | Panel | Execution |
+    |---|---|
+    | Is it the home router or the provider | 1,776 ms |
+    | How long was the link down | 1,827 ms |
+    | Is it good enough for a video call | 891 ms |
+    | How late is an event, end to end | 446 ms |
+    | How much arrived, and how much arrived late (two queries) | 449 and 360 ms |
+    | At which hours is the link worse | 232 ms |
+    | The three health panels | 140 to 148 ms |
+
+    Two panels fail. `link_minute` and `link_outages` run window functions
+    over every ping in the table, so a filter on time cannot reach the scan
+    and their cost grows with the table, not the range shown: at one day
+    they take 1.8 s, and seven days of events would take about seven times
+    as long, past Grafana's 10-second statement timeout. An index cannot
+    help a query that reads every row, so decision 8's second remedy
+    applies: a table built by a dbt incremental model. It is built next,
+    before the Pi or prod.
 - **2026-11-17 — Grafana, decision 7, built for staging.** One Grafana in
   the namespace `grafana`, at `ops.ofantini.com/grafana`, reading staging's
   `serving` as `grafana_reader` (`platform/infra/grafana/`; runbook: *The

@@ -417,7 +417,10 @@ RisingWave is tried afterwards, as a second consumer of the same hub.
       in the pull request that follows it)
 - [ ] The criteria of ADR-0047's decision 8, in staging: a restart, a cut
       link, Postgres deleted, the table rebuilt from the hub, and 24 hours
-      of memory, the hub's size on disk and query times
+      of memory, the hub's size on disk and query times (all pass but two
+      panels' queries, read on 2026-11-18: `link_minute` and `link_outages`
+      scan the whole table, 1.8 s at one day of events. Next: decision 8's
+      incremental table, then the queries read again)
 - [ ] Measure before deploying: memory of NATS and Redpanda Connect on the
       Pi, the events' size per day in the live table and in the lake, what
       the showcase adds to R2 (limit: 1 GB of the free tier's 10), bytes
@@ -468,7 +471,8 @@ idea.
       (2026-11-16)
 - [x] Staging without its Dagster UI and its backup (2026-11-16)
 - [ ] Both Postgres at 256 MiB, once a reading taken with events being
-      written confirms it
+      written confirms it (not confirmed on 2026-11-18: 266 MiB of working
+      set in staging, so both stay at 300; ADR-0047's notes)
 - [ ] After M6 is in prod: staging on or off. Postgres hibernated and
       Dagster removed while off; one schema-checked state file outside the
       guarded list, operated by agents (a guardrail change, approved once by
