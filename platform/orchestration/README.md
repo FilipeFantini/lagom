@@ -38,8 +38,8 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
 - `streaming`, hourly at minute 45, **only where `LAGOM_STREAMING` is
   `"true"`** in the code server's environment (the environment's values): the
   op `build_live_views` runs `dbt build` on the warehouse's `serving` target,
-  which creates the live table if it is missing, builds the streaming views,
-  checks their contracts and runs their tests
+  which creates the live table if it is missing, builds the streaming tables
+  of minutes and views, checks their contracts and runs their tests
   ([ADR-0047](../../docs/adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md);
   [`platform/warehouse/`](../warehouse/README.md)). It holds the owner of
   `serving` (`SERVING_ENV`, from `serving-credentials`) and nothing of the

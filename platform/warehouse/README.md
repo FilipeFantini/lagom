@@ -139,12 +139,23 @@ target they are not.
 
 | What | Where | What it guarantees |
 |---|---|---|
-| live table | `live.events`, created by the `on-run-start` hook (`macros/create_live_events.sql`) if it is missing, never altered | `UNLOGGED`; one row per event, its key the event identifier; `received_at` is when the hub stored it, so a replay writes the same rows; the writer `events_writer` may insert and nothing else; an hour leaves it once all of it is older than 7 days and its rows are confirmed in the lake, by Dagster's `streaming_archive` ([`platform/orchestration/`](../orchestration/README.md)) |
+| live table | `live.events`, created by the `on-run-start` hook (`macros/create_live_events.sql`) if it is missing, its columns never altered | `UNLOGGED`; one row per event, its key the event identifier; indexes on `collected_at` and `received_at`; `received_at` is when the hub stored it, so a replay writes the same rows; the writer `events_writer` may insert and nothing else; an hour leaves it once all of it is older than 7 days and its rows are confirmed in the lake, by Dagster's `streaming_archive` ([`platform/orchestration/`](../orchestration/README.md)) |
 | typed events | `streaming.stg_events__pings`, `stg_events__health` (views) | the payload's fields, typed |
+| minutes | `streaming.ping_minute`, `health_minute` (incremental tables, `UNLOGGED`) | one row per minute of `collected_at` and source (and target, for pings), with everything the views need; the minutes the live table holds and no more; Grafana cannot read them |
 | metrics | `metrics.*` (views), **contract enforced** | `link_minute`, `link_hour_profile`, `link_outages`, `source_health_minute`, `pipeline_minute`: what Grafana reads; grouped by `collected_at`, in UTC; SELECT on each, and USAGE on the schema, granted to Grafana's role `grafana_reader` on every build |
 
-Views, not tables: each is computed when read, so a late event is a row with
-an old `collected_at` that the next query counts. Two rules the views decide:
+The views read the tables of minutes, and compute again, when read, the
+minutes those may have wrong: the latest, which the writer is still adding
+to (a late event moves this stretch back to its own minute), and the oldest,
+which the archive trims. So a late event is a row with an old `collected_at`
+that the next query counts, and a query reads about two hours of events, not
+the week. Each build of the tables computes the same two stretches again and
+replaces those rows; `--full-refresh`, or emptying a table, computes it
+whole. The mechanism and its assumptions are in
+[`macros/streaming/changed_minutes.sql`](macros/streaming/changed_minutes.sql);
+what each minute holds in `ping_minute_rows.sql` and `health_minute_rows.sql`
+beside it ([ADR-0047](../../docs/adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)'s
+notes, 2026-11-18). Two rules the views decide:
 a lost ping has no round trip whatever its payload says, so it never enters
 a percentile; and two pings to a target more than five seconds apart are not
 consecutive, so an outage does not run across a gap with no events (the
@@ -153,13 +164,22 @@ source down) and jitter does not measure across one.
 **Unit tests** (`unit_tests:` in the two YAML files) give rows and expect rows
 for that logic: a lost ping's round trip; outages split by an answer and by a
 gap, per target; the minute cut, percentiles and jitter across a minute
-boundary and a lost ping; and the late rule at exactly one minute. Their
+boundary and a lost ping; and the late rule at exactly one minute. Then, with
+a table of minutes as a build left it: a late ping counted in its own minute,
+an outage carried across the start of the recomputed stretch, the minutes the
+archive trimmed dropped, a settled minute read from the table, and what an
+incremental build writes. A table of minutes is given as SQL, since dbt
+cannot write a fixture's array columns. Their
 other tests are `not_null`,
 `accepted_values`, `value_between` and `unique_combination` (the grain of each
 view, `tests/generic/`), and `tests/streaming/live_window_is_full.sql`: it
 fails when, over the last 60 whole minutes (less the last two), one of the
 five streams holds fewer than 1,800 events of 3,600. It reads
 `pipeline_minute`, so it runs last and stops no view. And
+`tests/streaming/minutes_equal_a_full_computation.sql` fails when the
+minutes the views read differ from a computation over the whole live table:
+it is what makes a broken assumption of the tables loud, and costs about
+20 seconds a run at 7 days. And
 `tests/streaming/grafana_reader_privileges.sql` fails when `grafana_reader`
 can read anything outside `metrics`, write anywhere, use `streaming` or
 `live`, or has no connection limit or statement timeout (the timeout is set
@@ -173,7 +193,12 @@ rows.
 Redpanda Connect writing synthetic events (the configuration of the staging
 manifests): `dbt build --target serving` passed 27 of 27 with an hour of
 events, the four unit tests included; with six minutes of events only
-`live_window_is_full` failed, as it should. No CI job runs this target yet: it needs a Postgres.
+`live_window_is_full` failed, as it should. CI's job *warehouse (serving
+target)* builds it on a Postgres 18 with an empty live table. On 2026-11-18,
+with the tables of minutes, that job's steps passed locally against
+Postgres 18.1, the build 37 of 37 with the nine unit tests. Over 7 days of
+synthetic events every view returned the rows of the views it replaced, and
+every dashboard query took under 0.5 s (ADR-0047's notes).
 
 ## Image
 

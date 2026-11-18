@@ -6,33 +6,44 @@
 -- each, so a complete minute holds 60. Lateness is received_at, when the hub
 -- stored the event, minus collected_at, the source's clock. An event is late
 -- when it arrived more than a minute after it was collected: the backlog of
--- an outage.
+-- an outage. A ping stream's minutes are streaming.ping_minute's, the health
+-- stream's streaming.health_minute's, each read as link_minute and
+-- source_health_minute read them (macros/streaming/changed_minutes.sql).
 
-with events as (
-    select
-        source,
-        collected_at,
-        received_at,
-        'ping.' || ping_target as event_stream
-    from {{ ref('stg_events__pings') }}
-    union all
-    select
-        source,
-        collected_at,
-        received_at,
-        'health' as event_stream
-    from {{ ref('stg_events__health') }}
+{% set lateness = ['late_events', 'lateness_p50_seconds', 'lateness_max_seconds'] %}
+
+with ping_minutes as (
+    {{ current_minutes(
+        ref('stg_events__pings'), ref('ping_minute'), ping_minute_rows, '5 seconds',
+        ['minute_start', 'source', 'ping_target', 'pings'] + lateness
+    ) }}
+),
+
+health_minutes as (
+    {{ current_minutes(
+        ref('stg_events__health'), ref('health_minute'), health_minute_rows, '0 seconds',
+        ['minute_start', 'source', 'readings'] + lateness
+    ) }}
 )
 
 select
-    date_trunc('minute', collected_at at time zone 'UTC') at time zone 'UTC' as minute_start,
+    minute_start,
     source,
-    event_stream,
-    count(*) as events,
-    count(*) filter (where received_at - collected_at > interval '1 minute') as late_events,
-    percentile_cont(0.5) within group (
-        order by extract(epoch from received_at - collected_at)
-    ) as lateness_p50_seconds,
-    max(extract(epoch from received_at - collected_at))::double precision as lateness_max_seconds
-from events
-group by 1, 2, 3
+    'ping.' || ping_target as event_stream,
+    pings as events,
+    late_events,
+    lateness_p50_seconds,
+    lateness_max_seconds
+from ping_minutes
+
+union all
+
+select
+    minute_start,
+    source,
+    'health' as event_stream,
+    readings as events,
+    late_events,
+    lateness_p50_seconds,
+    lateness_max_seconds
+from health_minutes

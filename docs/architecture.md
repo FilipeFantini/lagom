@@ -191,9 +191,14 @@ append-only table in the `serving` database, acknowledging only after the
 write; a primary key on the event's identifier stores a repeated delivery
 once. The table is `UNLOGGED`, so the events stay out of the backup and R2;
 a crash of Postgres empties it, and a dbt test on a schedule makes that
-loud. The windows over event time are views, defined in dbt and computed when
-read, so a late event is counted by the next query and each metric is defined
-once, behind a dbt contract that Grafana's panels read. The hub keeps 7
+loud. The windows over event time are views, defined in dbt, each metric
+once, behind a dbt contract that Grafana's panels read. A view reads a table
+of minutes that an hourly dbt incremental build keeps, and computes again,
+when it is read, the minutes that table may have wrong: the latest, which
+the writer is still adding to, a late event's minute among them, and the
+oldest, which the archive trims. So a late event is counted by the next
+query, and a panel reads about two hours of events, not the week (ADR-0047's
+notes, 2026-11-18). The hub keeps 7
 days, and so does the table, so the table can be rebuilt by reading the
 stream again. **The history is in the lake** (ADR-0047, decision 6, in staging
 since 2026-11-17): every hour Dagster's `streaming_archive` copies the
@@ -202,7 +207,8 @@ zstd Parquet partitioned by UTC day, confirms each row there by its
 identifier, and only then deletes from the table an hour whose rows are all
 older than 7 days; the lake keeps the raw events 30 days, inside the
 showcase's 1 GB of R2 (the arithmetic is in ADR-0047's notes). A failed
-archive deletes nothing (§7). This is aggregation on read, not stream processing.
+archive deletes nothing (§7). This is aggregation on read, over tables of
+minutes, not stream processing.
 RisingWave is tried next, as a second consumer of the same hub, in the room
 staging frees while it is off (§9a), and stays only if the comparison earns
 its memory.
@@ -272,15 +278,22 @@ target, `serving`, the database of that name
 decision 3). Under it only `models/streaming/` is built, and it is built
 under no other target. A hook creates the live table `live.events` if it is
 missing (`UNLOGGED`, its key the event identifier, inserted into by Redpanda
-Connect and by nothing else); `streaming/` types the events into views;
-`metrics/` holds five views, each with an enforced contract, which are what
+Connect and by nothing else, with indexes on `collected_at` and
+`received_at`); `streaming/` types the events into views and keeps two
+tables of minutes, `ping_minute` and `health_minute`, built incrementally
+and `UNLOGGED` like the events; `metrics/` holds five views, each with an
+enforced contract, which are what
 Grafana reads: the link per minute (loss, median and 95th-percentile round
 trip, jitter), the link by hour of the day and day of the week, the link's
 outages, the source's health per minute, and the pipeline per minute (events
-against one a second, and how late). They group by `collected_at`, so a late
-event is counted by the next query. A test fails when any of the five streams
-held fewer than half its events over the last hour: it is what makes an
-emptied table loud.
+against one a second, and how late). They group by `collected_at` and read
+the tables of minutes, computing again the minutes the tables may have wrong,
+so a late event is counted by the next query
+([`macros/streaming/changed_minutes.sql`](../platform/warehouse/macros/streaming/changed_minutes.sql)).
+A test fails when any of the five streams held fewer than half its events
+over the last hour: it is what makes an emptied table loud. Another fails
+when what the views read differs from a computation over the whole live
+table: it is what makes a broken assumption of the tables loud.
 
 ## 7. Orchestration — Dagster
 

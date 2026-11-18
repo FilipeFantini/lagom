@@ -1442,9 +1442,14 @@ What runs ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-
     position the hub keeps for it, and inserts each event into
     `serving.live.events`. It acknowledges a message only after the write.
 - **Dagster's `streaming` job** runs hourly at :45. It creates that table if
-  it is missing, builds the views and tests them. The test
-  `live_window_is_full` fails, and the alarm e-mails, when the last hour
-  holds fewer than half its events.
+  it is missing, builds the tables of minutes and the views, and tests them.
+  The test `live_window_is_full` fails, and the alarm e-mails, when the last
+  hour holds fewer than half its events. The test
+  `minutes_equal_a_full_computation` fails when what the views read differs
+  from a computation over the whole table (ADR-0047's notes, 2026-11-18):
+  after a rebuild from the hub without its last step below, a writer that
+  stored events more than an hour behind newer ones, or a row deleted by
+  hand. Its repair is that same last step: empty the tables of minutes.
 
 Think of the hub as a tape recorder and the table as a whiteboard copied from
 the tape. Wiping the whiteboard loses nothing: the tape is played again.
@@ -1533,6 +1538,19 @@ not copy the replayed rows again. `received_at` is the hub's timestamp, so
 the rebuilt rows equal the old ones. Wait until `num_pending` is 0, then compare the counts as above.
 Deleting the consumer is the step that matters: a Connect restart alone
 resumes from the consumer's position (ADR-0045's spike notes, correction 5).
+
+Last, once `num_pending` is 0, empty the tables of minutes the views read:
+
+```bash
+kubectl -n staging exec postgres-1 -c postgres -- psql -d serving -c \
+  "truncate streaming.ping_minute, streaming.health_minute"
+```
+
+A replayed event keeps its old `received_at`, so a build that ran during the
+replay took it for one it had already read, and its minute can be missing
+from the tables. Emptied, the tables are computed whole by the next
+`streaming` run. Until then each panel computes every minute itself, which
+over a full week takes seconds and can pass Grafana's 10-second timeout.
 
 **The archive and the live table's retention** (ADR-0047, decision 6).
 Dagster's `streaming_archive` runs every hour at minute 20
@@ -1635,9 +1653,10 @@ on 2026-11-17, with the rebuild above; the figures are in ADR-0047's *Notes*.
   - `kubectl top pod -n staging` for the hub, Connect and `postgres-1`
     against their requests;
   - the hub's `bytes` above;
-  - in `psql -d serving`, `\timing` on each `metrics` view over the whole
-    table, which must stay under two seconds. The 7-day figure needs 7
-    days of events.
+  - each query of the dashboard over a 7-day range, as `grafana_reader`,
+    under two seconds: Grafana's macros replaced as in ADR-0047's notes
+    (2026-11-18), and the server's time read from `EXPLAIN (ANALYZE, TIMING
+    OFF)`. The 7-day figure needs 7 days of events.
 
 ### The Raspberry Pi (M6 step 5)
 

@@ -36,12 +36,16 @@ models:
       +grants: "{{ {'select': ['gold_reader']} if target.type == 'postgres' else {} }}"
       +post-hook: "{{ 'grant usage on schema ' ~ this.schema ~ ' to gold_reader' if target.type == 'postgres' else '' }}"
 
-    # The streaming showcase, in the database `serving` (ADR-0047). Views,
-    # computed when read: a late event is a row with an old `collected_at`,
-    # and the next query counts it. `streaming` holds the typed events, read
-    # only by the views; `metrics` holds the views Grafana reads, each with an
-    # enforced contract, so what computes a metric can change behind it
-    # without a panel being rewritten.
+    # The streaming showcase, in the database `serving` (ADR-0047). `streaming`
+    # holds the typed events (views) and two tables of minutes,
+    # `ping_minute` and `health_minute`, incremental models that set their
+    # own materialization; `metrics` holds the views Grafana reads, each with
+    # an enforced contract, so what computes a metric can change behind it
+    # without a panel being rewritten. A view of `metrics` reads a table of
+    # minutes and computes again, when read, the minutes the table may have
+    # wrong: so a late event, a row with an old `collected_at`, is counted by
+    # the next query (macros/streaming/changed_minutes.sql; ADR-0047's notes,
+    # 2026-11-18).
     streaming:
       +enabled: "{{ target.name == 'serving' }}"
       +materialized: view
@@ -52,7 +56,8 @@ models:
         # these views and nothing else of `serving`. A view is created again
         # on each build without its grants, so they are given again here, as
         # for gold_reader above; a view runs with its owner's rights, so the
-        # role needs no grant on `streaming` or `live`. If the role is
+        # role needs no grant on `streaming` or `live`, where the tables of
+        # minutes are, and is given none. If the role is
         # missing, the GRANT fails the build, loudly.
         # tests/streaming/grafana_reader_privileges.sql asserts the result.
         +grants: {select: [grafana_reader]}
