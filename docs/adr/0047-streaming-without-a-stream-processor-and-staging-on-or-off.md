@@ -555,3 +555,117 @@ measured, without rewriting it.
     old: the 10:20 UTC run on 2026-11-24.
   - *No index on `received_at`:* the two runs took 37 and 19 seconds, Pod
     start included, so none is asked for.
+- **2026-11-18 — decision 8's second remedy, built: tables of minutes
+  behind the views.** In staging, over one day of events, two panels' queries
+  took 1.8 s (the fifth criterion's reading, #125). Every view read every
+  event of the live table, so each query's cost grew with the week. Measured
+  locally over 7 days (below), four of the dashboard's eleven queries took
+  4.3 to 13 s, and two more about 1.9 s. An index cannot help a query that
+  reads every row, so the second remedy is built, for all five views of
+  `metrics`, not only the two that failed. How it was carried out, where the
+  text left it open:
+  - *What holds state.* Two `UNLOGGED` tables in `streaming`, `ping_minute`
+    and `health_minute`: one row per minute of `collected_at`, per source and
+    target, or per source, built by dbt incremental models in the hourly
+    `streaming` job. A minute of pings keeps what every link view needs:
+    counts, percentiles and jitter, but also its round trips, so the
+    percentiles of `link_hour_profile` stay exact, and its runs of lost pings,
+    each marked as starting an outage or carrying one on, so `link_outages`
+    joins an outage across minutes and hours. The five views keep their
+    names, columns and contracts, and the dashboard is unchanged.
+  - *What triggers recomputation.* The table's newest `received_at` records
+    how far the last build read. A build, and every read of a view, computes
+    two stretches of event time again from `live.events`:
+    - the recent stretch: from the minute of the earliest event the hub
+      stored less than an hour before that newest one, or after it, so a late
+      event moves the stretch back to its own minute;
+    - the trimmed stretch: up to an hour and two minutes after the live
+      table's oldest `received_at`, where the archive deletes.
+
+    Between the two stretches, the table's rows are read as they are. The
+    events are filtered by an index on `collected_at` before the window
+    functions run; a second index, on `received_at`, finds the new ones.
+    `platform/warehouse/macros/streaming/changed_minutes.sql` holds the
+    mechanism and its assumptions.
+  - *Freshness.* At the moment a panel is read, it shows what a computation
+    over the whole live table would show. The views compute the recent
+    stretch themselves, so nothing waits for the next build. The table
+    decides only how much of the week a query reads.
+  - *Assumptions, and what makes a broken one loud:*
+    - the writer stores an event less than an hour after a newer one;
+    - the source's clock runs less than an hour ahead of the hub's;
+    - only the archive deletes rows of `live.events`;
+    - a rebuild from the hub is followed by emptying the two tables
+      (runbook).
+
+    Every hour, the job's test `minutes_equal_a_full_computation` compares
+    what the views read with a computation over the whole live table, and
+    fails on any difference. It runs after the views, so a failure leaves
+    them in place.
+  - *Retention.* The tables hold the minutes the live table holds, and no
+    more: the next build deletes a minute whose events the archive deleted.
+    A full refresh from `live.events` gives the same rows as incremental
+    builds (shown below).
+  - *The trade-off accepted.* More code in the warehouse: two incremental
+    models and the macros that keep them. Where the views needed no
+    assumption to be right, they now rest on the four above, which the test
+    guards. The test's computation over the whole table costs Postgres 11 to
+    23 s an hour at 7 days, in the job and not in a panel; before, each of
+    the views' own tests read the whole table. Right after a long backlog
+    arrives, the views compute all of it until the next build: with 6 hours
+    held back and then delivered, the slowest panel took 0.9 s. In exchange,
+    a panel reads about two hours of events plus the tables, so its cost no
+    longer grows with the week.
+  - *Budget.* No new component and no new request. At 7 days the tables
+    take 29 MB (`ping_minute`, 42,804 rows) and 1.8 MB (`health_minute`), and
+    the indexes take 37 and 69 MB, beside the live table's 1,723 MB. All are
+    `UNLOGGED`, so the backup gains nothing. During the final local review
+    run, the live table held 3,210,005 events after a trim and subsequent
+    backfill. The two tables occupied 28 MB and 1,736 kB at that point.
+  - *Measured locally on 2026-11-18* against Postgres 18.1 in Docker, with
+    staging's settings (`shared_buffers` 96MB, `work_mem` 4MB, a 512 MiB
+    memory limit), on an Apple M5. The data: 7 days and an hour of synthetic
+    events at staging's rate, 3,041,980 rows. Four targets are pinged at
+    1 Hz, with staging's half-hourly outages and 0.3 % random loss, plus
+    health readings. Each of the dashboard's queries ran as `grafana_reader`,
+    under `EXPLAIN (ANALYZE, TIMING OFF)`, with Grafana's macros replaced for
+    a 7-day range: `$__timeGroupAlias(col, $__interval)` as
+    `date_bin('10 minutes', col, timestamptz '2000-01-01') as time`,
+    `$__timeFilter(col)` as the last 7 days, and the target `node`. Each
+    figure is the median of three runs before and five after. *After* has an
+    hour of events stored since the last build, as just before the :45 run.
+
+    | Query | Before | After |
+    |---|---|---|
+    | Is it the home router or the provider | 7,479 ms | 160 ms |
+    | Is it good enough for a video call | 4,333 ms | 128 ms |
+    | How long was the link down | 13,016 ms | 475 ms |
+    | At which hours is the link worse | 1,311 ms | 343 ms |
+    | The three health panels | 938 to 1,198 ms | 24 ms |
+    | How late is an event, end to end | 5,752 ms | 301 ms |
+    | How much arrived, and how much arrived late (two queries) | 1,856 and 1,985 ms | 304 and 300 ms |
+    | The `source` variable | 647 ms | 25 ms |
+
+    The Mac is faster than the node: per day of events, staging's one-day
+    reading of the first query took 1.6 to 1.7 times the local one. So the
+    node may take about twice these times, which are still under two
+    seconds. Staging must first pin the orchestration image published from
+    this merge. After the first hourly `streaming` build on that image, run
+    the same queries in staging. The criterion needs seven days of live
+    events there.
+  - *Equal to the views it replaces.* Over the same 7 days, each of the five
+    views returned the same rows as the SQL on `main`: 0 rows differed, of
+    40,564 minutes, 6,585 outages, 672 cells, 10,141 health minutes and
+    50,705 pipeline rows, with averages compared to nine decimals. Then a
+    series of steps compared the views with that SQL before and after each
+    build:
+    - an outage carried across a build, and across the start of the recent
+      stretch;
+    - two minutes held back, then delivered two hours late, which joined two
+      outages into one before any build;
+    - the oldest hour trimmed, as the archive trims it.
+
+    Each step left 0 rows different. A hand-made delete of ten minutes failed
+    the test (58 rows), and `--full-refresh` repaired it. A second build
+    changed no row, and after several incremental builds a full refresh gave
+    the same tables, with 0 rows different.

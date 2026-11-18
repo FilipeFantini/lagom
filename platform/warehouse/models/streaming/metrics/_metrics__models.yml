@@ -3,8 +3,9 @@ version: 2
 # What Grafana reads (ADR-0047, decision 3), and nothing else of `serving`.
 # Column names and types are a published interface (protocol 16.3):
 # `contract.enforced` makes dbt compare them with the SQL and fail the build on
-# any difference, before the view is created. A view is computed when read,
-# so these tests read the live table as it is when the job runs.
+# any difference, before the view is created. A view reads a table of
+# minutes and computes again the minutes it may have wrong, so these tests
+# read the views as a panel does when the job runs.
 models:
   - name: link_minute
     description: The link per minute of event time (UTC), per source and target.
@@ -169,6 +170,16 @@ models:
 # Given rows and expected rows for the logic the contracts cannot see: the
 # outage islands, jitter, the minute cut, percentiles and the late rule. Times
 # are UTC. They run with `dbt build` on the `serving` target, before the views.
+#
+# Each view reads a table of minutes (streaming.ping_minute,
+# streaming.health_minute) and computes again the stretches it may have wrong
+# (macros/streaming/changed_minutes.sql). The first three tests give no
+# table of minutes, so the view computes every minute from the given events:
+# their expected rows are the ones written for the views before the tables
+# existed, unchanged. The tests after them give a table as a build would have
+# written it, then events it has not seen, and expect what a computation over
+# all the given events gives. The tables are given as SQL, since dbt cannot
+# write a fixture's array columns.
 unit_tests:
   - name: link_outages_splits_runs_at_answers_and_at_gaps
     description: >
@@ -187,6 +198,18 @@ unit_tests:
           - {source: s, ping_target: node, collected_at: "2026-11-17 12:00:05+00", lost: true}
           - {source: s, ping_target: node, collected_at: "2026-11-17 12:00:06+00", lost: false}
           - {source: s, ping_target: gateway, collected_at: "2026-11-17 10:00:01+00", lost: true}
+      - input: ref('ping_minute')
+        format: sql
+        rows: &no_ping_minutes |
+          select
+              null::timestamptz as minute_start, null::text as source, null::text as ping_target,
+              null::bigint as pings, null::bigint as lost_pings, null::float8 as rtt_p50_ms,
+              null::float8 as rtt_p95_ms, null::float8 as jitter_ms, null::float8[] as rtts,
+              null::timestamptz[] as run_started_at, null::timestamptz[] as run_last_lost_at,
+              null::bigint[] as run_lost_pings, null::boolean[] as run_starts_outage,
+              null::bigint as late_events, null::float8 as lateness_p50_seconds,
+              null::float8 as lateness_max_seconds, null::timestamptz as max_received_at
+          where false
     expect:
       rows:
         - {ping_target: node, started_at: "2026-11-17 10:00:01+00", duration_seconds: 2, lost_pings: 2}
@@ -211,6 +234,9 @@ unit_tests:
           - {source: s, ping_target: node, collected_at: "2026-11-17 10:01:02+00", lost: false, rtt_ms: 20}
           - {source: s, ping_target: node, collected_at: "2026-11-17 10:01:30+00", lost: false, rtt_ms: 50}
           - {source: s, ping_target: node, collected_at: "2026-11-17 10:02:00+00", lost: true, rtt_ms: null}
+      - input: ref('ping_minute')
+        format: sql
+        rows: *no_ping_minutes
     expect:
       rows:
         - {minute_start: "2026-11-17 10:00:00+00", pings: 2, lost_pings: 0, rtt_p50_ms: 12, rtt_p95_ms: 13.8, jitter_ms: 4}
@@ -230,7 +256,191 @@ unit_tests:
       - input: ref('stg_events__health')
         rows:
           - {source: s, collected_at: "2026-11-17 10:00:00+00", received_at: "2026-11-17 10:00:00.5+00"}
+      - input: ref('ping_minute')
+        format: sql
+        rows: *no_ping_minutes
+      - input: ref('health_minute')
+        format: sql
+        rows: |
+          select
+              null::timestamptz as minute_start, null::text as source, null::bigint as readings,
+              null::float8 as cpu_temp_max_c, null::float8 as cpu_temp_avg_c,
+              null::float8 as cpu_freq_avg_mhz, null::float8 as load_1m_avg,
+              null::bigint as throttled_seconds, null::bigint as under_voltage_seconds,
+              null::bigint as disk_used_bytes, null::bigint as disk_total_bytes,
+              null::bigint as late_events, null::float8 as lateness_p50_seconds,
+              null::float8 as lateness_max_seconds, null::timestamptz as max_received_at
+          where false
     expect:
       rows:
         - {minute_start: "2026-11-17 10:00:00+00", event_stream: ping.node, events: 2, late_events: 1, lateness_max_seconds: 61}
         - {minute_start: "2026-11-17 10:00:00+00", event_stream: health, events: 1, late_events: 0, lateness_max_seconds: 0.5}
+
+  - name: link_minute_counts_a_late_ping_in_its_own_minute
+    description: >
+      The table was built before the ping collected at 09:30:00 arrived (at
+      11:10). It is newer than the table's newest event less the writer's
+      hour, so its minute and every one after are computed again from the
+      events; the minutes between the trimmed and the recent stretch come
+      from the table. Its jitter reads the ping at 09:29:59, in the minute
+      before, which the table holds: the five seconds of context. The
+      expected rows are a computation over all the given pings.
+    model: link_minute
+    given:
+      - input: ref('stg_events__pings')
+        rows:
+          - {source: s, ping_target: node, collected_at: "2026-11-17 07:00:00+00", received_at: "2026-11-17 07:00:00.5+00", lost: false, rtt_ms: 30}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:29:58+00", received_at: "2026-11-17 09:29:58.5+00", lost: false, rtt_ms: 10}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:29:59+00", received_at: "2026-11-17 09:29:59.5+00", lost: false, rtt_ms: 14}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:30:00+00", received_at: "2026-11-17 11:10:00+00", lost: false, rtt_ms: 12}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:30:01+00", received_at: "2026-11-17 09:30:01.5+00", lost: false, rtt_ms: 32}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 11:00:00+00", received_at: "2026-11-17 11:00:00.5+00", lost: false, rtt_ms: 40}
+      - input: ref('ping_minute')
+        format: sql
+        rows: |
+          select * from (values
+            ('2026-11-17 07:00:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 30::float8, 30::float8,
+             null::float8, array[30]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 07:00:00.5+00'::timestamptz),
+            ('2026-11-17 09:29:00+00'::timestamptz, 's', 'node', 2::bigint, 0::bigint, 12::float8, 13.8::float8,
+             4::float8, array[10, 14]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 09:29:59.5+00'::timestamptz),
+            ('2026-11-17 09:30:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 32::float8, 32::float8,
+             18::float8, array[32]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 09:30:01.5+00'::timestamptz),
+            ('2026-11-17 11:00:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 40::float8, 40::float8,
+             null::float8, array[40]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 11:00:00.5+00'::timestamptz)
+          ) as t (
+            minute_start, source, ping_target, pings, lost_pings, rtt_p50_ms, rtt_p95_ms, jitter_ms,
+            rtts, run_started_at, run_last_lost_at, run_lost_pings, run_starts_outage,
+            late_events, lateness_p50_seconds, lateness_max_seconds, max_received_at
+          )
+    expect:
+      rows:
+        - {minute_start: "2026-11-17 07:00:00+00", pings: 1, lost_pings: 0, rtt_p50_ms: 30, rtt_p95_ms: 30, jitter_ms: null}
+        - {minute_start: "2026-11-17 09:29:00+00", pings: 2, lost_pings: 0, rtt_p50_ms: 12, rtt_p95_ms: 13.8, jitter_ms: 4}
+        - {minute_start: "2026-11-17 09:30:00+00", pings: 2, lost_pings: 0, rtt_p50_ms: 22, rtt_p95_ms: 31, jitter_ms: 11}
+        - {minute_start: "2026-11-17 11:00:00+00", pings: 1, lost_pings: 0, rtt_p50_ms: 40, rtt_p95_ms: 40, jitter_ms: null}
+
+  - name: link_outages_joins_an_outage_across_the_recomputed_minutes
+    description: >
+      An outage from 09:59:57 to 10:00:02. The minute 09:59 comes from the
+      table, which holds its run as the start of an outage; the minute 10:00
+      is computed again (its events are newer than the table's newest less
+      the writer's hour), and its run carries on the outage because the ping
+      before it, at 09:59:59, was lost a second earlier. One outage, not two.
+    model: link_outages
+    given:
+      - input: ref('stg_events__pings')
+        rows:
+          - {source: s, ping_target: node, collected_at: "2026-11-17 07:00:00+00", received_at: "2026-11-17 07:00:00.5+00", lost: false, rtt_ms: 30}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:59:57+00", received_at: "2026-11-17 09:59:57.5+00", lost: true, rtt_ms: null}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:59:58+00", received_at: "2026-11-17 09:59:58.5+00", lost: true, rtt_ms: null}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:59:59+00", received_at: "2026-11-17 09:59:59.5+00", lost: true, rtt_ms: null}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:00+00", received_at: "2026-11-17 10:00:00.5+00", lost: true, rtt_ms: null}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:01+00", received_at: "2026-11-17 10:00:01.5+00", lost: true, rtt_ms: null}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:02+00", received_at: "2026-11-17 10:00:02.5+00", lost: true, rtt_ms: null}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 10:00:03+00", received_at: "2026-11-17 10:00:03.5+00", lost: false, rtt_ms: 30}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 11:00:00+00", received_at: "2026-11-17 11:00:00.5+00", lost: false, rtt_ms: 30}
+      - input: ref('ping_minute')
+        format: sql
+        rows: |
+          select * from (values
+            ('2026-11-17 07:00:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 30::float8, 30::float8,
+             null::float8, array[30]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 07:00:00.5+00'::timestamptz),
+            ('2026-11-17 09:59:00+00'::timestamptz, 's', 'node', 3::bigint, 3::bigint, null::float8, null::float8,
+             null::float8, null::float8[], array['2026-11-17 09:59:57+00']::timestamptz[], array['2026-11-17 09:59:59+00']::timestamptz[],
+             array[3]::bigint[], array[true]::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 09:59:59.5+00'::timestamptz),
+            ('2026-11-17 10:00:00+00'::timestamptz, 's', 'node', 4::bigint, 3::bigint, 30::float8, 30::float8,
+             null::float8, array[30]::float8[], array['2026-11-17 10:00:00+00']::timestamptz[], array['2026-11-17 10:00:02+00']::timestamptz[],
+             array[3]::bigint[], array[false]::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 10:00:03.5+00'::timestamptz),
+            ('2026-11-17 11:00:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 30::float8, 30::float8,
+             null::float8, array[30]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 11:00:00.5+00'::timestamptz)
+          ) as t (
+            minute_start, source, ping_target, pings, lost_pings, rtt_p50_ms, rtt_p95_ms, jitter_ms,
+            rtts, run_started_at, run_last_lost_at, run_lost_pings, run_starts_outage,
+            late_events, lateness_p50_seconds, lateness_max_seconds, max_received_at
+          )
+    expect:
+      rows:
+        - {ping_target: node, started_at: "2026-11-17 09:59:57+00", last_lost_at: "2026-11-17 10:00:02+00", duration_seconds: 6, lost_pings: 6}
+
+  - name: link_minute_drops_the_minutes_the_archive_trimmed
+    description: >
+      The table holds the minute 06:59, whose pings the archive has since
+      deleted, and a jitter for 07:00 that read the ping at 06:59:59. The
+      minutes up to an hour and two minutes after the oldest event left are
+      computed again from the events: 06:59 goes, and 07:00's jitter is the
+      one step left.
+    model: link_minute
+    given:
+      - input: ref('stg_events__pings')
+        rows:
+          - {source: s, ping_target: node, collected_at: "2026-11-17 07:00:00+00", received_at: "2026-11-17 07:00:00.5+00", lost: false, rtt_ms: 30}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 07:00:01+00", received_at: "2026-11-17 07:00:01.5+00", lost: false, rtt_ms: 34}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 11:00:00+00", received_at: "2026-11-17 11:00:00.5+00", lost: false, rtt_ms: 40}
+      - input: ref('ping_minute')
+        format: sql
+        rows: |
+          select * from (values
+            ('2026-11-17 06:59:00+00'::timestamptz, 's', 'node', 3::bigint, 0::bigint, 20::float8, 20::float8,
+             0::float8, array[20, 20, 20]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 06:59:59.5+00'::timestamptz),
+            ('2026-11-17 07:00:00+00'::timestamptz, 's', 'node', 2::bigint, 0::bigint, 32::float8, 33.8::float8,
+             7::float8, array[30, 34]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 07:00:01.5+00'::timestamptz),
+            ('2026-11-17 11:00:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 40::float8, 40::float8,
+             null::float8, array[40]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 11:00:00.5+00'::timestamptz)
+          ) as t (
+            minute_start, source, ping_target, pings, lost_pings, rtt_p50_ms, rtt_p95_ms, jitter_ms,
+            rtts, run_started_at, run_last_lost_at, run_lost_pings, run_starts_outage,
+            late_events, lateness_p50_seconds, lateness_max_seconds, max_received_at
+          )
+    expect:
+      rows:
+        - {minute_start: "2026-11-17 07:00:00+00", pings: 2, lost_pings: 0, jitter_ms: 4}
+        - {minute_start: "2026-11-17 11:00:00+00", pings: 1, lost_pings: 0, jitter_ms: null}
+
+  - name: link_minute_reads_the_settled_minutes_from_the_table
+    description: >
+      Between the trimmed stretch (before 08:02) and the recent one (from
+      11:00), a minute is read from the table and not computed again. The
+      table's 09:00 says 60 pings where the events hold one, so the expected
+      60 shows where the row came from; a view that computed every minute
+      again would still be right, but would read seven days on each query.
+    model: link_minute
+    given:
+      - input: ref('stg_events__pings')
+        rows:
+          - {source: s, ping_target: node, collected_at: "2026-11-17 07:00:00+00", received_at: "2026-11-17 07:00:00.5+00", lost: false, rtt_ms: 30}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 09:00:00+00", received_at: "2026-11-17 09:00:00.5+00", lost: false, rtt_ms: 30}
+          - {source: s, ping_target: node, collected_at: "2026-11-17 11:00:00+00", received_at: "2026-11-17 11:00:00.5+00", lost: false, rtt_ms: 40}
+      - input: ref('ping_minute')
+        format: sql
+        rows: |
+          select * from (values
+            ('2026-11-17 07:00:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 30::float8, 30::float8,
+             null::float8, array[30]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 07:00:00.5+00'::timestamptz),
+            ('2026-11-17 09:00:00+00'::timestamptz, 's', 'node', 60::bigint, 0::bigint, 30::float8, 30::float8,
+             null::float8, array[30]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 09:00:00.5+00'::timestamptz),
+            ('2026-11-17 11:00:00+00'::timestamptz, 's', 'node', 1::bigint, 0::bigint, 40::float8, 40::float8,
+             null::float8, array[40]::float8[], null::timestamptz[], null::timestamptz[], null::bigint[], null::boolean[],
+             0::bigint, 0.5::float8, 0.5::float8, '2026-11-17 11:00:00.5+00'::timestamptz)
+          ) as t (
+            minute_start, source, ping_target, pings, lost_pings, rtt_p50_ms, rtt_p95_ms, jitter_ms,
+            rtts, run_started_at, run_last_lost_at, run_lost_pings, run_starts_outage,
+            late_events, lateness_p50_seconds, lateness_max_seconds, max_received_at
+          )
+    expect:
+      rows:
+        - {minute_start: "2026-11-17 07:00:00+00", pings: 1}
+        - {minute_start: "2026-11-17 09:00:00+00", pings: 60}
+        - {minute_start: "2026-11-17 11:00:00+00", pings: 1}
