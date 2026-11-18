@@ -627,3 +627,7 @@ every change:
    [ADR-0032](adr/0032-agents-in-credential-free-containers.md)). The one
    credential a runner may hold is the operator's repository-scoped token,
    in its GitHub connector ([ADR-0035](adr/0035-agents-use-the-operators-scoped-token.md)).
+   The exception is the sequential handoff through T3 Code: Codex or
+   Antigravity works on the Mac with no sandbox, and the deny rules bind it
+   as an instruction, not a lock
+   ([ADR-0051](adr/0051-handoff-to-another-provider-through-t3-code.md)).
