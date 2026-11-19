@@ -134,7 +134,8 @@ spec:
       # The connection limits keep both inside the Cluster's 25: dbt opens
       # one at a time (`threads: 1`), Connect at most two (`conn_max_open`).
       - name: serving
-        ensure: present
+        # Streaming removal, step 1: CloudNativePG drops the role.
+        ensure: absent
         login: true
         superuser: false
         createdb: false
@@ -144,7 +145,8 @@ spec:
         passwordSecret:
           name: serving-credentials
       - name: events_writer
-        ensure: present
+        # Streaming removal, step 1: CloudNativePG drops the role.
+        ensure: absent
         login: true
         superuser: false
         createdb: false
@@ -169,7 +171,8 @@ spec:
       # the role. The `streaming` job's test grafana_reader_privileges fails
       # every hour it is missing, so it cannot be lost quietly.
       - name: grafana_reader
-        ensure: present
+        # Streaming removal, step 1: CloudNativePG drops the role.
+        ensure: absent
         login: true
         superuser: false
         createdb: false

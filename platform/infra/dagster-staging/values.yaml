@@ -197,10 +197,9 @@ dagster-user-deployments:
         # (ADR-0033, decision 5).
         - name: HEARTBEAT_URL
           valueFrom: {secretKeyRef: {name: pipeline-heartbeat, key: url}}
-        # The streaming showcase runs here (ADR-0047): the `streaming` job and
-        # its hourly schedule exist only where this is "true", and anything
-        # but "true" or "false" stops the code location. Its credentials come
-        # from the job's tag (SERVING_ENV), not from here. Prod leaves it
-        # unset until the showcase reaches it.
+        # Streaming removal, step 1: "false" turns off the streaming jobs and
+        # schedules in the pinned image, so nothing runs against the hub and
+        # the database this step removes, and no failed run trips the alarm.
+        # Step 2 deletes the variable with the code that reads it.
         - name: LAGOM_STREAMING
-          value: "true"
+          value: "false"

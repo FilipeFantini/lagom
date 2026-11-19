@@ -12,4 +12,5 @@ spec:
   owner: serving
   cluster:
     name: postgres
-  ensure: present
+  # Streaming removal, step 1: CloudNativePG drops the database.
+  ensure: absent
