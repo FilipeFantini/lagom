@@ -116,12 +116,9 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Pinned by digest (ADR-0015): built from main at 6de3cfe. That image
-        # still holds the streaming jobs, which exist only where
-        # LAGOM_STREAMING is "true" and it is no longer set (ADR-0052), so none
-        # loads; the next pin is built from the commit that removes them. The
-        # code location needs HEARTBEAT_URL, set below.
-        tag: "6de3cfe394051964892ea126b1965a0e36c658e6@sha256:fabb201d0e19c4b6e0a858ba3ea32ddf84333aa4342543a2f1bf249e9d471db9"
+        # Batch-only orchestration built from main at 412a694
+        # (ADR-0052, ADR-0053). The code location needs HEARTBEAT_URL, set below.
+        tag: "412a69416bb8f82dd4cba5ffc707920474ac1f21@sha256:cf37d9acdca8112d448bc3f892ec3e31ffd034f2da2bbe18a0e13e26d3da2d4f"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
