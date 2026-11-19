@@ -117,7 +117,11 @@ objects by hand, so the cleanup is declared first and the files go second:
   `ensure: absent`, so CloudNativePG drops them; and sets `LAGOM_STREAMING` to
   `"false"`, so the streaming jobs stop before their database goes.
 - **Step 2**, the change that carries this ADR, merges only after step 1 has
-  synced, and deletes the files.
+  synced, and deletes the files. Step 1 needed one correction on review:
+  Redpanda Connect and Grafana go to zero replicas first, because Postgres
+  refuses to drop a database with open sessions. Read on 2026-11-19 after
+  step 1 synced: the database `serving` dropped, Connect and Grafana at zero,
+  the hub's claim owned by its StatefulSet.
 
 What is left after both, and why:
 
@@ -126,6 +130,11 @@ What is left after both, and why:
   Postgres, and the three sealed secrets of the dropped roles stay as objects
   that do nothing. They are deleted with the runbook's procedure for retiring
   a manifest from `postgres-<env>`.
+- The roles `serving`, `events_writer` and `grafana_reader` stay in the
+  `Cluster`'s list at `ensure: absent`. CloudNativePG refused to drop them
+  while the database `serving` held their objects, and it retries a role only
+  when the `Cluster` changes; step 2 is that change. The three entries leave
+  the list once the `Cluster` status shows the roles gone.
 - The `grafana` namespace, created by Argo CD's `CreateNamespace`, stays
   empty: the finalizer deletes what the Application deployed, not the
   namespace it created.

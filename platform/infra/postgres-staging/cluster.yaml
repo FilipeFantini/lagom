@@ -116,3 +116,14 @@ spec:
         comment: read-only on the DuckLake catalog; granted by lake_maintenance
         passwordSecret:
           name: lake-reader-credentials
+      # The streaming showcase's roles, kept only until CloudNativePG drops
+      # them (ADR-0052). It refused while the database `serving` still held
+      # their objects, and it retries a role only when this Cluster changes:
+      # this change is that retry. Removed from this list once the Cluster
+      # status shows them gone.
+      - name: serving
+        ensure: absent
+      - name: events_writer
+        ensure: absent
+      - name: grafana_reader
+        ensure: absent
