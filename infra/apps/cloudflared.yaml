@@ -1,0 +1,26 @@
+# cloudflared: the outbound-only tunnel that serves the operator's web UIs at
+# ops.ofantini.com behind a Cloudflare Access login (ADR-0030). Which path
+# reaches which Service is config.yaml in this directory, reviewed
+# like any change; the login policy lives in Cloudflare's dashboard (runbook).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudflared
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/FilipeFantini/lagom.git
+    targetRevision: main
+    path: platform/infra/cloudflared
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudflared
+  syncPolicy:
+    automated:
+      # Nothing here holds state: the tunnel's identity is the sealed token,
+      # which Git keeps.
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
