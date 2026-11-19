@@ -1,7 +1,7 @@
 # ADR-0042 — The dashboards return to dbt Charts; the server of our own is stopped
 
 - **Status:** Accepted, by the operator in conversation on 2026-11-14;
-  decision 6 settled by [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed)
+  decision 6 settled by [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed), then withdrawn with the showcase by [ADR-0052](0052-streaming-leaves-the-platform.md)
 - **Date:** 2026-11-14
 - **Decided by:** the operator, in conversation on 2026-11-14, after two merged
   pull requests in the server's repository and a second look at what it adds.

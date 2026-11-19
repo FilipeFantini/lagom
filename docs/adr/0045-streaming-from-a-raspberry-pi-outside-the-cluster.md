@@ -1,6 +1,6 @@
 # ADR-0045 — The streaming showcase: a Raspberry Pi outside the cluster, NATS JetStream as the log
 
-- **Status:** Proposed. Taken by the operator in conversation on 2026-11-15:
+- **Status:** Superseded by [ADR-0052](0052-streaming-leaves-the-platform.md) on 2026-11-19. Until then: Proposed. Taken by the operator in conversation on 2026-11-15:
   decisions 1 and 3, RisingWave measured first with the two-path design as the
   fallback (decision 6), no throughput test (decision 4), the storage limit
   of decision 8 and the privacy rule of decision 11. The rest is the

@@ -29,11 +29,10 @@ dbt, Postgres, Dagster.
 | Second VPS (real environment isolation) | a real client |
 | Terraform for resources outside the cluster (Hetzner server and firewall, Tailscale ACL, Cloudflare DNS, R2 and Pages) | the next node created or rebuilt. **Deferred by the operator on 2026-10-28**, after the move to `lagom-shared-02` had been planned as its entry: it adds work outside the data showcases, and the candidate state backend, HCP Terraform's free plan, is one more freemium vendor. The CLI is free; the state backend is the choice that needs its ADR. Existing resources are adopted with `import`, which records them without recreating them, so `lagom-shared-02` can still be brought under code later ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | dbt Charts (the dashboards) | M4 — the dashboard gallery on ofantini.com ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)); replaced Evidence on 2026-11-10 ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md)). Its static page is the target again since 2026-11-14 ([ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)) |
-| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). In M6 it is created to hold the streaming showcase's events ([ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md), accepted) |
+| The `serving` database | The first server resident on the node that answers visitors; not needed by a static page ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)). |
 | Cloudflare Access (login) | **entered 2026-11-05** with the first content that must not be public: the operator's own UIs, Dagster's first, at `ops.ofantini.com/<tool>` ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)). Partners' reports will use the same path, each with its own policy. The site and its showcases are public data and need no login |
-| NATS | second consumer of the same stream, or a replay requirement. The streaming showcase (M6) meets it ([ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), proposed) |
 | Streamlit | an interactive app a static page cannot serve |
-| Infrastructure observability (metrics and logs), shown on ofantini.com | the USGS showcase is live on ofantini.com (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; Grafana only for the operator, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
+| Infrastructure observability (metrics and logs), shown on ofantini.com | the USGS showcase is live on ofantini.com (M4): the platform delivers data first, then shows how it runs. Candidate stack, chosen for resident memory and confirmed by its own ADR when it enters: VictoriaMetrics single-node (scrapes and stores, PromQL-compatible), node-exporter and kube-state-metrics as sources, VictoriaLogs for logs; a viewer for the operator only, over the tailnet. The site gets static snapshots exported after each run, like every showcase, never a live dashboard reaching the cluster ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)). Expected, not yet measured: lower resident memory than Prometheus and a simpler log store than Loki; the ADR measures the candidate before accepting it |
 | PgBouncer (CloudNativePG `Pooler`) | first external BI consumer |
 | Credentials per job, and short-lived ones (ingestion writes only bronze, dbt only the layers it builds; a secret store or workload identity in place of static secrets) | a real client, or a second team on the cluster. **Entered early and in part, on 2026-11-14,** by the operator's decision, for the dashboards' render ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)): each job declares the Secrets its Pod gets, a read-only catalog role exists, and the dashboards' render holds only read-only credentials and its bucket's token. Still open: `usgs` and `lake_maintenance` hold the catalog owner's password and the R2 write token (not split into bronze-only and dbt-only), every run Pod still holds the alarm's ping URL and Dagster's own database password, and the credentials are static |
 | Row Level Security | second consumer with segregated data |
@@ -80,7 +79,7 @@ Re-introducing a practice excluded in
 | Type | CAX11 (2 ARM vCPU, 4 GB) for `lagom-shared-01`; CAX21 (4 ARM vCPU, 8 GB) since `lagom-shared-02` | [ADR-0002](adr/0002-single-node-k3s-hetzner.md), [ADR-0020](adr/0020-move-to-the-8-gb-node.md). ARM, because the images are built for arm64 only |
 | IPv4 | yes | IPv6-only breaks registries and endpoints that still lack v6 |
 | IPv6 | yes | free |
-| Private network | no | only links Hetzner servers; the Pi joins over Tailscale |
+| Private network | no | only links Hetzner servers |
 | SSH key | existing ed25519 (1Password) | password auth never enabled; root gets the key but cannot use it |
 | Cloud config | [runbook](runbook.md#provision-the-node-m0) | creates a personal sudo user, disables root and password login |
 | Volume | no | 40 GB local is enough for megabytes in Postgres; disk pressure is a lakehouse trigger ([ADR-0008](adr/0008-postgres-for-all-layers.md)) |
@@ -387,108 +386,22 @@ big-data stack ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md), proposed).
 - [ ] Lakehouse trigger measures visible: `dbt run` duration and data size —
       [ADR-0008](adr/0008-postgres-for-all-layers.md)
 
-## M6 — Streaming
+## M6 — Streaming (removed)
 
-Continuous events. Candidates in [`use-case-globe.md`](use-case-globe.md).
+The streaming showcase left the platform on 2026-11-19, which is batch-only
+again: [ADR-0052](adr/0052-streaming-leaves-the-platform.md). The memory
+trims it prompted stay: `hello` removed, `argocd-server` at zero replicas,
+cert-manager at 48 MiB, one run slot per environment, and a staging without
+its Dagster UI and its backup (all 2026-11-16). One is open: both Postgres at
+256 MiB, once a reading taken during a run confirms it.
 
-This is where the platform proves it grows by composition: **if adding a source
-is only new configuration, the design worked.**
+## Repository layout
 
-The design is [ADR-0045](adr/0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed): a
-Raspberry Pi 3 Model B rev 1.2 at the operator's home is the source, outside the cluster,
-and NATS JetStream is the log. It replaces the earlier plan of joining the Pi
-to k3s as an agent node, which needed flannel moved to `tailscale0` on the
-node that carries prod. [ADR-0047](adr/0047-streaming-without-a-stream-processor-and-staging-on-or-off.md)
-(accepted) takes the stream processor out of it: Redpanda Connect writes the
-events to Postgres, their windows are views computed when read, and
-RisingWave is tried afterwards, as a second consumer of the same hub.
+Defined in [ADR-0006](adr/0006-monorepo-layout.md) and listed in
+[`../README.md`](../README.md). Directories are created by the milestone that
+fills them — no empty scaffolding.
 
-- [ ] Spike on the operator's machine: a NATS leaf node and a hub, the hub's
-      stream sourcing the leaf's, with the link cut and restored; nothing
-      lost, nothing duplicated
-- [x] Spike: RisingWave measured (a 768 MiB request). Not built: its
-      measurements are the evidence for ADR-0047, and arrive in ADR-0045's
-      notes with the spikes' pull request
-- [ ] In staging: the hub, one Redpanda Connect process (the synthetic
-      producer and the consumer), the `serving` database with its unlogged
-      `events` table, and the views in dbt with their contracts and tests
-      (the views, their tests and the `streaming` job since 2026-11-17, #113;
-      the manifests, with a CI job building the `serving` target on Postgres,
-      in the pull request that follows it)
-- [ ] The criteria of ADR-0047's decision 8, in staging: a restart, a cut
-      link, Postgres deleted, the table rebuilt from the hub, and 24 hours
-      of memory, the hub's size on disk and query times (memory and the hub
-      pass, read on 2026-11-18; query times did not: every view scanned the
-      whole table. Decision 8's second remedy, tables of minutes behind the
-      views (#127), kept every panel query under 0.9 s locally over 7 days
-      of events. The staging image pin (#128) and first hourly build
-      succeeded. With 26 h 41 min of live data, the slowest panel query
-      took 0.47 s in staging. Repeat when staging holds seven days of
-      events, expected on 2026-11-24; ADR-0047's notes)
-- [ ] Measure before deploying: memory of NATS and Redpanda Connect on the
-      Pi, the events' size per day in the live table and in the lake, what
-      the showcase adds to R2 (limit: 1 GB of the free tier's 10), bytes
-      written per day to the Pi's SD card
-- [ ] One Grafana in its own namespace behind Cloudflare Access, reading
-      each environment's `serving` through its own read-only role, with
-      staging's data source first; one panel per question of ADR-0045's
-      decision 5
-      (staging's built in the pull request that adds `platform/infra/grafana/`;
-      the image that grants the role pinned in staging by #119, and
-      prod's data source comes with the hub and Connect in prod)
-- [ ] Archive to the lake on a schedule, with the raw events' retention,
-      validated in staging (the hourly `streaming_archive` job, 7 days live
-      and 30 in the lake, in the pull request that adds
-      `platform/orchestration/lagom_orchestration/archive.py`, #121; its
-      image pinned in staging by #122). The archive and its re-run pass in
-      staging since 2026-11-17 (ADR-0047's notes). Still to see there: the
-      first delete from the live table, when the first archived hour turns
-      7 days old on 2026-11-24, and the bytes of a merged day
-- [ ] The Pi: Redpanda Connect and a NATS leaf node under systemd, its
-      tailnet tag and ACL, and its runbook section; it points at staging
-      first (runtime and integration tests in `platform/edge/pi/`; deployment,
-      Pi-only reconciliation and 24-hour measurements still pending, ADR-0050)
-- [ ] The hub and Connect in prod, and the Pi moved to it
-- [ ] The measurements written in the ADRs, as the source for an article on
-      what streaming needs at this load and where a stream processor would
-      pay. The article itself is written in the site's repository
-      ([ADR-0039](adr/0039-the-site-in-its-own-repository.md))
-- [ ] What the site shows of this showcase: aggregates only, under
-      ADR-0045's privacy rule (decision 11) — not decided
-
-**Memory.** With RisingWave, M6 did not fit the CI ceiling, and
-[ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)
-freed room for it. Without it (ADR-0047), prod with M6 and a whole staging
-total 5,374 of 5,632 MiB, with 258 to spare (5,246 and 386 in ADR-0047, which
-counted Grafana at 128; measured, it is requested at 256), so staging stays
-on while M6 is built ([architecture.md §11](architecture.md#11-resource-budget)). Staging
-that can be switched off comes after M6, for the room it frees to try an
-idea.
-
-- [x] Remove the `hello` Application (16 MiB), and the runbook steps that
-      use it (2026-11-16)
-- [x] Trim platform requests to what was measured: `argocd-server` at zero
-      replicas, cert-manager's controller and cainjector at 48 MiB
-      (2026-11-16)
-- [x] One run slot per environment: `maxConcurrentRuns: 1` in both Dagster
-      instances, and the budget check failing a run slot without it
-      (2026-11-16)
-- [x] Staging without its Dagster UI and its backup (2026-11-16)
-- [ ] Both Postgres at 256 MiB, once a reading taken with events being
-      written confirms it (not confirmed on 2026-11-18: 266 MiB of working
-      set in staging, so both stay at 300; ADR-0047's notes)
-- [ ] After M6 is in prod: staging on or off. Postgres hibernated and
-      Dagster removed while off; one schema-checked state file outside the
-      guarded list, operated by agents (a guardrail change, approved once by
-      the operator); the budget check counting staging as on whatever the
-      file says; the quota at the `on` total; staging's alarm on failures
-      only
-- [ ] Second phase, with its own ADR: RisingWave as a second consumer of
-      prod's hub, an experiment that runs while staging is off, the same
-      metrics compared with the views computed on read
-- Parked, by ADR-0047: the Flux spike, until a resident component for prod
-  does not fit beside a whole staging
-
+| Directory | Born in |
 ---|---|
 | `docs/` | now |
 | `platform/infra/`, `.github/` | M1 |

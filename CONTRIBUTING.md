@@ -309,8 +309,9 @@ in its own commit, with the reason stated.
 This is the most common change, and the platform is designed so it is
 configuration rather than code:
 
-1. Choose the pattern — batch goes through dlt, continuous events through
-   Redpanda Connect ([ADR-0003](docs/adr/0003-ingestion-split-dlt-benthos.md)).
+1. Choose the pattern — the platform is batch-only, so a source goes through
+   dlt ([ADR-0003](docs/adr/0003-ingestion-split-dlt-benthos.md),
+   [ADR-0052](docs/adr/0052-streaming-leaves-the-platform.md)).
 2. Declare the source config. Credentials go to the cluster secret mechanism,
    never into the repository.
 3. Add dbt models for bronze, silver, and gold, with the schema contract the

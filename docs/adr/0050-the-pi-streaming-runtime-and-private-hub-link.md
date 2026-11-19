@@ -1,6 +1,6 @@
 # ADR-0050 — The Pi streaming runtime and its private link to the hub
 
-- **Status:** Proposed; deployment requires the operator's PR approval.
+- **Status:** Superseded by [ADR-0052](0052-streaming-leaves-the-platform.md) on 2026-11-19. Until then: Proposed; deployment requires the operator's PR approval.
 - **Date:** 2026-11-17
 - **Amends:** [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), decisions 1–4 and 11, and its open implementation questions.
 - **Related:** [ADR-0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md); the processing design is unchanged.
