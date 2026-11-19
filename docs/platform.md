@@ -327,9 +327,11 @@ so it adds no request.
   easier to diagnose.
 - **Scaling.** Vertical is a Hetzner resize and one reboot. Horizontal needs
   etcd instead of SQLite (three nodes) and storage that is not pinned to a node.
-- **Restore from the bucket in a rebuild is unproven.** A restore into a new
-  `Cluster` is tested; a node rebuild that bootstraps from the bucket instead
-  of re-loading has not been run.
+- **Full DuckLake recovery is untested.** The Postgres-era drill tested a
+  node rebuild and a database restore. The current
+  [rebuild procedure](runbook.md#disaster-recovery) includes the lake files
+  and their catalog. Neither a catalog restore nor a reload from USGS has
+  been exercised end to end on a replacement DuckLake node.
 - **Some gates hold by convention for one token.** A change to a gate waits for
   the operator's approval of the `guardrail` environment, which no agent's
   token can give, and the reviewer runs from `main`. The Mac session's token

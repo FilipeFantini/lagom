@@ -846,10 +846,11 @@ alarm is stale, inspect the daemon's sensor ticks as described in
 
 ## Disaster recovery
 
-Use this procedure after losing or replacing a node. The proven path
-rebuilds from Git and reloads the USGS source. See [accepted risks](platform.md#accepted-risks)
-for the available restore paths. Confirm the sealing and Secure Shell
-(SSH) keys are available to the operator before provisioning.
+Use this procedure after losing or replacing a node. The Git bootstrap and
+USGS reload were exercised with the original Postgres pipeline
+([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). A full rebuild with DuckLake
+still needs a drill. Confirm the sealing and Secure Shell (SSH) keys are
+available before provisioning.
 
 1. [Provision the node](#provision-the-node), [join the tailnet](#join-the-tailnet)
    and apply the existing `tag:lagom-node` [policy](#tailscale-acl-and-zero-inbound-ports).
@@ -857,12 +858,21 @@ for the available restore paths. Confirm the sealing and Secure Shell
    [kubeconfig context](#operator-kubeconfig).
 3. [Install Argo CD](#install-argo-cd) and [restore the sealing key](#sealed-secrets)
    before applying the root Application.
-4. Confirm the data path before [handing over](#hand-over-to-argo-cd). A
-   fresh DuckLake catalog needs a fresh per-environment data path. If
-   another cluster exists, coordinate its shutdown or isolate its writers
-   and heartbeat checks before starting the new writers. A merge to
-   `main` affects both clusters while both reconcile it. Use explicit
-   contexts for every command in this procedure.
+4. Before [handing over](#hand-over-to-argo-cd), choose how each lake
+   comes back. To recover the old lake, restore its Postgres catalog and
+   retain the files at the paths the catalog records. To reload from USGS
+   into a fresh catalog, prepare an empty lake location per environment
+   and review both `LAGOM_LAKE_DATA_PATH` and
+   `DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL` in
+   `infra/dagster-<env>/values.yaml` together. Ensure the sealed
+   `r2-lake` writer and `r2-lake-reader` reader credentials cover that
+   location. Preserve the old prod backup archive as a restore source.
+   Give the replacement its own [archive destination](../infra/postgres-prod/objectstore.yaml)
+   and matching `r2-backups` credential. Review those targets before applying
+   the root Application, which enables scheduled writers. A merge to
+   `main` reaches both clusters while both reconcile it. During a move,
+   stop the old cluster before changing shared settings, or isolate both
+   the writers and their heartbeat checks. Use explicit contexts throughout.
 5. Verify all Applications are healthy, both Postgres Clusters are
    ready, and staging then prod succeed. Verify dbt reports zero errors,
    reconciliation passes, the [dashboard is published](#the-dashboards-publishing-path)
