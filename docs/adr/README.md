@@ -21,8 +21,8 @@ decision, consequences, and how to reverse it.
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-use-adrs.md) | Record architecture decisions in ADRs | Accepted; the Obsidian vault's role amended by 0034 |
-| [0002](0002-single-node-k3s-hetzner.md) | Single-node k3s on a Hetzner CAX11 | Accepted, partially superseded by 0021; the Pi as an agent node superseded by 0045 (proposed) |
-| [0003](0003-ingestion-split-dlt-benthos.md) | Split ingestion: dlt for batch, Redpanda Connect for events | Accepted; NATS's deferral amended by 0045 (proposed) |
+| [0002](0002-single-node-k3s-hetzner.md) | Single-node k3s on a Hetzner CAX11 | Accepted, partially superseded by 0021; the Pi as an agent node superseded by 0045, itself superseded by 0052: no Pi is part of the platform |
+| [0003](0003-ingestion-split-dlt-benthos.md) | Split ingestion: dlt for batch, Redpanda Connect for events | Accepted; NATS's deferral amended by 0045 (proposed), and standing again since 0052 |
 | [0004](0004-table-format.md) | Open table format: Iceberg preferred, Delta as fallback | Proposed, deferred by 0008 |
 | [0005](0005-duckdb-and-postgres-roles.md) | DuckDB as compute engine, Postgres as operational spine | Accepted, partially superseded by 0008 |
 | [0006](0006-monorepo-layout.md) | Monorepo layout: platform, services, products | Accepted |
@@ -60,14 +60,15 @@ decision, consequences, and how to reverse it.
 | [0038](0038-leaner-agent-gates.md) | Leaner agent gates: the guarded list is the security core, and the reviewer runs less and blocks less | Accepted; the staging mode file outside the guarded list, by 0046 |
 | [0039](0039-the-site-in-its-own-repository.md) | The site at ofantini.com lives in its own repository | Accepted; decision 2's tool amended by 0040, and where the server of the dashboards lives by 0041 |
 | [0040](0040-dbt-charts-for-the-dashboards.md) | The dashboards are written in dbt Charts, not Evidence | Accepted; decision 3 and the publishing path amended by 0041; the static page is the target again by 0042; the publishing path and decision 5 amended by 0044 |
-| [0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md) | The dashboards read a serving layer in Postgres; their server is built in its own repository | Accepted; decisions 6 and 7 superseded, and 1, 3 and 8 amended, by 0042; decision 4 amended by 0045 (proposed); `serving` created in M6 by 0047 |
-| [0042](0042-the-dashboards-return-to-dbt-charts.md) | The dashboards return to dbt Charts; the server of our own is stopped | Accepted; decision 6 settled by 0045 (proposed) |
+| [0041](0041-a-serving-layer-in-postgres-for-the-dashboards.md) | The dashboards read a serving layer in Postgres; their server is built in its own repository | Accepted; decisions 6 and 7 superseded, and 1, 3 and 8 amended, by 0042; decision 4 amended by 0045 (proposed) and `serving` created in M6 by 0047, both superseded by 0052: `serving` is not built |
+| [0042](0042-the-dashboards-return-to-dbt-charts.md) | The dashboards return to dbt Charts; the server of our own is stopped | Accepted; decision 6 settled by 0045 (proposed), then withdrawn by 0052 |
 | [0043](0043-the-dashboards-filter-in-the-browser.md) | The dashboards filter in the visitor's browser: a static page drawn with Vega-Lite | Rejected; its spike's measurements stand |
 | [0044](0044-per-job-credentials-and-the-dashboards-publishing-path.md) | Credentials per job, and the path the dashboards take to be published | Accepted; decisions 1 to 6 built in #80, 7 to 9 in the dashboards' render |
-| [0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) | The streaming showcase: a Raspberry Pi outside the cluster, NATS JetStream as the log, RisingWave measured first | Proposed; RisingWave's request, decision 9, shared components and the archive's validation amended by 0046; decision 6 superseded, and decisions 3, 7, 8 and 9 amended, by 0047 |
-| [0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) | Memory for streaming: a lean staging on demand, one Grafana, one run slot per environment | Accepted (#101); being built; the four modes of decisions 1 and 2 and decision 9 superseded, and decisions 4, 7 and 8 amended, by 0047 |
-| [0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) | Streaming without a stream processor: events in Postgres, and a staging that is on or off | Accepted (#106); being built |
+| [0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) | The streaming showcase: a Raspberry Pi outside the cluster, NATS JetStream as the log, RisingWave measured first | Superseded by 0052 (was Proposed; amended by 0046 and 0047) |
+| [0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) | Memory for streaming: a lean staging on demand, one Grafana, one run slot per environment | Accepted (#101); built; what it made for streaming (decisions 1 and 2's modes, 4, 7, 9) superseded or amended by 0047 and 0052; decisions 5, 6 and 8 and the lean staging stand |
+| [0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) | Streaming without a stream processor: events in Postgres, and a staging that is on or off | Superseded by 0052 (was Accepted, #106) |
 | [0048](0048-dependency-and-code-scanning-for-the-public-repository.md) | Dependency and code scanning for the public repository: Dependabot, CodeQL, pinned actions, approval for outside contributors' CI | Accepted; Decision 2 superseded by 0049 |
 | [0049](0049-the-reviewer-runs-on-dependabots-pull-requests.md) | The reviewer runs on Dependabot's pull requests: the action allows `dependabot[bot]`, and no Dependabot secret | Accepted |
-| [0050](0050-the-pi-streaming-runtime-and-private-hub-link.md) | The Pi streaming runtime and its private link to the hub | Proposed; deployment requires the operator's PR approval |
+| [0050](0050-the-pi-streaming-runtime-and-private-hub-link.md) | The Pi streaming runtime and its private link to the hub | Superseded by 0052 (was Proposed) |
 | [0051](0051-handoff-to-another-provider-through-t3-code.md) | Handing off to another provider through T3 Code, on the Mac | Proposed |
+| [0052](0052-streaming-leaves-the-platform.md) | The streaming showcase leaves the platform | Accepted; supersedes 0045, 0047 and 0050, amends 0046 and 0042 (decision 6) |

@@ -11,8 +11,3 @@ max_line_length = 100
 # of the columns (magnitude next to magnitude_class), not the kind of
 # expression, and reordering it changes no result. Every other rule is on.
 exclude_rules = structure.column_order
-
-[sqlfluff:templater:jinja]
-# The streaming models call the project's own macros (macros/streaming/), so
-# the templater loads them: the SQL they render into a model is linted with it.
-load_macros_from_path = macros

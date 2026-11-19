@@ -1,6 +1,6 @@
 # ADR-0047 — Streaming without a stream processor: events in Postgres, and a staging that is on or off
 
-- **Status:** Accepted (#106, merged 2026-11-16). Taken by the operator in conversation on 2026-11-16:
+- **Status:** Superseded by [ADR-0052](0052-streaming-leaves-the-platform.md) on 2026-11-19. Until then: Accepted (#106, merged 2026-11-16). Taken by the operator in conversation on 2026-11-16:
   the essential pipeline first, with no stream processor in it; a staging
   that can be hibernated, in two states, so that the node has room to try an
   idea; an events table that a crash may empty, which a personal project
@@ -705,3 +705,6 @@ measured, without rewriting it.
   The slowest individual run took 466.50 ms. The seven-day result is still
   pending. With continuous ingestion, staging will first hold a full week
   on November 24. Repeat the same queries once that data is present.
+- **2026-11-19 — superseded.** The showcase this ADR built and measured was
+  removed by [ADR-0052](0052-streaming-leaves-the-platform.md). The notes above are what it measured and passed, kept as
+  the record.

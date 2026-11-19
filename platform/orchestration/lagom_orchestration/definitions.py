@@ -4,17 +4,13 @@ Every service's assets plus the dbt project, whose models become assets
 downstream of the sources they read. One job loads and builds, every 30
 minutes; another keeps DuckLake compact, daily; a third renders the
 dashboards and publishes them, after each successful pipeline run
-(lagom_orchestration/dashboards.py). In an environment with the streaming
-showcase, a fourth builds and tests its views in `serving`, hourly, and a fifth
-archives its events to the lake, hourly (lagom_orchestration/archive.py). Two
-sensors raise the alarm through Healthchecks.io (lagom_orchestration/alarm.py).
+(lagom_orchestration/dashboards.py). Two sensors raise the alarm through
+Healthchecks.io (lagom_orchestration/alarm.py).
 
 Paths are relative to the repository layout, which the image keeps under /app.
 """
 
-import os
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +31,6 @@ from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from services.usgs.assets import usgs_events
 
 from lagom_orchestration.alarm import build_alarm_sensors
-from lagom_orchestration.archive import archive_from_environment
 from lagom_orchestration.dashboards import build_render_trigger, memory_peak_mib, run_dashboards
 from lagom_orchestration.lake import attach_lake, grant_reader_access, run_maintenance
 
@@ -195,101 +190,6 @@ def lake_maintenance() -> None:
     grant_lake_reader()
 
 
-# The streaming showcase's views (ADR-0047, decision 3), in the database
-# `serving` of the run's own environment, as its owner `serving`
-# (postgres-<env>/cluster.yaml). `dbt build` on the `serving` target creates
-# the live table if it is missing (macros/create_live_events.sql), creates the
-# views, checks their contracts, and runs their tests; the test that the last
-# hour holds its events is what makes an emptied table raise the alarm. Only
-# this Secret: no lake owner, no R2 token. `postgres-rw` is the Cluster's
-# read-write Service in the Pod's namespace.
-SERVING_ENV = [
-    _secret_env("LAGOM_PG_USER", "serving-credentials", "username"),
-    _secret_env("LAGOM_PG_PASSWORD", "serving-credentials", "password"),
-    {"name": "LAGOM_PG_HOST", "value": "postgres-rw"},
-    {"name": "LAGOM_PG_PORT", "value": "5432"},
-    {"name": "LAGOM_PG_DBNAME", "value": "serving"},
-    {"name": "LAGOM_PG_SSLMODE", "value": "require"},
-]
-# No pipeline tag: the job touches neither dlt's cursor nor the lake. It
-# still waits its turn in the one run slot (maxConcurrentRuns: 1 in the
-# environment's values), so the budget's one run per environment holds.
-STREAMING_TAGS = {
-    "dagster-k8s/config": {"container_config": {"resources": RUN_RESOURCES, "env": SERVING_ENV}},
-}
-
-
-@op
-def build_live_views(dbt_serving: DbtCliResource) -> None:
-    """`dbt build` on `serving`: the live table if missing, the views, contracts and tests."""
-    dbt_serving.cli(["build"], target_path=DBT_TARGET_PATH / "serving").wait()
-
-
-@job(tags=STREAMING_TAGS)
-def streaming() -> None:
-    build_live_views()
-
-
-# The archive of the showcase's events (ADR-0045 decision 7, ADR-0047
-# decision 6): it reads and deletes in `serving`, as its owner, and writes the
-# lake, as the catalog's owner with the R2 write token. So it holds both sets:
-# the writers' Secrets without dlt's variables, which it does not use, and the
-# `serving` owner's. No pipeline tag: it touches neither dlt's cursor nor
-# the lake's USGS tables, and waits its turn in the one run slot.
-ARCHIVE_ENV = [
-    *(e for e in WRITER_ENV if not e["name"].startswith("DESTINATION__")),
-    *SERVING_ENV,
-]
-ARCHIVE_TAGS = {
-    "dagster-k8s/config": {"container_config": {"resources": RUN_RESOURCES, "env": ARCHIVE_ENV}},
-}
-
-
-@op
-def archive_events(context: OpExecutionContext) -> None:
-    """Copy the closed hours of `live.events` to the lake; delete what is confirmed and expired."""
-    report = archive_from_environment(datetime.now(UTC))
-    for window in report.windows:
-        context.log.info(window.describe())
-    if not report.windows:
-        context.log.info("no window to archive or delete")
-    archived = sum(w.inserted for w in report.windows)
-    deleted = sum(w.deleted for w in report.windows)
-    days = ", ".join(f"{day} {size:,} B" for day, size in report.bytes_by_day.items())
-    context.log.info(
-        f"{len(report.windows)} window(s): {archived} rows archived, {deleted} deleted from the "
-        f"live table, {report.lake_deleted} deleted from the lake by its retention; the lake "
-        f"holds {report.lake_rows} rows in {report.lake_bytes:,} bytes of Parquet ({days})"
-    )
-    peak = memory_peak_mib()
-    context.log.info(
-        "memory peak of the run's container: "
-        + (f"{peak:.0f} MiB" if peak is not None else "not reported by the kernel")
-    )
-
-
-@job(tags=ARCHIVE_TAGS)
-def streaming_archive() -> None:
-    archive_events()
-
-
-# Whether this environment has the streaming showcase: its hub, its writer and
-# the database `serving`. Set in the environment's values.yaml, not in code,
-# because one image serves both environments and prod gets the showcase last
-# (ADR-0047). Anything but "true" or "false" stops the code location: a typo
-# must not silently drop the job and its alarm.
-STREAMING_VAR = "LAGOM_STREAMING"
-
-
-def streaming_enabled() -> bool:
-    value = os.environ.get(STREAMING_VAR, "false")
-    if value not in {"true", "false"}:
-        raise RuntimeError(f"{STREAMING_VAR} must be 'true' or 'false', not {value!r}")
-    return value == "true"
-
-
-STREAMING = streaming_enabled()
-
 defs = Definitions(
     assets=[usgs_events, warehouse, pages],
     # Every step in the run's own process. The default executor starts each
@@ -301,7 +201,6 @@ defs = Definitions(
         usgs_job,
         lake_maintenance,
         dashboards_job,
-        *([streaming, streaming_archive] if STREAMING else []),
     ],
     schedules=[
         # Every 30 minutes, as the CronJob: USGS publishes ~9 events an hour.
@@ -318,38 +217,11 @@ defs = Definitions(
             execution_timezone="UTC",
             default_status=DefaultScheduleStatus.RUNNING,
         ),
-        # Hourly, away from the pipeline's half hours: a run takes the one
-        # slot for about a minute.
-        *(
-            [
-                ScheduleDefinition(
-                    job=streaming,
-                    cron_schedule="45 * * * *",
-                    execution_timezone="UTC",
-                    default_status=DefaultScheduleStatus.RUNNING,
-                ),
-                # Hourly, 20 minutes past: the hour before is closed (archive.py,
-                # GRACE), and the slot is free between the pipeline's half hours.
-                ScheduleDefinition(
-                    job=streaming_archive,
-                    cron_schedule="20 * * * *",
-                    execution_timezone="UTC",
-                    default_status=DefaultScheduleStatus.RUNNING,
-                ),
-            ]
-            if STREAMING
-            else []
-        ),
     ],
     # Reads HEARTBEAT_URL now: without it the code location does not load
     # (ADR-0033). It is the one variable the code location needs to load, so
     # it stays in the code server's environment, which every run inherits:
     # run Pods import this module too.
     sensors=[*build_alarm_sensors(usgs_job), build_render_trigger(usgs_job, dashboards_job)],
-    resources={
-        "dbt": DbtCliResource(project_dir=warehouse_project),
-        "dbt_serving": DbtCliResource(
-            project_dir=str(WAREHOUSE), profiles_dir=str(WAREHOUSE), target="serving"
-        ),
-    },
+    resources={"dbt": DbtCliResource(project_dir=warehouse_project)},
 )
