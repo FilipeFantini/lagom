@@ -8,6 +8,11 @@ kind: Application
 metadata:
   name: grafana
   namespace: argocd
+  # Streaming removal, step 1: with this finalizer, deleting the Application
+  # deletes what it deployed. Without it Argo CD would delete only the
+  # Application and leave its workloads running. Step 2 deletes the file.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:

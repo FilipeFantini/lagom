@@ -169,6 +169,11 @@ spec:
       volumes:
         - name: config
           configMap: {name: nats-hub}
+  # Streaming removal, step 1: the claim goes with the StatefulSet when step 2
+  # deletes it, instead of outliving it.
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Retain
   volumeClaimTemplates:
     - metadata:
         name: data
