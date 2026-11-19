@@ -1,5 +1,5 @@
 # local-path-provisioner: the storage class every Postgres volume uses,
-# reconciled from platform/infra/local-path/. Replaces the k3s addon
+# reconciled from infra/local-path/. Replaces the k3s addon
 # (ADR-0021).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/FilipeFantini/lagom.git
     targetRevision: main
-    path: platform/infra/local-path
+    path: infra/local-path
   destination:
     server: https://kubernetes.default.svc
     namespace: local-path-storage

@@ -15,7 +15,7 @@ spec:
       helm:
         releaseName: metrics-server
         valueFiles:
-          - $values/platform/infra/metrics-server/values.yaml
+          - $values/infra/metrics-server/values.yaml
     - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values

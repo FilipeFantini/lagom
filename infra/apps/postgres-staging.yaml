@@ -1,5 +1,5 @@
 # The staging Postgres: one CloudNativePG Cluster mirroring prod's, plus the
-# developer's role and database, reconciled from platform/infra/postgres-staging/.
+# developer's role and database, reconciled from infra/postgres-staging/.
 # See ADR-0007 and ADR-0014.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/FilipeFantini/lagom.git
     targetRevision: main
-    path: platform/infra/postgres-staging
+    path: infra/postgres-staging
   destination:
     server: https://kubernetes.default.svc
     namespace: staging

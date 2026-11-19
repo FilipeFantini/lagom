@@ -1,6 +1,6 @@
 """Resource budget check for everything Argo CD applies to the cluster.
 
-Renders every Application in platform/infra/apps/ the way Argo CD does, then
+Renders every Application in infra/apps/ the way Argo CD does, then
 enforces engineering-protocol.md §16.5:
 
 1. Every container, init containers included, declares a memory request, a
@@ -337,10 +337,10 @@ def render_application(repo: Path, app: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def load_applications(repo: Path) -> list[dict[str, Any]]:
-    """Every Argo CD Application in platform/infra/apps/, in file order."""
+    """Every Argo CD Application in infra/apps/, in file order."""
     return [
         doc
-        for app_file in sorted((repo / "platform/infra/apps").glob("*.y*ml"))
+        for app_file in sorted((repo / "infra/apps").glob("*.y*ml"))
         for doc in _load_yaml(app_file.read_text())
         if doc.get("kind") == "Application"
     ]

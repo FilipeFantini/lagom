@@ -18,7 +18,7 @@ secrets.yaml
 !*-sealed.yaml
 
 # dlt — a pattern containing a slash is anchored to the repository root, so
-# **/ is what makes these match inside services/<name>/ too
+# **/ is what makes these match inside data/sources/<name>/ too
 **/.dlt/secrets.toml
 **/.dlt/*.duckdb
 

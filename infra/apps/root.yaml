@@ -1,17 +1,6 @@
 # The root Application: Argo CD watches infra/apps/ and creates every
 # Application it finds there, including this one. Applied once by hand at
 # bootstrap (see the runbook); from then on, changes to it arrive by commit.
-#
-# TRANSITIONAL (repository layout move, platform/infra/ -> infra/): the
-# Applications are declared twice for a short while, in infra/apps/ (this
-# directory) and in platform/infra/apps/, byte for byte the same files. The
-# cluster's root reads one of them, and either gives the same cluster, because
-# both declare the same Applications by name. Root was reading the old
-# directory; once it reads this revision it re-points itself here, and the
-# next change deletes the old directory. Moving the directory and root's path
-# in a single commit would make Argo CD read the new revision at the old path,
-# find nothing and stop, and only a manual `kubectl apply` could recover it.
-# tools/tests/test_transitional_apps.py fails if the two copies differ.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

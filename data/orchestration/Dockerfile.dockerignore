@@ -1,0 +1,18 @@
+# The build context is the repository root; send only what the Dockerfile copies.
+*
+!data/orchestration/pyproject.toml
+!data/orchestration/uv.lock
+!data/orchestration/lagom_orchestration/
+!data/sources/usgs/ingestion/
+!data/sources/usgs/assets/
+!data/warehouse/dbt_project.yml
+!data/warehouse/profiles.yml
+!data/warehouse/macros/
+!data/warehouse/models/
+!data/warehouse/tests/
+!data/dashboards/dbt_charts.yml
+!data/dashboards/profiles.yml
+!data/dashboards/check_boards.py
+!data/dashboards/charts/
+!data/dashboards/partials/
+**/__pycache__

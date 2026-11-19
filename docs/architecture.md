@@ -106,10 +106,10 @@ changes the cluster until they match. A manual change in the cluster is undone
 on the next pass (`selfHeal`); an object removed from Git is deleted from the
 cluster (`prune`).
 
-**App of apps.** A `root` Application watches `platform/infra/apps/` and creates
+**App of apps.** A `root` Application watches `infra/apps/` and creates
 every Application found there; each Application points at a directory or a Helm
 chart. Argo CD manages itself the same way, from a pinned upstream chart and
-[`platform/infra/argocd/values.yaml`](../platform/infra/argocd/values.yaml). It
+[`infra/argocd/values.yaml`](../infra/argocd/values.yaml). It
 reads this public repository anonymously over HTTPS. See
 [ADR-0009](adr/0009-argocd-bootstrap-and-self-management.md) and
 [ADR-0017](adr/0017-public-repository-from-a-snapshot.md).
@@ -142,7 +142,7 @@ It integrates natively with Dagster, so each pipeline becomes an asset with
 lineage and no glue code.
 
 The `rest_api` config lives in a YAML file next to the pipeline, loaded with
-`yaml.safe_load`. The first source is [`services/usgs`](../services/usgs/README.md).
+`yaml.safe_load`. The first source is [`data/sources/usgs`](../data/sources/usgs/README.md).
 
 ## 5. Storage — Postgres now, open table format by trigger
 
@@ -188,7 +188,7 @@ Layers: bronze (raw, typed), silver (cleaned, conformed), gold (modelled for
 consumption). Each layer's guaranteed schema is a contract — see
 [`engineering-protocol.md`](engineering-protocol.md) §16.3.
 
-**The project** is `platform/warehouse/`. For USGS, silver is
+**The project** is `data/warehouse/`. For USGS, silver is
 `stg_usgs__events` (the latest revision of each event, typed, times in UTC) and
 gold is `fct_earthquakes` (earthquakes only, with magnitude and depth classes —
 the USGS showcase's main table) and `agg_earthquakes_daily_region`. Both gold models have an
@@ -197,7 +197,7 @@ accepted values; reconciliation of row counts between the layers
 (`tests/reconcile_*.sql`); and unit tests of the dedup, the region parsing and
 the class boundaries. Freshness of bronze (warn 2 h, error 6 h) is checked by
 `dbt source freshness`. CI lints and parses the project but runs no model: how
-to run it is in [`platform/warehouse/README.md`](../platform/warehouse/README.md).
+to run it is in [`data/warehouse/README.md`](../data/warehouse/README.md).
 
 ## 7. Orchestration — Dagster
 
@@ -210,8 +210,8 @@ that environment's Postgres, backed up with it. Runs are Kubernetes Jobs in
 the same namespace, so staging never reaches prod.
 
 **One code location for the platform**, the image `lagom-orchestration`
-([`platform/orchestration/`](../platform/orchestration/README.md)). It holds
-each service's assets (`services/<service>/assets/`) and the dbt project,
+([`data/orchestration/`](../data/orchestration/README.md)). It holds
+each source's assets (`data/sources/<source>/assets/`) and the dbt project,
 whose models dagster-dbt turns into assets downstream of the sources they
 read. Its first content is USGS on DuckLake:
 
@@ -225,7 +225,7 @@ read. Its first content is USGS on DuckLake:
 
 **One run at a time per environment**, of any job: the run queue starts a run
 only when the one before it has ended (`maxConcurrentRuns: 1` in
-`platform/infra/dagster-<env>/values.yaml`), because the budget in §11 counts
+`infra/dagster-<env>/values.yaml`), because the budget in §11 counts
 one run's memory per environment
 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)).
 A new batch source takes turns in that slot. Two `usgs` runs are also kept
@@ -237,7 +237,7 @@ sensor pings it after each successful `usgs` run, and another calls its
 `/fail` with the error when any run fails. A password inside that error is
 removed first: DuckDB echoes the catalog URI, and the body is stored and
 e-mailed by Healthchecks.io. The sensors are in the code
-location ([`alarm.py`](../platform/orchestration/lagom_orchestration/alarm.py)).
+location ([`alarm.py`](../data/orchestration/lagom_orchestration/alarm.py)).
 **They are live in both environments, and the CronJobs on Postgres are
 retired** (2026-11-07: removed from Git, then deleted by hand, since the
 `postgres-<env>` Applications never prune; runbook: *Retire a manifest from
@@ -251,7 +251,7 @@ environment into every run Pod, so that environment holds only what loading
 the definitions needs (`HEARTBEAT_URL`) and the settings that are not secret
 (the bucket, the schema). The catalog owner's connection string and the R2
 write token are named in each job's `dagster-k8s/config` tag
-(`WRITER_ENV` in [`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)),
+(`WRITER_ENV` in [`definitions.py`](../data/orchestration/lagom_orchestration/definitions.py)),
 which dagster-k8s adds to the code server's variables when it builds the Pod.
 A Secret is per namespace, so the same name gives staging's value in staging and
 prod's in prod. `usgs` and `lake_maintenance` hold the same credentials as before; a
@@ -297,7 +297,7 @@ when its backup went
 runbook's *Backup and restore*. cert-manager issues the TLS certificates the plugin and
 the operator use.
 
-**Credentials.** The prod `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml))
+**Credentials.** The prod `Cluster` ([`infra/postgres-prod/`](../infra/postgres-prod/cluster.yaml))
 creates the `lagom` database and role, and the operator generates that role's
 password into the Secret `postgres-app` in the `prod` namespace. Nothing is
 sealed or committed to Git. Consumers read their credentials from that Secret
@@ -338,7 +338,7 @@ is published as files. A server of our own was designed and stopped
 | Tool | Role | RAM on the node | Enters when |
 |---|---|---|---|
 | **Astro** | the site at ofantini.com: pages, copy, the gallery of showcases. It lives in its own repository, `FilipeFantini/ofantini.com`, and links to the dashboards by URL ([ADR-0039](adr/0039-the-site-in-its-own-repository.md)) | 0 (static, Cloudflare Pages) | M4 |
-| **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check are in `products/dashboards/`; the job `dashboards` renders and publishes them, built but not yet run in the cluster ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md), [ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) | 0 resident (a render is about 0.5 GiB at its peak on the CI fixture, in the built image, 2026-11-14) | M4 |
+| **dbt Charts** | the dashboards: boards in YAML over SQL on gold, rendered to static HTML. The boards and their CI check are in `data/dashboards/`; the job `dashboards` renders and publishes them, built but not yet run in the cluster ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md), [ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) | 0 resident (a render is about 0.5 GiB at its peak on the CI fixture, in the built image, 2026-11-14) | M4 |
 | **Streamlit** | interactive apps | 200–250 MB | an app a static page cannot serve |
 
 **How a dashboard reaches a visitor**
@@ -386,7 +386,7 @@ pre-1.0 and it is pinned. It replaced Evidence on 2026-11-10 after a trial
 beside the Python one). It is built for reviewed reports, not ad-hoc
 exploration, and the page `dct render` makes is static: no in-page filters,
 search or map zoom. Its render exits 0 on a query that returns nothing, so CI checks every
-column of every query a board draws against gold ([`products/dashboards/`](../products/dashboards/README.md)).
+column of every query a board draws against gold ([`data/dashboards/`](../data/dashboards/README.md)).
 
 Two cautions: the data is **embedded in the page**, and the page has **no
 authentication and no row-level security**. A public showcase therefore
@@ -404,8 +404,8 @@ Three, decided in [ADR-0007](adr/0007-three-environments.md).
 | Environment | Where | What runs there |
 |---|---|---|
 | `dev` | code on the operator's machine, data in staging | dbt and dlt run from the machine's `uv` environments against the `lagom_dev` database in staging's Postgres, through `kubectl port-forward` over the tailnet; unit tests need no database; manifests are checked with a server-side dry run ([ADR-0014](adr/0014-develop-against-staging.md)); agents use `kubectl diff -n <namespace> -f`, since `apply` is denied to them ([CONTRIBUTING](../CONTRIBUTING.md#workflow)) |
-| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07. A NetworkPolicy on staging's Postgres admits only `staging` and the CloudNativePG operator |
-| `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`platform/infra/dagster-prod/`](../platform/infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
+| `staging` | namespace on the node | own Postgres `Cluster` mirroring prod's configuration, holding two databases: `lagom` for staging's pipeline and `lagom_dev` for the developer, who cannot connect to `lagom`; own secrets; no backup since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md): prod's is the protection); a ResourceQuota (2432Mi of memory requests, 4608Mi of limits, 10 Pods; the arithmetic is in `quota.yaml`) and a LimitRange ([`infra/postgres-staging/`](../infra/postgres-staging/)); **its own Dagster** ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), superseding ADR-0007's "no Dagster in staging"): daemon and the platform's code location, with no UI since 2026-11-16 (its webserver at zero replicas, [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)), with its metadata in the database `dagster` of staging's Postgres, running USGS on DuckLake and raising staging's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Staging's CronJob on Postgres was retired on 2026-11-07. A NetworkPolicy on staging's Postgres admits only `staging` and the CloudNativePG operator |
+| `prod` | namespace on the node | the full stack: its Postgres `Cluster` ([`infra/postgres-prod/`](../infra/postgres-prod/)), and its own Dagster with the database `dagster` in that Postgres, running the image staging ran, promoted by digest ([`infra/dagster-prod/`](../infra/dagster-prod/values.yaml)), raising prod's alarm through Healthchecks.io ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)). Prod's CronJob on Postgres was retired on 2026-11-07 |
 
 The namespace, the Postgres volume, the secrets and the quota are permanent,
 and prod's NetworkPolicy keeps denying staging, so the four conditions below
@@ -432,8 +432,8 @@ repository's own images need a digest); what it does not check is in
 
 **Images.** One, built by [`images.yml`](../.github/workflows/images.yml) on a
 native arm64 runner: `ghcr.io/filipefantini/lagom-orchestration`, the Dagster
-code location, [`platform/orchestration/Dockerfile`](../platform/orchestration/Dockerfile).
-It is built from the repository root and bundles every service's code and the
+code location, [`data/orchestration/Dockerfile`](../data/orchestration/Dockerfile).
+It is built from the repository root and bundles every source's code and the
 dbt project. Until 2026-11-07 two more were built, `lagom-usgs` (dlt) and
 `lagom-warehouse` (`dbt build`), for the CronJobs on Postgres; they were
 retired with them ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)).
@@ -530,7 +530,7 @@ tool (`/dagster`; `/dagster-staging` until staging's UI was
 removed on 2026-11-16), so a new tool needs no DNS or Access
 change; each tool serves itself under its path. What the tunnel serves is the
 list of rules in
-[`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml); any
+[`cloudflared/config.yaml`](../infra/cloudflared/config.yaml); any
 other hostname or path gets a 404. `cloudflared` also checks the token Access signs
 after login, so a request that did not pass the login is refused even if the
 Access application is misconfigured.
@@ -562,7 +562,7 @@ validates a JWT and mints the URL on demand.
 
 **How the read-only role is built.** Each `Cluster` declares a group role,
 `gold_reader`: NOLOGIN, so it cannot connect, and no attribute beyond the
-default. Its privileges come from dbt (`platform/warehouse/dbt_project.yml`),
+default. Its privileges come from dbt (`data/warehouse/dbt_project.yml`),
 which grants `SELECT` on every gold model and `USAGE` on the `gold` schema each
 time it builds one, since a rebuilt table loses the grants of the one it
 replaces; a missing role fails the build. The CronJobs that built gold on
@@ -578,7 +578,7 @@ default of 8 workers, each on its own connection, failed the first staging run
 with "too many connections for role" (2026-11-15).
 The read-only R2 token comes with the dashboards' render. A data test checks the outcome in the
 catalogue: gold readable, bronze and silver not, nothing writable
-([warehouse README](../platform/warehouse/README.md)). A consumer gets its own login role inside that group
+([warehouse README](../data/warehouse/README.md)). A consumer gets its own login role inside that group
 (`inRoles: [gold_reader]` in the `Cluster`, with its own sealed password), so
 each one is revoked alone. No consumer exists yet, so no login role does.
 
@@ -701,8 +701,8 @@ adds that 70 MiB request as its allowance for components outside Git.
 | Argo CD (no Dex, no UI) | 544 MB | set from measurement with three Applications: application-controller 290–465 MiB before `GOMEMLIMIT`, 190–285 MiB after (request 384, limit 640, `GOMEMLIMIT` 540MiB), repo-server ~105, redis ~10 ([ADR-0009](adr/0009-argocd-bootstrap-and-self-management.md)). `argocd-server` (~37 measured, 64 requested) runs at zero replicas since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)) |
 | CloudNativePG operator | 64 MB | measured 24 MiB with no Cluster, 31 MiB reconciling one (request 64, limit 192, `GOMEMLIMIT` 150MiB) ([ADR-0012](adr/0012-cloudnative-pg.md)) |
 | Backup: Barman Cloud plugin and cert-manager | 160 MB | plugin 32, cert-manager controller 48, cainjector 48, webhook 32; each with `GOMEMLIMIT`; measured idle on 2026-10-28: 19, 34, 31 and 17 MiB, and on 2026-11-16 the cert-manager three at 39, 35 and 22, from which the controller and cainjector came down from 64 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)). Each backed-up Postgres instance adds a 64 MiB sidecar (18 MiB measured during a base backup), counted with its Cluster |
-| Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`platform/infra/postgres-prod/`](../platform/infra/postgres-prod/cluster.yaml)) |
-| Dagster | 800 MB | in prod; staging 640, its webserver at zero replicas since 2026-11-16 ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../platform/orchestration/lagom_orchestration/definitions.py)) |
+| Postgres (prod `Cluster`, 1 instance) | 364 MB | 300 for Postgres plus 64 for the backup sidecar. Postgres: request 300 MiB, limit 512 MiB; `shared_buffers` 96MB, `max_connections` 25, `work_mem` 4MB, `maintenance_work_mem` 32MB, `effective_cache_size` 256MB, instance manager `GOMEMLIMIT` 96MiB. Measured idle on 2026-10-16: pod working set 47 MiB, cgroup 55 MiB (25 anonymous, 25 page cache), instance manager ~62 MiB RSS including shared pages. The request is kept for dbt load, measured in M2. Counted by the CI check, which reads the `Cluster` object because the operator creates its Pods ([`infra/postgres-prod/`](../infra/postgres-prod/cluster.yaml)) |
+| Dagster | 800 MB | in prod; staging 640, its webserver at zero replicas since 2026-11-16 ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md), [ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): webserver 160, daemon 320 and code server 320 MiB of requests, plus each run as an ephemeral job of 768, declared on its Application. Measured in staging by the kubelet: over an hour of runs on 2026-10-28, webserver 127–141, daemon 104–206 and code server 203–291 MiB; after seven days, on 2026-11-05, 138, 263 and 258 MiB. The daemon grows with uptime and is watched. A run peaked at 699 and 674 MiB, during `dbt build` (6–8 samples each, so the true peak may be higher), when each step still ran in a second Python process; its limit is 1 GiB. With steps in one process (image d6716cc), on 2026-11-05: 623, 631 and 640 MiB in staging; 550 MiB in prod's first run, which loaded 30 days (10,042 events), and 442 in its next. The request stays at 768: the samples are 2–15 s apart and miss short peaks, and lowering it by 64–128 MiB would need a new image. A run's resources are a tag on each job in the code location, since a run would otherwise inherit the code server's; runs execute their steps in one process ([`definitions.py`](../data/orchestration/lagom_orchestration/definitions.py)) |
 | `cloudflared` | 48 MB | the tunnel that serves the operator's UIs behind Cloudflare Access, both environments ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)): request 48 MiB, limit 128 MiB, `GOMEMLIMIT` 100MiB. Measured 24 MiB at start and 31 MiB a few minutes later, on 2026-11-07, idle (Cloudflare's figure is ~30 MB); the request is re-set from `kubectl top` after a week |
 | **Core requests** | **~2.2 GB** | |
 | **Left within the ceiling for ephemeral jobs** | **~3.4 GB** | |
@@ -711,7 +711,7 @@ Staging adds ~0.94 GB:
 
 - its own Postgres, 300 MB ([ADR-0007](adr/0007-three-environments.md)): a
   second `Cluster` with the same request and limit as prod's
-  ([`platform/infra/postgres-staging/`](../platform/infra/postgres-staging/cluster.yaml)),
+  ([`infra/postgres-staging/`](../infra/postgres-staging/cluster.yaml)),
   with no backup sidecar since 2026-11-16;
 - its own Dagster, 640 MB: daemon and code server, with no webserver since
   2026-11-16.

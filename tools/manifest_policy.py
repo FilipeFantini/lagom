@@ -1,6 +1,6 @@
 """Manifest policy check for everything Argo CD applies to the cluster.
 
-Reads every Application in platform/infra/apps/ and renders it the way Argo CD
+Reads every Application in infra/apps/ and renders it the way Argo CD
 does (the rendering is resource_budget.py's), then enforces four rules (roadmap
 Track G). Each turns something a reviewer must remember into a CI gate:
 
@@ -37,7 +37,7 @@ What it does not check:
   args or environment variables.
 - Any other Application field: selfHeal, project, syncOptions, destination.
   Prune is checked for being explicit, not for being the right value.
-- Kinds other than Application in platform/infra/apps/ (an ApplicationSet is
+- Kinds other than Application in infra/apps/ (an ApplicationSet is
   ignored), and Applications created outside that directory.
 - Chart contents beyond the rendered manifests, and anything helm template
   cannot see without a cluster (lookup, the cluster's API versions).
@@ -170,7 +170,7 @@ def check(repo: Path) -> tuple[list[str], list[str], int, int]:
     unrendered: list[str] = []
     images = 0
     if not apps:
-        problems.append(f"no Application found in {repo / 'platform/infra/apps'}")
+        problems.append(f"no Application found in {repo / 'infra/apps'}")
     for app in apps:
         name = app["metadata"]["name"]
         problems += prune_violations(app)

@@ -194,23 +194,24 @@ a proven functional failure.
 ## 10. More than one harness
 
 Only Claude Code reads the deny rules in
-[`.claude/settings.json`](.claude/settings.json). An agent on another harness
-runs in that harness's sandbox with network off for its commands — for Codex,
-`workspace-write` with `network_access` off, which also keeps `.git` read-only,
-so it cannot commit — and edits its checkout and nothing else. A session
-outside the sandbox (the operator's Claude Code session, or the operator) reads
-the diff, commits, pushes, opens the pull request, and merges under §6. A
-harness with no sandbox is not used. Never turn the sandbox off or hand an
-agent a credential to get around it — ask the operator instead
-([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
+[`.claude/settings.json`](.claude/settings.json). **No agent runs in a sandbox
+today.** An agent on another harness (Codex, Antigravity, through T3 Code) runs
+on the Mac with the operator's authorisation and network, as described below.
+A sandboxed agent would run in that harness's sandbox with network off for its
+commands — for Codex, `workspace-write` with `network_access` off, which also
+keeps `.git` read-only, so it cannot commit — and edit its checkout and nothing
+else; a session outside the sandbox (the operator's Claude Code session, or the
+operator) would read the diff, commit, push, open the pull request, and merge
+under §6. A harness that is neither sandboxed nor run as below is not used.
+Never turn a sandbox off or hand an agent a credential to get around it — ask
+the operator instead ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
 
-**The handoff through T3 Code** is the exception, for one agent at a time
-when Claude's limit is reached: Codex or Antigravity may run on the Mac
-without that sandbox, under the operator's accounts, and commit, push, open
-and merge pull requests under §6. It never runs a command
-`.claude/settings.json` denies, even where its harness does not enforce it,
-never changes a ruleset or environment or approves `guardrail`, and never
-opens SSH to the node.
+**Other harnesses, through T3 Code**, one agent at a time when Claude's limit is
+reached: Codex or Antigravity run on the Mac, under the operator's accounts, and
+commit, push, open and merge pull requests under §6. They never run a command
+`.claude/settings.json` denies, even where their harness does not enforce it,
+never change a ruleset or environment or approve `guardrail`, and never open
+SSH to the node.
 Before handing off, the architect session leaves the status in the
 repository — roadmap, ADR notes, the open pull request's body — and the next
 agent starts from there

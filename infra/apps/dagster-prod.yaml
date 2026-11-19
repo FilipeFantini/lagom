@@ -9,7 +9,7 @@ metadata:
     # Each run is a Pod the run launcher creates at run time, so nothing
     # rendered from this Application shows it. tools/resource_budget.py counts
     # this request as one ephemeral job. The run's resources are a tag in the
-    # code location (RUN_RESOURCES in platform/orchestration/lagom_orchestration/
+    # code location (RUN_RESOURCES in data/orchestration/lagom_orchestration/
     # definitions.py), so they travel with the image; its tests fail if this
     # figure differs.
     lagom.dev/ephemeral-memory-request: 768Mi
@@ -22,7 +22,7 @@ spec:
       helm:
         releaseName: dagster
         valueFiles:
-          - $values/platform/infra/dagster-prod/values.yaml
+          - $values/infra/dagster-prod/values.yaml
     - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values

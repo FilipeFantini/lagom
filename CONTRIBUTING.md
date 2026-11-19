@@ -125,7 +125,7 @@ says what changed; the body says what it is protecting against.
 
 CI runs on every pull request and on `main`
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): lint, types, and tests
-for `tools/` and for every project under `services/`; lint and parse of the dbt
+for `tools/` and for every project under `data/sources/`; lint and parse of the dbt
 project; a secret scan of the whole history (see [Secrets](#secrets)); the
 promotion check (prod pins only digests staging pinned first,
 [ADR-0015](docs/adr/0015-images-on-ghcr.md)); the resource budget check; and the
@@ -148,7 +148,9 @@ enforces, with no bypass — the operator follows the same rules:
   `guardrail approval` and `agent review` — a renamed job must be renamed in
   the ruleset too, or every pull request waits for a check that never reports
   (`manifest policy` joined the ruleset on 2026-10-27; `guardrail approval`
-  and `agent review` on 2026-11-07, after the setup tests below);
+  and `agent review` on 2026-11-07, after the setup tests below). The job
+  `services` checks `data/sources/`: its name predates ADR-0053 and stays until
+  the operator renames it in the ruleset in the same step;
 - `main` cannot be force-pushed or deleted.
 
 **The guardrail approval.** Every agent acts as the operator on GitHub, so
@@ -167,7 +169,7 @@ branch has no `guardrail approval` or `agent review` check; once its base
 becomes `main` it stays blocked until its next push. The operator approves on the pull
 request's **For the operator** section — what changes in behaviour, what it
 touches, what could go wrong, how to undo it, in plain words; for a pin under
-`platform/infra/`, every change merged since the previous pin — not by
+`infra/`, every change merged since the previous pin — not by
 reading code.
 
 Inspect what applies with
@@ -312,10 +314,13 @@ configuration rather than code:
 1. Choose the pattern — the platform is batch-only, so a source goes through
    dlt ([ADR-0003](docs/adr/0003-ingestion-split-dlt-benthos.md),
    [ADR-0052](docs/adr/0052-streaming-leaves-the-platform.md)).
-2. Declare the source config. Credentials go to the cluster secret mechanism,
-   never into the repository.
-3. Add dbt models for bronze, silver, and gold, with the schema contract the
-   next layer can rely on.
+2. Create one directory, `data/sources/<name>/`, and declare the source config
+   in it. Credentials go to the cluster secret mechanism, never into the
+   repository.
+3. Add dbt models for bronze, silver, and gold under
+   `data/warehouse/models/`, with the schema contract the next layer can rely
+   on. Those two directories are all a source adds
+   ([ADR-0053](docs/adr/0053-repository-layout-infra-and-data.md)).
 4. Add reconciliation and freshness tests —
    [`docs/engineering-protocol.md`](docs/engineering-protocol.md) §16.4.
 5. Add fixtures for tests. **Tests never call the live API.**

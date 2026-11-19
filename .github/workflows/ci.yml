@@ -27,6 +27,9 @@ jobs:
       - run: uv run --project tools --locked mypy --config-file tools/pyproject.toml tools
       - run: uv run --project tools --locked pytest tools
 
+  # The job id and name predate data/sources/ (it was services/) and are kept:
+  # the name is a required check in the repository ruleset, so renaming the job
+  # needs the ruleset renamed in the same step (CONTRIBUTING.md, Branch protection).
   services:
     name: services (lint, types, tests)
     runs-on: ubuntu-latest
@@ -35,13 +38,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      # Every service is its own uv project. Looping over the directory keeps
-      # ADR-0006's test: adding a service changes nothing outside it.
+      # Every source is its own uv project. Looping over the directory keeps
+      # ADR-0053's test: adding a source changes nothing outside it.
       # mypy reads its config from the working directory, not from the project,
       # so the file is named explicitly or strict mode would silently not apply.
       - run: |
           set -euo pipefail
-          for project in services/*/; do
+          for project in data/sources/*/; do
             project="${project%/}"
             echo "::group::$project"
             uv run --project "$project" --locked ruff format --check "$project"
@@ -51,16 +54,16 @@ jobs:
             echo "::endgroup::"
           done
       # The Dagster code location (ADR-0026). It also type-checks each
-      # service's assets/, which import Dagster and so are excluded from the
-      # service's own mypy run.
+      # source's assets/, which import Dagster and so are excluded from the
+      # source's own mypy run.
       - name: orchestration
         run: |
           set -euo pipefail
-          p=platform/orchestration
-          uv run --project $p --locked ruff format --check $p services/*/assets
-          uv run --project $p --locked ruff check $p services/*/assets
+          p=data/orchestration
+          uv run --project $p --locked ruff format --check $p data/sources/*/assets
+          uv run --project $p --locked ruff check $p data/sources/*/assets
           # From inside the project, so the assets resolve once, as imported.
-          (cd $p && uv run --locked mypy lagom_orchestration ../../services/*/assets)
+          (cd $p && uv run --locked mypy lagom_orchestration ../../data/sources/*/assets)
           uv run --project $p --locked pytest $p
 
   secrets:
@@ -156,15 +159,15 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      - run: uv run --project platform/warehouse --locked sqlfluff lint platform/warehouse
+      - run: uv run --project data/warehouse --locked sqlfluff lint data/warehouse
       # `dbt parse` reads the project and the profile but never opens a
       # connection, so the connection variables only need to exist. The values
       # are placeholders, not credentials: nothing here can reach a database,
       # and the real ones never leave the operator's machine and the cluster.
       # This does not check the SQL against a database, nor run any test.
       - run: >
-          uv run --project platform/warehouse --locked dbt parse
-          --project-dir platform/warehouse --profiles-dir platform/warehouse
+          uv run --project data/warehouse --locked dbt parse
+          --project-dir data/warehouse --profiles-dir data/warehouse
         env:
           LAGOM_PG_HOST: localhost
           LAGOM_PG_PORT: "5432"
@@ -188,11 +191,11 @@ jobs:
           lake="$(mktemp -d)"
           export LAGOM_LAKE_CATALOG="ducklake:${lake}/catalog.ducklake"
           export LAGOM_LAKE_DATA_PATH="${lake}/data/"
-          uv run --project platform/orchestration --locked \
-            python platform/warehouse/ci/load_fixture.py
-          uv run --project platform/orchestration --locked dbt build \
+          uv run --project data/orchestration --locked \
+            python data/warehouse/ci/load_fixture.py
+          uv run --project data/orchestration --locked dbt build \
             --target lake --no-partial-parse \
-            --project-dir platform/warehouse --profiles-dir platform/warehouse
+            --project-dir data/warehouse --profiles-dir data/warehouse
         env:
           LAGOM_LAKE_METADATA_SCHEMA: main
           LAGOM_R2_ACCESS_KEY_ID: ci-placeholder
@@ -200,7 +203,7 @@ jobs:
           LAGOM_R2_ENDPOINT: https://ci-placeholder.invalid
 
   dashboards:
-    # What this proves: the boards under products/dashboards validate, render
+    # What this proves: the boards under data/dashboards validate, render
     # against a lake built as the `warehouse` job builds it (gold in Parquet
     # files, as in the cluster), no query is empty, and every column of every
     # query a board draws equals what gold holds over the same window
@@ -219,7 +222,7 @@ jobs:
       # (docs/adr/0040-dbt-charts-for-the-dashboards.md).
       DO_NOT_TRACK: "1"
       # check_boards.py and its tests import the code location's lake module.
-      PYTHONPATH: products/dashboards:platform/orchestration
+      PYTHONPATH: data/dashboards:data/orchestration
       # The variables the `lake` target requires. The R2 values are
       # placeholders; the lake is a directory on the runner.
       LAGOM_LAKE_METADATA_SCHEMA: main
@@ -238,11 +241,11 @@ jobs:
       - name: check_boards (lint, types, tests)
         run: |
           set -euo pipefail
-          p=platform/orchestration
-          uv run --project $p --locked ruff format --check --config $p/pyproject.toml products/dashboards
-          uv run --project $p --locked ruff check --config $p/pyproject.toml products/dashboards
-          (cd $p && uv run --locked mypy lagom_orchestration ../../products/dashboards)
-          uv run --project $p --locked pytest products/dashboards/tests
+          p=data/orchestration
+          uv run --project $p --locked ruff format --check --config $p/pyproject.toml data/dashboards
+          uv run --project $p --locked ruff check --config $p/pyproject.toml data/dashboards
+          (cd $p && uv run --locked mypy lagom_orchestration ../../data/dashboards)
+          uv run --project $p --locked pytest data/dashboards/tests
       - name: build the fixture lake, then validate and render the boards
         run: |
           set -euo pipefail
@@ -251,15 +254,15 @@ jobs:
           mkdir -p "$out"
           export LAGOM_LAKE_CATALOG="ducklake:${lake}/catalog.ducklake"
           export LAGOM_LAKE_DATA_PATH="${lake}/data/"
-          u="uv run --project platform/orchestration --locked --group dashboards"
+          u="uv run --project data/orchestration --locked --group dashboards"
           # As the `warehouse` job.
-          $u python platform/warehouse/ci/load_fixture.py
+          $u python data/warehouse/ci/load_fixture.py
           $u dbt build --target lake --no-partial-parse \
-            --project-dir platform/warehouse --profiles-dir platform/warehouse
+            --project-dir data/warehouse --profiles-dir data/warehouse
           # DuckLake keeps a table of up to 10 rows in its catalog and writes no
           # file. Gold would then never be read from Parquet, which is how it is
           # read in the cluster and where dct's file lock applies
-          # (products/dashboards/profiles.yml). Writing the files out makes this
+          # (data/dashboards/profiles.yml). Writing the files out makes this
           # job exercise the same path.
           $u python - <<'PY'
           from lagom_orchestration.lake import attach_lake
@@ -269,7 +272,7 @@ jobs:
           # The manifest dct resolves ref() against. `dbt build` writes one too;
           # this is the command the cluster step will run.
           $u dbt parse --target lake \
-            --project-dir platform/warehouse --profiles-dir platform/warehouse
+            --project-dir data/warehouse --profiles-dir data/warehouse
           # Everything from here runs in a time zone 13 hours from UTC. The
           # fixture has earthquakes between 11:00 and 24:00 UTC, so a day bucket
           # or a displayed time in check_boards.py that follows the machine's
@@ -277,23 +280,23 @@ jobs:
           # covered: the window's anchor (the latest earthquake is at 00:00 UTC,
           # the same calendar day in this zone), and the board's own
           # `at time zone 'UTC'`, since dct runs its queries in UTC whatever the
-          # zone (products/dashboards/README.md).
+          # zone (data/dashboards/README.md).
           export TZ=Pacific/Auckland
           # --strict: a warning fails. --warehouse: the SQL is described against
           # the lake, which catches a column that does not exist. It does not
           # read data, so the render below is what catches the rest.
-          $u dct validate --strict --warehouse products/dashboards/charts \
-            --project-dir products/dashboards
+          $u dct validate --strict --warehouse data/dashboards/charts \
+            --project-dir data/dashboards
           # --no-cache: a cached result is not a render of this lake. A class
           # that no earthquake in the window belongs to is expected, and is not
           # worth a warning.
           for format in html data; do
-            $u dct render products/dashboards/charts/*.yml --project-dir products/dashboards \
+            $u dct render data/dashboards/charts/*.yml --project-dir data/dashboards \
               --no-cache --ignore-warning WARN-CATEGORY-COLOR-PIN-UNSEEN --format $format \
               --output "${out}/{stem}.${format}"
           done
           ls -l "$out"
-          $u python products/dashboards/check_boards.py "$out"/*.data
+          $u python data/dashboards/check_boards.py "$out"/*.data
       # The published page is one file that loads nothing from outside: no
       # script, stylesheet, image or frame by address, no CSS @import, and no
       # url() to another host. A link a reader clicks (<a href>) is not a load,

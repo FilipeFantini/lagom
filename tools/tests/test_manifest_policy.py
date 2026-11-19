@@ -23,7 +23,7 @@ def application(
     sync_policy: dict[str, Any] | None = None,
     name: str = "demo",
 ) -> dict[str, Any]:
-    git = {"repoURL": REPO_URL, "targetRevision": "main", "path": "platform/infra/demo"}
+    git = {"repoURL": REPO_URL, "targetRevision": "main", "path": "infra/demo"}
     return {
         "apiVersion": "argoproj.io/v1alpha1",
         "kind": "Application",
@@ -278,10 +278,10 @@ def test_other_kinds_are_ignored() -> None:
 def write_repo(root: Path, app: dict[str, Any], manifest: str) -> None:
     import yaml
 
-    (root / "platform/infra/apps").mkdir(parents=True)
-    (root / "platform/infra/demo").mkdir(parents=True)
-    (root / "platform/infra/apps/demo.yaml").write_text(yaml.safe_dump(app))
-    (root / "platform/infra/demo/deployment.yaml").write_text(manifest)
+    (root / "infra/apps").mkdir(parents=True)
+    (root / "infra/demo").mkdir(parents=True)
+    (root / "infra/apps/demo.yaml").write_text(yaml.safe_dump(app))
+    (root / "infra/demo/deployment.yaml").write_text(manifest)
 
 
 DEPLOYMENT = """\
@@ -323,7 +323,7 @@ def test_check_does_not_render_an_application_with_an_unpinned_source(tmp_path: 
 
 
 def test_check_fails_when_there_is_nothing_to_inspect(tmp_path: Path) -> None:
-    (tmp_path / "platform/infra/apps").mkdir(parents=True)
+    (tmp_path / "infra/apps").mkdir(parents=True)
     problems, _, apps, _ = check(tmp_path)
     assert apps == 0
     assert len(problems) == 1
@@ -345,7 +345,7 @@ def test_real_applications_pass_the_application_rules() -> None:
 
 def test_check_fails_an_application_that_renders_nothing(tmp_path: Path) -> None:
     write_repo(tmp_path, application(), DEPLOYMENT.format(image="nginx:1.30.5"))
-    (tmp_path / "platform/infra/demo/deployment.yaml").unlink()
+    (tmp_path / "infra/demo/deployment.yaml").unlink()
     problems, unrendered, apps, images = check(tmp_path)
     assert (unrendered, apps, images) == ([], 1, 0)
     assert problems == ["demo: renders no manifests"]

@@ -72,8 +72,8 @@ def repo(tmp_path: Path) -> Path:
     commit(
         tmp_path,
         {
-            "platform/infra/apps/staging.yaml": application("staging", "staging", "env/staging"),
-            "platform/infra/apps/prod.yaml": application("prod", "prod", "env/prod"),
+            "infra/apps/staging.yaml": application("staging", "staging", "env/staging"),
+            "infra/apps/prod.yaml": application("prod", "prod", "env/prod"),
             "env/staging/.keep": "",
             "env/prod/.keep": "",
         },
@@ -83,7 +83,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def test_environment_paths_maps_namespace_to_git_paths(repo: Path) -> None:
-    paths = environment_paths(repo / "platform/infra/apps")
+    paths = environment_paths(repo / "infra/apps")
     assert paths == {"staging": ["env/staging"], "prod": ["env/prod"]}
 
 
@@ -140,6 +140,25 @@ def test_digest_only_outside_staging_paths_does_not_count(repo: Path) -> None:
     assert violations(repo, base)[0]
 
 
+def test_digest_pinned_under_the_old_layout_still_counts(repo: Path) -> None:
+    """ADR-0053 moved platform/infra/ to infra/: the change that moves it passes, because
+    the history under the old path is searched too."""
+    commit(repo, {"platform/infra/staging/job.yaml": cronjob(f"app:1@{DIGEST_A}")}, "staging A")
+    commit(repo, {"platform/infra/prod/job.yaml": cronjob(f"app:1@{DIGEST_A}")}, "prod A")
+    base = git(repo, "rev-parse", "HEAD")
+    git(repo, "mv", "platform/infra/staging", "infra/staging")
+    git(repo, "mv", "platform/infra/prod", "infra/prod")
+    commit(
+        repo,
+        {
+            "infra/apps/staging.yaml": application("staging", "staging", "infra/staging"),
+            "infra/apps/prod.yaml": application("prod", "prod", "infra/prod"),
+        },
+        "the layout move",
+    )
+    assert violations(repo, base)[0] == []
+
+
 def test_fails_on_an_image_without_a_digest(repo: Path) -> None:
     base = commit(repo, {"env/staging/job.yaml": cronjob("app:1")}, "staging tag")
     commit(repo, {"env/prod/job.yaml": cronjob("app:1")}, "prod tag")
@@ -168,7 +187,7 @@ def test_fails_when_prod_has_no_image_to_check(repo: Path) -> None:
 
 def test_fails_when_a_prod_path_does_not_exist(repo: Path) -> None:
     base = commit(repo, {"env/staging/job.yaml": cronjob(f"app:1@{DIGEST_A}")}, "staging A")
-    commit(repo, {"platform/infra/apps/prod.yaml": application("prod", "prod", "env/prd")}, "typo")
+    commit(repo, {"infra/apps/prod.yaml": application("prod", "prod", "env/prd")}, "typo")
     problems, _ = violations(repo, base)
     assert "env/prd: prod Application path does not exist" in problems
 
@@ -192,8 +211,8 @@ spec:
   destination:
     namespace: prod
 """
-    commit(repo, {"platform/infra/apps/prod.yaml": multi}, "multi-source prod")
-    assert environment_paths(repo / "platform/infra/apps")["prod"] == ["env/prod"]
+    commit(repo, {"infra/apps/prod.yaml": multi}, "multi-source prod")
+    assert environment_paths(repo / "infra/apps")["prod"] == ["env/prod"]
 
 
 def test_main_exit_codes(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -249,10 +268,10 @@ def chart_repo(repo: Path) -> Path:
     commit(
         repo,
         {
-            "platform/infra/apps/chart-staging.yaml": chart_application(
+            "infra/apps/chart-staging.yaml": chart_application(
                 "chart-staging", "staging", "charts/staging.yaml"
             ),
-            "platform/infra/apps/chart-prod.yaml": chart_application(
+            "infra/apps/chart-prod.yaml": chart_application(
                 "chart-prod", "prod", "charts/prod.yaml"
             ),
             "env/staging/job.yaml": cronjob(f"app:1@{DIGEST_A}"),
@@ -264,7 +283,7 @@ def chart_repo(repo: Path) -> Path:
 
 
 def test_environment_paths_include_helm_values_files(chart_repo: Path) -> None:
-    paths = environment_paths(chart_repo / "platform/infra/apps")
+    paths = environment_paths(chart_repo / "infra/apps")
     assert paths["prod"] == ["charts/prod.yaml", "env/prod"]
     assert paths["staging"] == ["charts/staging.yaml", "env/staging"]
 
