@@ -105,40 +105,51 @@ platform ingesting events. What was measured and decided stays in the three
 superseded ADRs and their notes: the criteria ADR-0047 passed in staging, the
 memory of the hub and of Connect over 12 hours, the query times of the views.
 
-**Left in the cluster, outside Git.** Removing files from Git does not remove
-every object they created, because of how Argo CD is set up here. The
-operator or an agent deletes each one by hand after the change has synced,
-and a note below records it when done:
+**How the cluster is emptied, in two pull requests.** Removing a file from
+Git does not remove every object it created, and agents may not delete
+objects by hand, so the cleanup is declared first and the files go second:
 
-- The Applications `streaming-staging` and `grafana` disappear when `root`
-  prunes them, but they had no `resources-finalizer`, so Argo CD deletes only the
-  Application objects: the NATS hub and its 4 Gi volume, Redpanda Connect,
-  Grafana and its volume, and the `grafana` namespace keep running until
-  deleted.
+- **Step 1 (#130)** gives the Applications `streaming-staging` and `grafana`
+  Argo CD's `resources-finalizer`, so deleting them deletes what they
+  deployed (the NATS hub, Redpanda Connect, Grafana and Grafana's volume); sets
+  the hub's StatefulSet to delete its 4 Gi claim with it; sets the `Database`
+  `serving` and the roles `serving`, `events_writer` and `grafana_reader` to
+  `ensure: absent`, so CloudNativePG drops them; and sets `LAGOM_STREAMING` to
+  `"false"`, so the streaming jobs stop before their database goes.
+- **Step 2**, the change that carries this ADR, merges only after step 1 has
+  synced, and deletes the files.
+
+What is left after both, and why:
+
 - `postgres-staging` never prunes (runbook: *Retire a manifest from
-  `postgres-<env>`*): the `Database` `serving` and the three sealed secrets
-  stay as objects. The `Database` has CloudNativePG's default reclaim policy,
-  `retain`, so deleting it does not drop the database; the roles are
-  not dropped by removing them from the `Cluster`'s `managed.roles`. They
-  are dropped by hand, as the superuser, through the instance's local socket.
+  `postgres-<env>`*): the `Database` object `serving`, already `absent` in
+  Postgres, and the three sealed secrets of the dropped roles stay as objects
+  that do nothing. They are deleted with the runbook's procedure for retiring
+  a manifest from `postgres-<env>`.
+- The `grafana` namespace, created by Argo CD's `CreateNamespace`, stays
+  empty: the finalizer deletes what the Application deployed, not the
+  namespace it created.
 - The Parquet files of `lake.bronze.streaming_events` in staging's lake (R2
   bucket `lagom-staging-lake`, catalog in staging's `lagom` database), at
-  most 30 days of synthetic events: the table is dropped by hand and
-  `lake_maintenance` then removes its files.
+  most 30 days of synthetic events. Staging data only; dropped by hand when
+  convenient, after which `lake_maintenance` removes the files.
 - In Tailscale, the tag `tag:lagom-pi` and its ACL grants (the Pi's access to
-  the node's port 7422 and ICMP, and the operator's SSH to the Pi).
+  the node's port 7422 and ICMP, and the operator's SSH to the Pi), removed
+  by the operator in the admin console, with the Pi itself.
 - In Cloudflare, nothing: the Access application covers the hostname
   `ops.ofantini.com`, every path, and the route was a line in `config.yaml`.
 - Staging's Dagster is pinned to an image built when the streaming jobs still
-  existed. Without `LAGOM_STREAMING` they do not load; the next pin comes from
-  an image built after this change, and prod follows by the promotion check.
+  existed. With `LAGOM_STREAMING` unset they do not load; the next pin comes
+  from an image built after this change, and prod follows by the promotion
+  check.
 
 ## Risks, cost and reversal
 
-**Risk.** The leftovers above run, and the NATS hub keeps accepting events
-and Connect keeps writing to `serving`, until they are deleted: the
-cost is the 448 MiB they hold, which the budget check, which reads Git, no
-longer counts. They are deleted soon after the merge.
+**Risk.** If step 2 merged before step 1 had synced, Argo CD would delete the
+Applications without their finalizer and leave the workloads running, holding
+448 MiB the budget check, which reads Git, no longer counts. The order of the
+two merges is the mitigation; the state is read with `kubectl get` before
+step 2 merges.
 
 **Reversal.** The files are in Git history: the last commit with the whole
 showcase is `accaf8c`, and `platform/edge/pi/` and the manifests can be read
