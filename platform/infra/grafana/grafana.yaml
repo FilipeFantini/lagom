@@ -23,7 +23,9 @@ kind: Deployment
 metadata:
   name: grafana
 spec:
-  replicas: 1
+  # Streaming removal, step 1: stopped, so its connections to `serving`
+  # close and CloudNativePG can drop the database and the roles.
+  replicas: 0
   # One writer of the SQLite file at a time: the old Pod stops before the new
   # one mounts the volume.
   strategy: {type: Recreate}
