@@ -13,6 +13,7 @@
 
 # Everything Argo CD applies to the cluster, both environments.
 /platform/infra/                  @FilipeFantini
+/infra/apps/                      @FilipeFantini
 
 # The gates: CI, this list, the checks CI runs, and the secret scan's config.
 /.github/                         @FilipeFantini
