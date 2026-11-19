@@ -4,23 +4,15 @@ config-version: 2
 
 profile: lagom
 
-# The `serving` target builds the streaming showcase's table and views and
-# nothing else (ADR-0047); every other target builds everything but them. Each
-# folder below says which with `+enabled`.
-on-run-start:
-  - "{{ create_live_events() if target.name == 'serving' else '' }}"
-
 # Models, tests and macros are found by dbt's default paths.
 # Schemas are fixed by macros/generate_schema_name.sql: a model's `+schema`
 # is the schema name, with no target prefix.
 models:
   lagom:
     staging:
-      +enabled: "{{ target.name != 'serving' }}"
       +materialized: table
       +schema: silver
     marts:
-      +enabled: "{{ target.name != 'serving' }}"
       +materialized: table
       +schema: gold
       # The read-only group of every gold consumer (architecture.md §10). A
@@ -36,39 +28,8 @@ models:
       +grants: "{{ {'select': ['gold_reader']} if target.type == 'postgres' else {} }}"
       +post-hook: "{{ 'grant usage on schema ' ~ this.schema ~ ' to gold_reader' if target.type == 'postgres' else '' }}"
 
-    # The streaming showcase, in the database `serving` (ADR-0047). `streaming`
-    # holds the typed events (views) and two tables of minutes,
-    # `ping_minute` and `health_minute`, incremental models that set their
-    # own materialization; `metrics` holds the views Grafana reads, each with
-    # an enforced contract, so what computes a metric can change behind it
-    # without a panel being rewritten. A view of `metrics` reads a table of
-    # minutes and computes again, when read, the minutes the table may have
-    # wrong: so a late event, a row with an old `collected_at`, is counted by
-    # the next query (macros/streaming/changed_minutes.sql; ADR-0047's notes,
-    # 2026-11-18).
-    streaming:
-      +enabled: "{{ target.name == 'serving' }}"
-      +materialized: view
-      +schema: streaming
-      metrics:
-        +schema: metrics
-        # Grafana's read-only role (postgres-<env>/cluster.yaml) may read
-        # these views and nothing else of `serving`. A view is created again
-        # on each build without its grants, so they are given again here, as
-        # for gold_reader above; a view runs with its owner's rights, so the
-        # role needs no grant on `streaming` or `live`, where the tables of
-        # minutes are, and is given none. If the role is
-        # missing, the GRANT fails the build, loudly.
-        # tests/streaming/grafana_reader_privileges.sql asserts the result.
-        +grants: {select: [grafana_reader]}
-        +post-hook: "grant usage on schema {{ this.schema }} to grafana_reader"
-
 data_tests:
   lagom:
-    +enabled: "{{ target.name != 'serving' }}"
-    streaming:
-      +enabled: "{{ target.name == 'serving' }}"
-    # Postgres only: DuckLake has no per-table grants (ADR-0023). Not under
-    # `serving`, which has no gold.
+    # Postgres only: DuckLake has no per-table grants (ADR-0023).
     gold_reader_privileges:
-      +enabled: "{{ target.type == 'postgres' and target.name != 'serving' }}"
+      +enabled: "{{ target.type == 'postgres' }}"

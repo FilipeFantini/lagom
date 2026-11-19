@@ -3,7 +3,8 @@
 - **Status:** Accepted — partially superseded by [ADR-0021](0021-k3s-packaged-components-under-git.md)
   (Traefik, servicelb, local-path and metrics-server are no longer k3s defaults);
   the Raspberry Pi joining as an agent node is superseded by
-  [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed)
+  [ADR-0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md) (proposed),
+  itself superseded by [ADR-0052](0052-streaming-leaves-the-platform.md): no Pi is part of the platform
 - **Date:** 2026-10-12
 
 ## Context and problem

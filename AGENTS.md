@@ -210,7 +210,7 @@ without that sandbox, under the operator's accounts, and commit, push, open
 and merge pull requests under §6. It never runs a command
 `.claude/settings.json` denies, even where its harness does not enforce it,
 never changes a ruleset or environment or approves `guardrail`, and never
-opens SSH to the node or the Pi.
+opens SSH to the node.
 Before handing off, the architect session leaves the status in the
 repository — roadmap, ADR notes, the open pull request's body — and the next
 agent starts from there

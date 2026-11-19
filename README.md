@@ -57,7 +57,7 @@ with this repository, so changes arrive through Git, not by hand.
 
 | Layer | Tools |
 |---|---|
-| Ingestion | dlt for APIs, Redpanda Connect for event streams |
+| Ingestion | dlt for APIs |
 | Storage | Postgres today; DuckLake on Cloudflare R2, with Postgres as its catalog, being tested ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
 | Transformation | dbt, on Postgres or DuckDB |
 | Orchestration | Dagster |
@@ -89,7 +89,6 @@ every change reaches the cluster through a pull request.
 
 ```
 platform/   the shared backbone: cluster manifests, Argo CD apps, the dbt project
-  edge/pi/  Pi streaming runtime, applied by the runbook outside Argo CD
 services/   one directory per data source: ingestion, its tests and image
 products/   what people see: the dashboards (the site has its own repository)
 tools/      CI checks and operational scripts

@@ -263,7 +263,7 @@ Coverage is not quality. A test that executes code without verifying the result
 is not evidence.
 
 **Scope exception for this repository.** Much of this codebase is declarative —
-Kubernetes manifests, dlt source config, Redpanda Connect pipelines, dbt models.
+Kubernetes manifests, dlt source config, dbt models.
 Line coverage over declarative files measures nothing. Those artifacts are
 validated by schema validation, dry-run, and the data tests in §16, not by code
 coverage. State which denominator a coverage number refers to.

@@ -7,12 +7,6 @@ audience each.
 |---|---|---|
 | [`dashboards/`](dashboards/README.md) | dbt Charts boards, rendered to static HTML; the project and its CI check exist, publishing does not yet ([ADR-0040](../docs/adr/0040-dbt-charts-for-the-dashboards.md)) | M4 |
 
-Planned:
-
-| Product | Form | Born in |
-|---|---|---|
-| the globe | Streamlit with pydeck | M6 |
-
 A product reads from the gold layer, which is in the lake
 ([ADR-0026](../docs/adr/0026-dagster-one-instance-per-environment.md)); the
 Postgres gold is no longer updated

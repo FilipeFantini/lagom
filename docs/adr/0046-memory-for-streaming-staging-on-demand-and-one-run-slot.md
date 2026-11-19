@@ -10,6 +10,9 @@
   off; decision 9 is superseded, the archive job is validated in staging;
   decisions 4, 7 and 8 are amended, since no stream processor is built; the
   Flux spike is parked.
+- **Amended by:** [ADR-0052](0052-streaming-leaves-the-platform.md) (2026-11-19): what it made for streaming goes
+  (decision 4's Grafana, decision 7, decision 9, and the staging modes of
+  decisions 1 and 2); decisions 5, 6 and 8 and the lean staging stand.
 - **Date:** 2026-11-16
 - **Decided by:** the operator, on 2026-11-16, in two rounds.
   - First: staging on demand, with its Postgres hibernated while off; one
@@ -534,4 +537,7 @@ without rewriting it.
   Staging stays always on until the modes and the mode file are built. The
   budget check's total falls from 4,958 to 4,734 MiB. The Postgres requests
   stay at 300 until a reading during a run confirms 256.
-
+- **2026-11-19 — streaming leaves the platform.** [ADR-0052](0052-streaming-leaves-the-platform.md) removes the
+  showcase, Grafana and the plan of a staging that is on or off. What this
+  ADR built that is not about streaming stays: decisions 5, 6 and 8 and the
+  lean staging. The budget check's total is 4,734 MiB again.

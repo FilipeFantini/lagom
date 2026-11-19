@@ -1,20 +1,15 @@
-# Who reaches staging's Postgres (ADR-0047, decision 7). Until this policy,
-# no NetworkPolicy selected its Pod, so a Pod in any namespace could open a
-# connection to it and only a password stood in the way. Grafana, in its own
-# namespace, is the first client from outside `staging`, so the Pod is now
-# closed to everything but:
+# Who reaches staging's Postgres. Without this policy no NetworkPolicy
+# selects its Pod, so a Pod in any namespace could open a connection to it and
+# only a password would stand in the way. The Pod is closed to everything but:
 #
-# 1. Pods in `staging` itself: Dagster, its runs and Redpanda Connect;
+# 1. Pods in `staging` itself: Dagster and its runs;
 # 2. the CloudNativePG operator in `cnpg-system`, which calls the instance
-#    manager's status port, as in prod's allow-prod-and-operator;
-# 3. Grafana's Pod, on Postgres's port and no other.
+#    manager's status port, as in prod's allow-prod-and-operator.
 #
 # It selects only the Postgres Pod (the operator labels it with its
-# Cluster's name), so the policies on the hub and Connect are unchanged.
-# What it does not block, as in prod: the kubelet's probes, `kubectl
-# port-forward` (the developer's way in, runbook) and egress
-# (postgres-prod/networkpolicy.yaml records why). The database Grafana may
-# use is the role's `pg_hba` lines (cluster.yaml), not this policy.
+# Cluster's name). What it does not block, as in prod: the kubelet's probes,
+# `kubectl port-forward` (the developer's way in, runbook) and egress
+# (postgres-prod/networkpolicy.yaml records why).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -30,12 +25,3 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: cnpg-system
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: grafana
-          podSelector:
-            matchLabels:
-              app: grafana
-      ports:
-        - {protocol: TCP, port: 5432}

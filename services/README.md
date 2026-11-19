@@ -6,7 +6,7 @@ themselves.
 
 ```
 services/<name>/
-  ingestion/     dlt pipeline or Redpanda Connect config
+  ingestion/     dlt pipeline config
   assets/        Dagster assets for this service
   tests/         fixtures and tests — never calls the live source
   README.md      what it is, its source, its freshness threshold
