@@ -156,7 +156,7 @@ describes the intended boundary. A new source reuses the deployment backbone.
 | Piece | Enters when |
 |---|---|
 | Postgres serving database with reconciled copies of gold | A resident server first needs to answer readers. Gold in the lake remains the source ([ADR-0041](adr/0041-a-serving-layer-in-postgres-for-the-dashboards.md), decision amended by [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md)) |
-| BI for ad-hoc queries, behind a login | A need for self-service exploration and a spike that meets its acceptance criteria ([Superset spike](https://github.com/FilipeFantini/lagom/issues/137)) |
+| BI for ad-hoc queries, behind a login | A candidate image that passes the security gate and a staging spike that meets the acceptance criteria ([ADR-0055](adr/0055-superset-spike.md)) |
 | Streamlit | A report requires a bespoke interactive application |
 | Signed file URLs with short expiry and recipient audit | A consumer needs time-limited object access |
 | Row-level security | A second consumer needs isolated rows |

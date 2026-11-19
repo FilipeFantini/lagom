@@ -60,6 +60,7 @@ decision, consequences, and how to reverse it.
 | [0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) | Streaming without a stream processor: events in Postgres, and a staging that is on or off | Superseded by [0052](0052-streaming-leaves-the-platform.md) (was Accepted, #106) |
 | [0050](0050-the-pi-streaming-runtime-and-private-hub-link.md) | The Pi streaming runtime and its private link to the hub | Superseded by [0052](0052-streaming-leaves-the-platform.md) (was Proposed) |
 | [0052](0052-streaming-leaves-the-platform.md) | The streaming showcase leaves the platform | Accepted; supersedes [0045](0045-streaming-from-a-raspberry-pi-outside-the-cluster.md), [0047](0047-streaming-without-a-stream-processor-and-staging-on-or-off.md) and [0050](0050-the-pi-streaming-runtime-and-private-hub-link.md), amends [0046](0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md) and [0042](0042-the-dashboards-return-to-dbt-charts.md) (decision 6) |
+| [0055](0055-superset-spike.md) | Superset 6.1.0 is rejected for Lagom's dashboards | Rejected |
 
 ## Ways of working
 
