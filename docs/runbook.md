@@ -597,7 +597,8 @@ Check all four outputs are nonempty SealedSecrets before committing them.
 After merge, verify each SealedSecret is `SYNCED True`. Promote the image
 through [staging then prod](#deploy). Check:
 
-1. The `dashboards` run succeeds and logs `published 1 page(s): earthquakes.html`.
+1. The `dashboards` run succeeds and logs both `earthquakes.html` and
+   `earthquakes_short.html` as published.
    In staging, wait for the next `usgs` run. In prod, also check the job's
    configuration in the Launchpad. It names the reader and dashboards
    credentials and has no `PG_URI`.
