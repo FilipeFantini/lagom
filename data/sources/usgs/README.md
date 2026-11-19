@@ -1,0 +1,223 @@
+# usgs — earthquake events
+
+Extraction and load of earthquake events from the USGS FDSN event web service
+into the `bronze` schema. Part of M2. Dagster runs it as the asset `usgs/events`
+in staging and prod ([`data/orchestration/`](../../orchestration/README.md)).
+The CronJobs that ran it on Postgres were retired on 2026-11-07
+([ADR-0033](../../../docs/adr/0033-dagster-alerts-through-healthchecks.md)).
+
+| | |
+|---|---|
+| **Source** | `https://earthquake.usgs.gov/fdsnws/event/1/query`, `format=geojson`. No key, no authentication. The static summary feeds are not used: they have no `updatedafter` and cannot be paged or backfilled. |
+| **Destination** | dlt `ducklake` destination in staging and prod (catalog in the environment's Postgres, files in its R2 bucket, [ADR-0026](../../../docs/adr/0026-dagster-one-instance-per-environment.md)), dataset `bronze`, table `usgs_events`. The command line takes the destination as a required argument |
+| **Freshness threshold** | 2 hours — the newest `properties__updated` in bronze may not be older than that. Asserted by dbt in the next step, not here. |
+| **Volume** | about 9 events an hour, roughly 300 000 a year |
+
+## How it works
+
+`ingestion/source.yaml` declares the source — URL, paginator, cursor, key,
+write disposition, column types — as data. `ingestion/pipeline.py` loads it with
+`yaml.safe_load`, validates it, adds the few things YAML cannot express, and runs
+a dlt pipeline. Everything about the source lives in the YAML; the Python
+contains no URL, no window, and no threshold.
+
+**Pagination.** The API pages with `limit` (at most 20 000) and `offset`
+(1-based). dlt's offset paginator advances `offset` by `limit` and stops at the
+first empty page. The API answers a page past the end with HTTP 200 and an
+empty `features` list, so that last request is the stop signal.
+
+**Ordering.** `orderby=time-asc`. FDSN offers no ordering by `updated`, and
+none is needed: dlt tracks the cursor as the maximum it has seen, in any order.
+A stable order is what offset pagination needs.
+
+**Cursor.** `properties.updated`, epoch milliseconds, sent to the API as
+`updatedafter` in ISO 8601 UTC. dlt stores the cursor in its pipeline state,
+which it also writes to the destination (`_dlt_pipeline_state`), so a
+Dagster run Pod, which starts with no disk, restores it from DuckLake and the
+cursor can be inspected with SQL. `updatedafter` ignores fractions of a second, so the request
+is cut to whole seconds and the API re-sends the events of the last second; the
+merge key removes them.
+
+**Write disposition: `merge` on `(id, properties__updated)`.** An event is not
+final when it is first published. USGS revises magnitude, location, and status
+(`automatic` to `reviewed`) for days, and each revision carries a new `updated`.
+Bronze is the raw record, so it keeps every revision: a revised event is a new
+row, and silver decides which revision is current. Because `updated` is part of
+the key, loading the same revision twice replaces its own row instead of adding
+one — re-running a window inserts nothing new, and an overlap between runs is
+harmless. `append` would duplicate on every re-run; a key on `id` alone would
+overwrite history.
+
+**Only events from the last 30 days, by origin time.** The query sends no
+`starttime`, and the API then returns only events whose origin is in the last
+30 days, whatever `updatedafter` says (checked 2026-10-28 with the `count`
+endpoint: 9,474 events updated since 2026-10-01 without `starttime`, 12,318
+with `starttime=2026-08-01`). Two consequences, **accepted by the operator on
+2026-10-28**: a revision published after an event is 30 days old is never
+loaded, so silver's "latest revision" is the latest one published within 30
+days of the origin; and a re-load after losing the node, or a backfill with
+`--since`, brings back 30 days of events at most
+([ADR-0019](../../../docs/adr/0019-postgres-backup-deferred.md) notes).
+
+**Types.** `properties` becomes typed columns (`properties__mag`,
+`properties__place`, ...). `time` and `updated` stay `BIGINT` epoch
+milliseconds in bronze; silver converts them. The API writes a magnitude as `4`
+or `4.1` depending on the value, and dlt types a column from the first value it
+sees, so the fractional fields (`mag`, `cdi`, `mmi`, `dmin`, `rms`, `gap`) are
+declared `double` in the YAML. `schema_contract: data_type: freeze` makes a field
+whose type changes fail the run instead of adding a second variant column. A
+field that is new to the source is added as a column. A field the source stops
+sending is not detected here: its column goes null, and dbt tests in the next
+step must catch that.
+
+**Nesting.** `geometry.coordinates` is `[longitude, latitude, depth]`. A list
+under a row makes dlt create a child table, one row per element, which would
+turn one event into three rows with no meaning. The column hint
+`geometry__coordinates: {data_type: json}` keeps it as one `JSON` value;
+silver extracts the three numbers. The hint is per column on purpose:
+`max_table_nesting` would apply to every list in the payload, including any
+the source adds later. A new list then becomes a visible child table instead of
+being hidden inside JSON. `properties` is a dict, not a list, so dlt flattens it
+into columns whichever way this is set.
+
+## Failing loudly
+
+- An HTTP error, a timeout, or a response that is not valid JSON propagates and
+  fails the run. This code has no `except` around the request; the only retry is
+  the few attempts dlt's HTTP client makes on a transient error (5xx, 429)
+  before it raises.
+- A window of `empty_window_hours` (6) or more that yields no new events raises
+  `EmptyWindowError` naming the window. The feed averages about 9 events an
+  hour, so six empty hours mean an outage or a cursor problem, not a quiet
+  period. The window runs from the cursor the request started at to `now`.
+  "No new events" counts rows that survive the incremental filter, so a window
+  holding only the event already stored at the cursor also counts as empty.
+- A type change in the payload fails the run, naming the column.
+- An event with no `properties.updated` raises (`on_cursor_value_missing: raise`)
+  instead of being skipped or loaded without a cursor.
+- The first run reads back `initial_lookback_days` (30) from `now`. Change it in
+  the YAML.
+
+## Running it
+
+In staging and prod Dagster runs it: the asset `usgs/events`
+([`assets/__init__.py`](assets/__init__.py)) calls `run("ducklake", ...)`
+every 30 minutes, and a run on demand is *Launch run* on the `usgs` job.
+By hand, everything runs from the repository root, because dlt reads `.dlt/`
+from the working directory.
+
+```sh
+uv run --project data/sources/usgs python data/sources/usgs/ingestion/pipeline.py --help
+```
+
+`--destination` is required and has no default, so a run never writes
+somewhere nobody chose. The destinations in use:
+
+| `--destination` | Where | Environment to run it from |
+|---|---|---|
+| `ducklake` | DuckLake, what Dagster runs in staging and prod | `data/orchestration`, which has `dlt[ducklake,s3]` |
+| `postgres` | `lagom_dev` in staging's Postgres, the developer's database ([ADR-0014](../../../docs/adr/0014-develop-against-staging.md)) | `data/sources/usgs` |
+| `duckdb` | a local `usgs.duckdb` file, for a quick try | `data/sources/usgs` |
+
+**Incremental run** into `lagom_dev`:
+
+```sh
+uv run --project data/sources/usgs python data/sources/usgs/ingestion/pipeline.py \
+  --destination postgres
+```
+
+**Backfill a window** of `updated` times, without editing code. `--since` is
+included and `--until` is excluded; both need a UTC offset. The stored cursor is
+not changed, so a backfill cannot move current data:
+
+```sh
+uv run --project data/sources/usgs python data/sources/usgs/ingestion/pipeline.py \
+  --destination postgres --since 2026-10-01T00:00:00Z --until 2026-10-02T00:00:00Z
+```
+
+The API cannot filter by an upper bound on `updated`, so a backfill reads
+everything updated after `--since` and drops what is at or after `--until`
+before loading. Pick `--since` close to the window you want.
+
+**Try it with no database** — loads into a local DuckDB file named
+`usgs.duckdb` in the current directory (git-ignored):
+
+```sh
+uv run --project data/sources/usgs python data/sources/usgs/ingestion/pipeline.py \
+  --destination duckdb --since 2026-10-16T10:00:00Z --until 2026-10-16T11:00:00Z
+```
+
+**Try DuckLake locally** — the destination Dagster runs, with the catalog in a
+local DuckDB file and the Parquet files in a local directory instead of
+Postgres and R2. It runs from the orchestration environment, which has the
+DuckLake destination:
+
+```sh
+LAKE="$(mktemp -d)"
+DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG="duckdb:///$LAKE/catalog.duckdb" \
+DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL="$LAKE/files" \
+uv run --project data/orchestration python data/sources/usgs/ingestion/pipeline.py \
+  --destination ducklake --since 2026-11-06T10:00:00Z --until 2026-11-06T11:00:00Z
+```
+
+The lake lives in a temporary directory outside the repository; delete it
+with `rm -rf "$LAKE"` when done.
+
+**DuckLake in the cluster.** The run Pod gets the destination from dlt's
+environment variables, `DESTINATION__DUCKLAKE__CREDENTIALS__*`, set in each
+environment's Dagster values
+([`infra/dagster-staging/values.yaml`](../../../infra/dagster-staging/values.yaml)):
+the catalog is the environment's `lagom` database, the files go to
+`s3://lagom-<env>-lake`, and the R2 token comes from a sealed Secret.
+
+**Postgres (`lagom_dev`).** Credentials come from dlt's own mechanism and are
+never in this repository: the environment variable
+`DESTINATION__POSTGRES__CREDENTIALS` (a connection string), or
+`.dlt/secrets.toml` at the repository root, which is git-ignored. Do not create
+`secrets.toml` anywhere else: the ignore rule is anchored to the root. The
+connection goes through `kubectl port-forward`
+([runbook.md, Staging](../../../docs/runbook.md#staging)).
+
+dlt sends anonymous usage telemetry unless `RUNTIME__DLTHUB_TELEMETRY=false` is
+set. The tests set it; set it wherever the pipeline runs.
+
+## Image
+
+No image of its own since 2026-11-07: `lagom-usgs` ran only in the CronJobs on
+Postgres, retired that day
+([ADR-0033](../../../docs/adr/0033-dagster-alerts-through-healthchecks.md)). The
+code is bundled into `lagom-orchestration`, which runs it as the asset
+`usgs/events` ([`data/orchestration/`](../../orchestration/README.md)).
+
+## Tests
+
+```sh
+uv run --project data/sources/usgs pytest data/sources/usgs
+```
+
+The tests load recorded GeoJSON pages (`tests/fixtures/`) through the real dlt
+pipeline into a DuckDB file in a temporary directory, with HTTP answered by
+`requests-mock`. No test can reach the live API: an unregistered URL raises.
+`now` is passed in, never read from the clock inside the code under test. The
+fixtures are recorded from the live API, except for the edits listed at the top
+of `tests/conftest.py` (an odd record with null magnitude, and a revision, which
+cannot be recorded on demand).
+
+Checks as CI runs them:
+
+```sh
+uv run --project data/sources/usgs --locked ruff format --check data/sources/usgs
+uv run --project data/sources/usgs --locked ruff check data/sources/usgs
+uv run --project data/sources/usgs --locked mypy --config-file data/sources/usgs/pyproject.toml data/sources/usgs
+uv run --project data/sources/usgs --locked pytest data/sources/usgs
+```
+
+## Known limits
+
+- **Offset pagination is not a snapshot.** If an event is revised while a run is
+  paging, the offsets shift: an event can appear twice (the merge key removes
+  it) or, in principle, be skipped. A skipped event whose `updated` is older than
+  the new cursor would not be read again. Nothing here detects it yet; the
+  reconciliation step against the API's `count` endpoint is where it would show.
+- **Truncated responses happen.** The API occasionally cuts a large response
+  short. The result is invalid JSON and the run fails; re-running is safe.

@@ -332,9 +332,9 @@ tailnet; after the handover below it manages itself
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm && helm repo update argo
 helm template argocd argo/argo-cd --version 10.10.3 -n argocd \
-  -f platform/infra/argocd/values.yaml > /tmp/argocd.yaml   # inspect before installing
+  -f infra/argocd/values.yaml > /tmp/argocd.yaml   # inspect before installing
 helm install argocd argo/argo-cd --version 10.10.3 -n argocd --create-namespace \
-  -f platform/infra/argocd/values.yaml --wait
+  -f infra/argocd/values.yaml --wait
 kubectl -n argocd get pods
 ```
 
@@ -359,15 +359,15 @@ with the same flags); Argo CD resumes from `main`.
 
 ## Hand over to Argo CD (M1)
 
-Once `platform/infra/` is on `main`, apply the root Application — the last
+Once `infra/` is on `main`, apply the root Application — the last
 command run by hand against the cluster:
 
 ```bash
-kubectl apply -f platform/infra/apps/root.yaml
+kubectl apply -f infra/apps/root.yaml
 kubectl -n argocd get applications
 ```
 
-Expected within a few minutes: every Application in `platform/infra/apps/`
+Expected within a few minutes: every Application in `infra/apps/`
 `Synced` and `Healthy`. `root` syncing is also the proof that Argo CD can read
 the repository.
 
@@ -415,7 +415,7 @@ any Application now shows the same loop:
 
 | Test | Result |
 |---|---|
-| Merge a one-line change to `platform/infra/hello/configmap.yaml` | merged 13:34:59, applied by Argo CD 13:36:05, served by nginx ~20 s later; the pod did not restart |
+| Merge a one-line change to `infra/hello/configmap.yaml` | merged 13:34:59, applied by Argo CD 13:36:05, served by nginx ~20 s later; the pod did not restart |
 | `kubectl -n hello scale deployment hello --replicas=2` by hand | reverted to 1 replica by Argo CD after 2 s |
 
 **Check state:**
@@ -428,7 +428,7 @@ kubectl -n argocd get application root -o jsonpath='{.status.sync.revision}'    
 A manual change to anything under Argo CD's management is not a deployment: it
 is undone on the next pass. To change the cluster, change `main`.
 
-**Removing an Application.** Deleting its file from `platform/infra/apps/`
+**Removing an Application.** Deleting its file from `infra/apps/`
 makes `root` prune the Application, but not what the Application created:
 no Application here carries Argo CD's resources finalizer, so its objects
 are left running, unmanaged, and a namespace made by `CreateNamespace=true`
@@ -442,7 +442,7 @@ kubectl delete namespace hello                   # its Deployment, Service and C
 
 ## Sealed Secrets (M1)
 
-Installed by Argo CD from `platform/infra/apps/sealed-secrets.yaml`
+Installed by Argo CD from `infra/apps/sealed-secrets.yaml`
 ([ADR-0010](adr/0010-sealed-secrets.md)). The operator needs `kubeseal`
 (`brew install kubeseal`).
 
@@ -453,7 +453,7 @@ secret-like name `.gitignore` lets through:
 ```bash
 read -rs VALUE
 kubectl create secret generic <name> -n <namespace> --from-literal=<key>="$VALUE" \
-  --dry-run=client -o yaml | kubeseal --format yaml > platform/infra/<component>/<name>-sealed.yaml
+  --dry-run=client -o yaml | kubeseal --format yaml > infra/<component>/<name>-sealed.yaml
 unset VALUE
 ```
 
@@ -507,7 +507,7 @@ the same fingerprint on both nodes.
 
 Prod runs as the CloudNativePG `Cluster` `postgres` in namespace `prod`
 ([ADR-0012](adr/0012-cloudnative-pg.md)), created by Argo CD from
-`platform/infra/postgres-prod/`. Services: `postgres-rw` (the primary, for
+`infra/postgres-prod/`. Services: `postgres-rw` (the primary, for
 writes), `postgres-ro` and `postgres-r` (reads), all ClusterIP.
 
 **Check it is healthy:**
@@ -538,10 +538,10 @@ is *not yet exercised*; it is written here when dlt and dbt first connect.
 ### Staging
 
 Staging runs the same way in namespace `staging`, from
-`platform/infra/postgres-staging/`: a `Cluster` `postgres` with the same
+`infra/postgres-staging/`: a `Cluster` `postgres` with the same
 settings as prod's, the managed role `lagom_dev` and the `Database` `lagom-dev`
 ([ADR-0014](adr/0014-develop-against-staging.md)). Prod's NetworkPolicy
-(`platform/infra/postgres-prod/networkpolicy.yaml`) drops traffic from staging.
+(`infra/postgres-prod/networkpolicy.yaml`) drops traffic from staging.
 
 Exercised on 2026-10-17, after the first deploy.
 
@@ -630,7 +630,7 @@ its length (a classic token is 40, and seals to 956 characters):
 ```bash
 read -rs TOKEN && echo "token length: ${#TOKEN}" && kubectl create secret docker-registry ghcr-pull -n <namespace> \
   --docker-server=ghcr.io --docker-username=FilipeFantini --docker-password="$TOKEN" --dry-run=client -o yaml \
-  | kubeseal --format yaml > platform/infra/postgres-<namespace>/ghcr-pull-sealed.yaml; unset TOKEN
+  | kubeseal --format yaml > infra/postgres-<namespace>/ghcr-pull-sealed.yaml; unset TOKEN
 grep -a -c 'ghp_' ~/.zsh_history ~/.zsh_sessions/* 2>/dev/null   # all 0: the token is in no history
 ```
 
@@ -666,12 +666,12 @@ in its console:
 **Seal the ping URL**, one per namespace. The URL is a secret — whoever has it
 can report a success — so it is pasted when the command waits, never typed on
 the command line. It reaches the code server as `HEARTBEAT_URL`
-(`platform/infra/dagster-<env>/values.yaml`):
+(`infra/dagster-<env>/values.yaml`):
 
 ```bash
 read -rs HC_URL && echo "url length: ${#HC_URL}" && kubectl create secret generic pipeline-heartbeat -n <namespace> \
   --from-literal=url="$HC_URL" --dry-run=client -o yaml \
-  | kubeseal --format yaml > platform/infra/postgres-<namespace>/pipeline-heartbeat-sealed.yaml; unset HC_URL
+  | kubeseal --format yaml > infra/postgres-<namespace>/pipeline-heartbeat-sealed.yaml; unset HC_URL
 ```
 
 A Healthchecks.io ping URL is `https://hc-ping.com/` (20 characters) plus a
@@ -757,7 +757,7 @@ public key:
 
 ```bash
 for ns in staging prod; do
-  f="platform/infra/postgres-$ns/lake-reader-credentials-sealed.yaml"
+  f="infra/postgres-$ns/lake-reader-credentials-sealed.yaml"
   openssl rand -hex 24 | { read -r PW && kubectl create secret generic lake-reader-credentials -n "$ns" \
     --type=kubernetes.io/basic-auth --from-literal=username=lake_reader --from-literal=password="$PW" \
     --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset PW; }
@@ -859,7 +859,7 @@ Tailscale connected:
 
 ```bash
 seal_r2() {  # seal_r2 <namespace> <secret name> <file name>
-  local ns="$1" name="$2" f="platform/infra/postgres-$1/$3" key secret endpoint
+  local ns="$1" name="$2" f="infra/postgres-$1/$3" key secret endpoint
   # printf, not `read -p`: in zsh, macOS's shell, -p reads from a coprocess.
   printf '%s access key ID (%s): ' "$name" "$ns"; read -rs key; echo
   printf '%s secret access key (%s): ' "$name" "$ns"; read -rs secret; echo
@@ -971,7 +971,7 @@ at the zone sends the browser back to HTTPS, at the cost of one extra hop.
 | Piece | What it is |
 |---|---|
 | Tunnel, `cloudflared` | A Pod that dials out to Cloudflare and keeps the connections open; requests for `ops.ofantini.com` come back down them. Nothing on the node listens for the internet, so no port opens. Think of a phone line we call out on, which then carries incoming calls |
-| Ingress rule | One line in [`cloudflared/config.yaml`](../platform/infra/cloudflared/config.yaml): a hostname plus a pattern on the path, mapped to a Service in the cluster. The first rule that matches wins; anything unmatched gets a 404 |
+| Ingress rule | One line in [`cloudflared/config.yaml`](../infra/cloudflared/config.yaml): a hostname plus a pattern on the path, mapped to a Service in the cluster. The first rule that matches wins; anything unmatched gets a 404 |
 | Path prefix | The part of the address that names the tool (`/dagster`). The tunnel passes it on unchanged, so each tool must serve its pages under it. Dagster's is `dagsterWebserver.pathPrefix` in its `values.yaml` |
 | Access application | Cloudflare's doorman for `ops.ofantini.com`, every path included. It shows a login page and lets through only the e-mail addresses in its policy |
 | One-time PIN | The login: Access e-mails a code to the address, and the code opens a session of 24 hours |
@@ -1051,8 +1051,8 @@ cloudflared tunnel create lagom           # writes ~/.cloudflared/<tunnel-id>.js
 cloudflared tunnel route dns lagom ops.ofantini.com
 cloudflared tunnel token lagom \
   | kubectl create secret generic cloudflared-token -n cloudflared --from-file=token=/dev/stdin --dry-run=client -o yaml \
-  | kubeseal --context <node-name> --format yaml > platform/infra/cloudflared/token-sealed.yaml
-grep -c 'token:' platform/infra/cloudflared/token-sealed.yaml   # 1: one sealed key
+  | kubeseal --context <node-name> --format yaml > infra/cloudflared/token-sealed.yaml
+grep -c 'token:' infra/cloudflared/token-sealed.yaml   # 1: one sealed key
 rm ~/.cloudflared/cert.pem ~/.cloudflared/*.json
 ```
 
@@ -1072,7 +1072,7 @@ reads its rules as intended. The rules sit inside a ConfigMap, so the first
 command extracts them:
 
 ```bash
-sed -e '1,/config.yaml: |/d' -e 's/^    //' platform/infra/cloudflared/config.yaml > /tmp/cloudflared.yaml
+sed -e '1,/config.yaml: |/d' -e 's/^    //' infra/cloudflared/config.yaml > /tmp/cloudflared.yaml
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress validate                                   # OK
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster/runs   # prod's rule
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster-staging  # the 404 rule since 2026-11-16
@@ -1188,7 +1188,7 @@ hour is not.
    is echoed. Expected lengths are 32, 64 and 65:
 
    ```bash
-   printf 'Access Key ID: ' && read -rs KEY_ID && echo && printf 'Secret Access Key: ' && read -rs SECRET && echo && printf 'S3 endpoint: ' && read -rs ENDPOINT && echo && echo "lengths: ${#KEY_ID} ${#SECRET} ${#ENDPOINT}" && kubectl --context <node-name> create secret generic r2-backups -n <env> --from-literal=ACCESS_KEY_ID="$KEY_ID" --from-literal=ACCESS_SECRET_KEY="$SECRET" --from-literal=ENDPOINT="$ENDPOINT" --dry-run=client -o yaml | kubeseal --context <node-name> --format yaml > platform/infra/postgres-<env>/r2-backups-sealed.yaml; unset KEY_ID SECRET ENDPOINT
+   printf 'Access Key ID: ' && read -rs KEY_ID && echo && printf 'Secret Access Key: ' && read -rs SECRET && echo && printf 'S3 endpoint: ' && read -rs ENDPOINT && echo && echo "lengths: ${#KEY_ID} ${#SECRET} ${#ENDPOINT}" && kubectl --context <node-name> create secret generic r2-backups -n <env> --from-literal=ACCESS_KEY_ID="$KEY_ID" --from-literal=ACCESS_SECRET_KEY="$SECRET" --from-literal=ENDPOINT="$ENDPOINT" --dry-run=client -o yaml | kubeseal --context <node-name> --format yaml > infra/postgres-<env>/r2-backups-sealed.yaml; unset KEY_ID SECRET ENDPOINT
    ```
 
 3. Add the `ObjectStore`, the `ScheduledBackup` and `spec.plugins` to the
@@ -1289,7 +1289,7 @@ base backup.
 
 Each environment runs its own Dagster in its namespace
 ([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), from
-`platform/infra/dagster-<env>/values.yaml`. Three Pods stay up:
+`infra/dagster-<env>/values.yaml`. Three Pods stay up:
 
 - the **webserver**, the UI;
 - the **daemon**, which evaluates the schedules and starts queued runs;
@@ -1305,7 +1305,7 @@ environment's Postgres.
 Exercised in staging on 2026-10-28; prod runs the same since 2026-11-05.
 In prod, replace `staging` with `prod`.
 
-**The jobs** (code in [`platform/orchestration/`](../platform/orchestration/README.md)):
+**The jobs** (code in [`data/orchestration/`](../data/orchestration/README.md)):
 
 | Job | Schedule (UTC) | What it does |
 |---|---|---|
@@ -1471,7 +1471,7 @@ next index:
 **While two clusters run at once** (a move, or a drill with the old node up):
 
 - **Both reconcile the same `main`.** A merge reaches both. Merge nothing to
-  `platform/infra/` that is meant for one node only.
+  `infra/` that is meant for one node only.
 - **Both run Dagster and ping the same Healthchecks.io checks**, because
   the sealed URLs decrypt with the same key on both. A check that stays *up*
   proves nothing about the new node: the old one's pings would hide its
@@ -1539,7 +1539,7 @@ nodes over a shared window was not run.
 - The re-load reaches 30 days back at most, and normal runs never load a
   revision published after an event is 30 days old. This is a limit of the
   USGS API's default, not of the runbook, and the operator accepted it
-  ([`services/usgs/README.md`](../services/usgs/README.md)).
+  ([`data/sources/usgs/README.md`](../data/sources/usgs/README.md)).
 
 ### Retire the old node
 

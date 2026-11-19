@@ -1,6 +1,6 @@
 # ADR-0006 — Monorepo layout: platform, services, products
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0053](0053-repository-layout-infra-and-data.md) on 2026-11-19. Until then: Accepted
 - **Date:** 2026-10-12
 
 ## Context and problem

@@ -88,15 +88,16 @@ every change reaches the cluster through a pull request.
 ## Layout
 
 ```
-platform/   the shared backbone: cluster manifests, Argo CD apps, the dbt project
-services/   one directory per data source: ingestion, its tests and image
-products/   what people see: the dashboards (the site has its own repository)
-tools/      CI checks and operational scripts
-docs/       architecture, roadmap, decisions (ADRs), runbook
+infra/   the infrastructure: cluster manifests, Argo CD apps, Helm values
+data/    the data: sources, the dbt warehouse, the Dagster code, the dashboards
+tools/   CI checks and operational scripts
+docs/    architecture, roadmap, decisions (ADRs), runbook
 ```
 
-Adding a source or a dashboard is additive: a new directory and its Argo CD
-Application ([ADR-0006](docs/adr/0006-monorepo-layout.md)).
+`infra/` is where the AI agents lead and `data/` is where the operator, a data
+professional, leads. Adding a source is additive: one directory under
+`data/sources/` and one of dbt models under `data/warehouse/models/`
+([ADR-0053](docs/adr/0053-repository-layout-infra-and-data.md)).
 
 ## License
 

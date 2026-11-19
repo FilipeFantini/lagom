@@ -17,7 +17,7 @@ spec:
       helm:
         releaseName: cert-manager
         valueFiles:
-          - $values/platform/infra/cert-manager/values.yaml
+          - $values/infra/cert-manager/values.yaml
     - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values

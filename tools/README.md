@@ -24,7 +24,7 @@ with `lagom.dev/ephemeral-memory-request` but whose rendered Dagster instance
 does not queue runs one at a time (`max_concurrent_runs: 1`): the annotation
 counts one run. It does not check what a run requests; that the code
 location's run resources equal the annotation is a test in
-`platform/orchestration/tests/test_definitions.py`.
+`data/orchestration/tests/test_definitions.py`.
 
 `resource_budget.py` renders charts with `helm template`, and
 `manifest_policy.py` uses that same rendering. A release name, chart,
@@ -36,7 +36,7 @@ run a program.
 ## Manifest policy check
 
 [`manifest_policy.py`](manifest_policy.py) reads every Application in
-`platform/infra/apps/`, renders it the way Argo CD does (it imports
+`infra/apps/`, renders it the way Argo CD does (it imports
 `resource_budget.py`'s rendering, so it needs `helm` and network access to the
 chart repositories), and enforces four rules:
 
@@ -75,7 +75,7 @@ is not read as more than it proves:
 - Any other Application field (`selfHeal`, `project`, `syncOptions`,
   `destination`), or whether the prune value is the right one: only that it is
   stated.
-- Kinds other than `Application` in `platform/infra/apps/`, and Applications
+- Kinds other than `Application` in `infra/apps/`, and Applications
   defined elsewhere.
 - Anything `helm template` cannot see without a cluster (`lookup`, the
   cluster's API versions).

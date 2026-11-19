@@ -17,8 +17,11 @@ Helm values file of a chart Application):
    had it on main before prod did.
 
 Each environment's paths are those of the Argo CD Applications in
-platform/infra/apps/ whose destination is that environment's namespace: the
-directory of a Git source, and the `$values/...` file of a chart source.
+infra/apps/ whose destination is that environment's namespace: the
+directory of a Git source, and the `$values/...` file of a chart source. A path
+under infra/ is also searched as platform/infra/, where it was before ADR-0053
+moved it: the history search does not follow a rename, so without that a digest
+staging pinned before the move would count as never pinned.
 
 What it does not check:
 - That staging's run of the image succeeded. CI never reaches the cluster
@@ -57,6 +60,10 @@ PROMOTED_NAMESPACE = "prod"
 SOURCE_NAMESPACE = "staging"
 IMAGE_KEYS = {"image", "imageName"}
 DIGEST = re.compile(r"@(sha256:[0-9a-f]{64})$")
+# ADR-0053 moved platform/infra/ to infra/. `git log -S` limited to a path does
+# not follow a rename, so a digest staging pinned before the move is found only
+# under the old path.
+LEGACY_PREFIX = "platform/"
 
 
 def _load_yaml(text: str) -> list[Any]:
@@ -136,9 +143,11 @@ def pinned_before(repo: Path, base: str, digest: str, paths: list[str]) -> bool:
 
     `git log -S` lists the commits that change how many times the string
     occurs, so a digest that was ever pinned there has at least the commit
-    that added it.
+    that added it. Paths under infra/ are also searched under platform/infra/, where
+    they were before ADR-0053 moved them.
     """
-    result = _git(repo, "log", "--format=%H", f"-S{digest}", base, "--", *paths)
+    searched = [*paths, *(f"{LEGACY_PREFIX}{p}" for p in paths if p.startswith("infra/"))]
+    result = _git(repo, "log", "--format=%H", f"-S{digest}", base, "--", *searched)
     if result.returncode != 0:
         raise SystemExit(f"git log failed:\n{result.stderr}")
     return bool(result.stdout.strip())
@@ -146,7 +155,7 @@ def pinned_before(repo: Path, base: str, digest: str, paths: list[str]) -> bool:
 
 def violations(repo: Path, base: str) -> tuple[list[str], int]:
     """Every problem found in prod's images, and how many images were checked."""
-    environments = environment_paths(repo / "platform/infra/apps")
+    environments = environment_paths(repo / "infra/apps")
     for namespace in (PROMOTED_NAMESPACE, SOURCE_NAMESPACE):
         if namespace not in environments:
             raise SystemExit(f"no Application with a Git path targets namespace {namespace!r}")

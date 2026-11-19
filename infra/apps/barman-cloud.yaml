@@ -15,7 +15,7 @@ spec:
       helm:
         releaseName: barman-cloud
         valueFiles:
-          - $values/platform/infra/barman-cloud/values.yaml
+          - $values/infra/barman-cloud/values.yaml
     - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values

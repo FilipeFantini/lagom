@@ -14,7 +14,7 @@ spec:
       helm:
         releaseName: cnpg
         valueFiles:
-          - $values/platform/infra/cloudnative-pg/values.yaml
+          - $values/infra/cloudnative-pg/values.yaml
     - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values

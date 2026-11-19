@@ -117,7 +117,7 @@ its own.
       [ADR-0011](adr/0011-memory-viability-on-4gb.md)
 - [x] Confirm `k3s-server` stays bounded over 24 h with `GOMEMLIMIT` — 761 MiB
       RSS after 67 h on 2026-10-16, against 1,235 MB after 17 h without it
-- [x] Argo CD (no Dex) watching `platform/infra/` —
+- [x] Argo CD (no Dex) watching `infra/` —
       [ADR-0009](adr/0009-argocd-bootstrap-and-self-management.md)
 - [x] Sealed Secrets configured — [ADR-0010](adr/0010-sealed-secrets.md):
       installed, a sealed secret decrypted in the cluster, the same file refused
@@ -157,7 +157,7 @@ passes.
 - [x] dlt pipeline for USGS (`rest_api` source, incremental) — first real
       load 2026-10-17: 10,168 events (30 days) into `lagom_dev` in 15 s
 - [x] Verify whether dlt source config can live in separate YAML — it can: the
-      whole `rest_api` block is in `services/usgs/ingestion/source.yaml`. One
+      whole `rest_api` block is in `data/sources/usgs/ingestion/source.yaml`. One
       thing cannot be written in YAML, a Python callable (here `convert`, which
       turns the cursor into the ISO date the API wants); the entry point adds
       it. [ADR-0003](adr/0003-ingestion-split-dlt-benthos.md) is history and is
@@ -302,7 +302,7 @@ The node that M3 needs, and the orchestration every showcase uses.
       hand-made bronze fixture in a DuckLake on the runner, every pull
       request: models, contracts, unit and data tests, reconciliations
       (`PASS=33`, 2026-11-07). What it does not cover is in the
-      [warehouse README](../platform/warehouse/README.md#tests)
+      [warehouse README](../data/warehouse/README.md#tests)
 - [ ] Freshness threshold declared and asserted
 - [ ] Runbook: on-failure section
 
@@ -322,7 +322,7 @@ the first showcase in it ([ADR-0022](adr/0022-platform-as-a-portfolio-of-archite
 - [ ] Dashboards rendered to a static page by dbt Charts, shown as a gallery
       of cards on the site
       ([ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md))
-  - [x] The dbt Charts project and its CI gate: `products/dashboards/`, the
+  - [x] The dbt Charts project and its CI gate: `data/dashboards/`, the
         first board (earthquakes), and a check that fails a render that
         disagrees with gold ([ADR-0040](adr/0040-dbt-charts-for-the-dashboards.md))
   - [x] A server of our own, designed and stopped: two pull requests in
@@ -397,22 +397,22 @@ its Dagster UI and its backup (all 2026-11-16). One is open: both Postgres at
 
 ## Repository layout
 
-Defined in [ADR-0006](adr/0006-monorepo-layout.md) and listed in
+Defined in [ADR-0053](adr/0053-repository-layout-infra-and-data.md) and listed in
 [`../README.md`](../README.md). Directories are created by the milestone that
 fills them — no empty scaffolding.
 
 | Directory | Born in |
 ---|---|
 | `docs/` | now |
-| `platform/infra/`, `.github/` | M1 |
-| `platform/warehouse/`, `services/usgs/` | M2 |
-| `platform/orchestration/` | M3 |
-| `products/` | M4 |
+| `infra/`, `.github/` | M1 |
+| `data/warehouse/`, `data/sources/usgs/` | M2 |
+| `data/orchestration/` | M3 |
+| `data/dashboards/` | M4 |
 
-Argo CD watches `platform/infra/` only. GitHub Actions handles CI and consumes
+Argo CD watches `infra/` only. GitHub Actions handles CI and consumes
 nothing on the VPS.
 
 **The test the layout must keep passing:** adding a source creates one directory
-under `services/` and one under `platform/warehouse/models/`, and changes
+under `data/sources/` and one under `data/warehouse/models/`, and changes
 nothing else. If a new source ever requires touching more, the layout needs
 revisiting — with a new ADR.

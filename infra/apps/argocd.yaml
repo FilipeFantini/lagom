@@ -1,5 +1,5 @@
 # Argo CD manages itself: the upstream chart, pinned, with the values file
-# from this repository. A change to platform/infra/argocd/values.yaml is
+# from this repository. A change to infra/argocd/values.yaml is
 # applied by Argo CD like any other change.
 #
 # Pruning is off: a mistake here must not let Argo CD delete its own pieces.
@@ -18,7 +18,7 @@ spec:
       helm:
         releaseName: argocd
         valueFiles:
-          - $values/platform/infra/argocd/values.yaml
+          - $values/infra/argocd/values.yaml
     - repoURL: https://github.com/FilipeFantini/lagom.git
       targetRevision: main
       ref: values

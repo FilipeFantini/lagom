@@ -1,0 +1,44 @@
+# Earthquakes, the full board: everything in partials/earthquakes.yml, the
+# table of the largest earthquakes and the notes on the numbers.
+#
+# The id is what check_boards.py finds the board's comparison by; without it
+# the id is made from the title, and a new title would lose the check.
+extends: ../partials/earthquakes.yml
+id: earthquakes
+
+queries:
+  largest:
+    sql: |
+      select event_utc, magnitude, magnitude_class, region, place, depth_km,
+             depth_class, status, 'USGS' as usgs_page, url
+      from {{ queries.base }} order by magnitude desc, event_utc desc, event_id limit 100
+
+charts:
+  largest:
+    type: table
+    query: largest
+    title: The 100 largest earthquakes
+    subtitle: By magnitude, with the most recent first among equals. Times are UTC, depth is in km.
+    style:
+      columns:
+        event_utc: {label: Origin time (UTC)}
+        usgs_page: {label: USGS page, link: "{{ url }}"}
+        url: {visible: false}
+
+rows:
+  - text: "Latest earthquake in the data: **{{ queries.kpis.one.last_event }} UTC**. Latest USGS revision of these earthquakes: **{{ queries.kpis.one.last_revision }} UTC**. Both times come from the data, not from when this page was built."
+  - cols: [k_events, k_largest, k_m4, k_reviewed]
+  - per_day
+  - map
+  - cols: [by_class, by_depth]
+  - top_regions
+  - largest
+  - text: |
+      **About these numbers**
+
+      - **Source:** the [USGS Earthquake Catalog](https://earthquake.usgs.gov/fdsnws/event/1/), earthquakes only: other event types, such as quarry blasts, are left out.
+      - **Window:** the last 30 UTC days up to the latest earthquake in the data, by origin time. The current UTC day is partial.
+      - **Classes:** the magnitude classes (micro to great) and depth classes (shallow, intermediate, deep) are defined in the warehouse; see [its README](https://github.com/FilipeFantini/lagom/blob/main/data/warehouse/README.md#what-the-models-decide).
+      - **Revisions:** an earthquake marked `automatic` has not been reviewed by a USGS analyst and may be revised, magnitude and class included. The share reviewed is of the earthquakes in the window.
+      - **Units:** all times are UTC; depth is in kilometres; magnitude has no unit.
+      - **Static page:** it cannot filter or search. 

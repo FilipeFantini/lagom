@@ -7,18 +7,18 @@ name: images
 on:
   pull_request:
     paths:
-      - "services/**"
-      - "platform/warehouse/**"
-      - "platform/orchestration/**"
-      - "products/dashboards/**"
+      - "data/sources/**"
+      - "data/warehouse/**"
+      - "data/orchestration/**"
+      - "data/dashboards/**"
       - ".github/workflows/images.yml"
   push:
     branches: [main]
     paths:
-      - "services/**"
-      - "platform/warehouse/**"
-      - "platform/orchestration/**"
-      - "products/dashboards/**"
+      - "data/sources/**"
+      - "data/warehouse/**"
+      - "data/orchestration/**"
+      - "data/dashboards/**"
       - ".github/workflows/images.yml"
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
   # Pull requests: no registry login, no write permission. Only `build` runs
   # here; PR code is executed in this job, so it holds nothing it could abuse.
   #
-  # To add an image for a new service, add one row to the matrix below and the
+  # To add an image for a new source, add one row to the matrix below and the
   # same row to the matrix of `publish`. The two are separate jobs because a
   # job's `permissions` cannot depend on the event: giving one job
   # `packages: write` would also give it to pull requests.
@@ -42,7 +42,7 @@ jobs:
         include:
           # One image since 2026-11-07: lagom-usgs and lagom-warehouse ran
           # only in the CronJobs on Postgres, retired that day (ADR-0033).
-          # The code location bundles services and the dbt project, so its
+          # The code location bundles the sources and the dbt project, so its
           # context is the repository root and its Dockerfile is named.
           # It has no entrypoint (the chart passes the whole command), so its
           # smoke test loads the definitions, as the code server does: first
@@ -51,7 +51,7 @@ jobs:
           # (`dct`, for the `dashboards` job) must run.
           - name: orchestration
             context: .
-            file: platform/orchestration/Dockerfile
+            file: data/orchestration/Dockerfile
             smoke: >-
               ! python -c 'import lagom_orchestration.definitions' 2>/dev/null &&
               HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions' &&
@@ -109,7 +109,7 @@ jobs:
         include:
           # One image since 2026-11-07: lagom-usgs and lagom-warehouse ran
           # only in the CronJobs on Postgres, retired that day (ADR-0033).
-          # The code location bundles services and the dbt project, so its
+          # The code location bundles the sources and the dbt project, so its
           # context is the repository root and its Dockerfile is named.
           # It has no entrypoint (the chart passes the whole command), so its
           # smoke test loads the definitions, as the code server does: first
@@ -118,7 +118,7 @@ jobs:
           # (`dct`, for the `dashboards` job) must run.
           - name: orchestration
             context: .
-            file: platform/orchestration/Dockerfile
+            file: data/orchestration/Dockerfile
             smoke: >-
               ! python -c 'import lagom_orchestration.definitions' 2>/dev/null &&
               HEARTBEAT_URL=https://hc-ping.invalid/smoke python -c 'import lagom_orchestration.definitions' &&

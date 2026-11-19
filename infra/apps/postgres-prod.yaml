@@ -1,5 +1,5 @@
 # The prod Postgres: one CloudNativePG Cluster, reconciled from
-# platform/infra/postgres-prod/. See ADR-0012.
+# infra/postgres-prod/. See ADR-0012.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/FilipeFantini/lagom.git
     targetRevision: main
-    path: platform/infra/postgres-prod
+    path: infra/postgres-prod
   destination:
     server: https://kubernetes.default.svc
     namespace: prod

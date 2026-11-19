@@ -25,7 +25,7 @@ decision, consequences, and how to reverse it.
 | [0003](0003-ingestion-split-dlt-benthos.md) | Split ingestion: dlt for batch, Redpanda Connect for events | Accepted; NATS's deferral amended by 0045 (proposed), and standing again since 0052 |
 | [0004](0004-table-format.md) | Open table format: Iceberg preferred, Delta as fallback | Proposed, deferred by 0008 |
 | [0005](0005-duckdb-and-postgres-roles.md) | DuckDB as compute engine, Postgres as operational spine | Accepted, partially superseded by 0008 |
-| [0006](0006-monorepo-layout.md) | Monorepo layout: platform, services, products | Accepted |
+| [0006](0006-monorepo-layout.md) | Monorepo layout: platform, services, products | Superseded by 0053 |
 | [0007](0007-three-environments.md) | Three environments: dev local, staging and prod on one node | Accepted, partially superseded by 0008, 0014, 0015 and 0026; staging on demand, lean and switched by agents, amended by 0046 |
 | [0008](0008-postgres-for-all-layers.md) | Postgres for every layer until the lakehouse has a measured trigger | Accepted, partially superseded by 0014 |
 | [0009](0009-argocd-bootstrap-and-self-management.md) | Argo CD: pinned Helm chart, app of apps, self-managed | Accepted, decision 4 superseded by 0017; the headless install's rejection reversed by 0046 |
@@ -72,3 +72,4 @@ decision, consequences, and how to reverse it.
 | [0050](0050-the-pi-streaming-runtime-and-private-hub-link.md) | The Pi streaming runtime and its private link to the hub | Superseded by 0052 (was Proposed) |
 | [0051](0051-handoff-to-another-provider-through-t3-code.md) | Handing off to another provider through T3 Code, on the Mac | Proposed |
 | [0052](0052-streaming-leaves-the-platform.md) | The streaming showcase leaves the platform | Accepted; supersedes 0045, 0047 and 0050, amends 0046 and 0042 (decision 6) |
+| [0053](0053-repository-layout-infra-and-data.md) | Repository layout: `infra/` and `data/` | Accepted; supersedes 0006 |
