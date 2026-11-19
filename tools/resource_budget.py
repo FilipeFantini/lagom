@@ -7,7 +7,7 @@ enforces engineering-protocol.md §16.5:
    memory limit, and a CPU request.
 2. Resident memory requests, plus the components k3s installs itself, plus
    every ephemeral job at once, fit within the ceiling stated in
-   docs/architecture.md.
+   docs/platform.md.
 
 CloudNativePG Cluster objects (postgresql.cnpg.io/v1) are counted too. Their
 Pods are created by the operator at runtime, so no Pod spec exists in Git to
@@ -251,11 +251,11 @@ def replicas(doc: dict[str, Any]) -> int:
     return 1
 
 
-def read_ceiling_bytes(architecture: Path) -> int:
-    """The ceiling is stated once, in architecture.md; GB there means GiB."""
-    match = CEILING_PATTERN.search(architecture.read_text())
+def read_ceiling_bytes(platform_doc: Path) -> int:
+    """The ceiling is stated once, in platform.md; GB there means GiB."""
+    match = CEILING_PATTERN.search(platform_doc.read_text())
     if match is None:
-        raise SystemExit(f"ceiling sentence not found in {architecture}")
+        raise SystemExit(f"ceiling sentence not found in {platform_doc}")
     return int(float(match.group(1)) * 2**30)
 
 
@@ -379,12 +379,12 @@ def main() -> int:
         type=int,
         # CoreDNS's request, the only component k3s still installs (ADR-0021).
         default=70,
-        help="requests of components k3s installs outside Git (architecture.md §11)",
+        help="requests of components k3s installs outside Git (platform.md, Resource budget)",
     )
     args = parser.parse_args()
     repo: Path = args.repo
 
-    ceiling = read_ceiling_bytes(repo / "docs/architecture.md")
+    ceiling = read_ceiling_bytes(repo / "docs/platform.md")
     resident: list[Workload] = []
     ephemeral: list[Workload] = []
     problems: list[str] = []

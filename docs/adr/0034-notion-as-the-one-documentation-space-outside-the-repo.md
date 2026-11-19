@@ -1,6 +1,6 @@
 # ADR-0034 — Notion is the one documentation space outside the repository
 
-- **Status:** Proposed
+- **Status:** Superseded by [ADR-0054](0054-documentation-one-place-per-fact.md) (was Proposed)
 - **Date:** 2026-11-07
 - **Amends:** in [ADR-0001](0001-use-adrs.md), *Decision*: the Obsidian vault
   no longer has a role in the project's documentation.

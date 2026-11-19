@@ -10,7 +10,7 @@ crds:
 # used 39 MiB, the cainjector 35 and the webhook 22, so the first two request
 # 48 (from 64) and the webhook keeps 32. The limits are unchanged.
 # GOMEMLIMIT keeps each runtime under its limit instead of holding idle heap
-# (architecture.md section 11).
+# (docs/platform.md, Resource budget).
 resources:
   requests: {cpu: 10m, memory: 48Mi}
   limits: {memory: 192Mi}

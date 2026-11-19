@@ -9,6 +9,10 @@
 - **Amends:** [ADR-0022](0022-platform-as-a-portfolio-of-architectures.md),
   *The pieces*: the site no longer lives under `products/`; the dashboards do.
 
+**2026-11-19 amendment to decision 3.** [ADR-0054](0054-documentation-one-place-per-fact.md)
+puts roadmap status in GitHub Projects. The site tells the story and links
+to the repository's technical details by commit permalink.
+
 ## Context and problem
 
 ADR-0022 put the site under `products/` because it was the platform's public

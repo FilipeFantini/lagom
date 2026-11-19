@@ -6,9 +6,7 @@ memory budget. The data that runs on it is in [`data.md`](data.md); how to
 operate it is in [`runbook.md`](runbook.md); why each choice was made, and
 what it replaced, is in the ADRs ([`adr/`](adr/README.md)).
 
-This is the part of the project the agents lead. A change here explains the
-mechanism it relies on, in plain words, before the step
-([`AGENTS.md`](../AGENTS.md) §4).
+This is the part of the project the agents lead. See the [agent rules](../AGENTS.md) for how infrastructure changes are explained.
 
 ---
 
@@ -17,8 +15,8 @@ mechanism it relies on, in plain words, before the step
 1. **Ephemeral compute.** The scarce resource is resident memory, not tool
    size. Work that can run as a job starts, does its work and exits; only what
    must answer at any moment stays resident.
-2. **Everything declarative in Git.** What runs in the cluster is a file on
-   `main`. No manual change in the cluster survives (see [GitOps](#gitops--argo-cd)).
+2. **Desired state in Git.** Argo CD reconciles managed objects with
+   `main`. See [GitOps](#gitops--argo-cd) for deletion and bootstrap details.
 3. **The resource budget is a contract.** Every container declares a memory
    request, a memory limit and a CPU request, and CI fails if the sum exceeds
    the ceiling ([Resource budget](#resource-budget)). The ceiling follows the
@@ -126,7 +124,7 @@ Secret `postgres-app`; nothing about it is committed, and a rebuild generates a
 new one, so consumers read the Secret and never cache it. There is no
 superuser password (`enableSuperuserAccess: false`); administration goes
 through the Pod's local socket. Other logins (`dagster`, `lagom_dev`,
-`lake_reader`) take their password from a sealed Secret.
+`lake_reader`) use passwords from sealed Secrets.
 
 **Isolation.** A NetworkPolicy on each Postgres admits only its own namespace
 and the CloudNativePG operator, so staging cannot reach prod.
@@ -147,7 +145,7 @@ cert-manager issues the TLS certificates the plugin and the operator use.
 - **Restore** into a new `Cluster` is tested (runbook:
   [*Backup and restore*](runbook.md#backup-and-restore)).
 - **RTO** (how long a rebuild takes): a rebuild from Git plus a re-load took
-  about 20 minutes once the server existed ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)).
+  about 20 minutes once the server existed, in the Postgres pipeline drill ([ADR-0020](adr/0020-move-to-the-8-gb-node.md)).
   A re-load brings back the last 30 days of USGS events, the limit the operator
   accepted ([ADR-0019](adr/0019-postgres-backup-deferred.md)).
 
@@ -189,8 +187,10 @@ Three, on one node ([ADR-0007](adr/0007-three-environments.md)):
 
 Staging is real, not nominal, because of four enforced conditions: its own
 Postgres and credentials, a quota, a NetworkPolicy that keeps it from prod,
-and separate secrets. It runs always on; with no UI, a change there is
-validated by the next scheduled run. The accepted limit: neither environment
+and separate secrets. Staging runs continuously, without a webserver. The
+next scheduled run validates a change there. Recreate staging on demand
+for structural validation ([ADR-0007](adr/0007-three-environments.md),
+[ADR-0052](adr/0052-streaming-leaves-the-platform.md)). The accepted limit: neither environment
 is isolated from node failure or from memory pressure on the node.
 
 **Promotion is by image digest** ([ADR-0015](adr/0015-images-on-ghcr.md)).
@@ -215,10 +215,8 @@ bundles every source's code, the dbt project, dbt Charts and the boards. A pull
 request builds and smoke-tests it; a push to `main` publishes it tagged with
 the commit SHA and prints the digest. The image is multi-stage, pinned by
 digest at the base, runs as UID 10001 on a read-only root filesystem, and
-writes only under `/tmp` (an `emptyDir`). It is about 1 GB in the registry
-(961 MiB at its first build, before dbt Charts added about 240 MiB unpacked),
-so the first pull on a node takes minutes; later runs start from the node's
-copy, since the image is pinned by digest.
+writes only under `/tmp` (an `emptyDir`). The first pull of a digest takes
+minutes. Later runs reuse the node's copy.
 
 The package is private: an anonymous pull is refused. Pods pull it with the
 sealed `ghcr-pull` Secret of their namespace.
@@ -237,7 +235,6 @@ them, not by opening a port.
 | **Public site and dashboards** (`ofantini.com`, `lagom.ofantini.com`) | anyone | static pages of public data; no path to the cluster |
 | **Cloudflare Access** (`ops.ofantini.com/<tool>`) | the operator; later partners | a web UI behind a login, nothing to install |
 | **Tailscale** | operators | the Kubernetes API and SSH to the node |
-| **Signed file URL** | partners, external pipelines | one object with an expiry; not built |
 
 **Tailscale** is a private network between machines (a WireGuard mesh) with
 rules by identity. The node is `tag:lagom-node`: operators reach its SSH and
@@ -258,29 +255,19 @@ that skipped the login is refused ([ADR-0030](adr/0030-operator-uis-behind-cloud
 itself: personal accounts only, `sudo` for operators only, no root login, no
 passwords, reachable only over Tailscale. Day-to-day work never needs it.
 
-**Signed URL.** An HMAC over one object with an expiry, checked by the storage
-layer. It carries no identity: whoever holds the link has access until it
-expires, and it cannot be revoked earlier. So: short expiry, one URL per
-recipient, each one logged.
-
-**Why an API, not the database, would be the public channel.** With an API, a
-proxy authenticates before anything reaches the application, the surface is a
-set of endpoints, HTTP has rate limiting and WAFs, and a token is scoped and
-revocable. Postgres parses the first packet itself, exposes a query engine to
-whoever authenticates, and a password saved in a BI tool lives long and
-somewhere unknown. Database access stays on the tailnet.
+Public APIs are a future access channel. Restricting one to defined
+endpoints allows authentication, request limits and narrow tokens at the
+proxy. A direct database connection would expose the full SQL query engine
+and its resource costs, so database access stays private.
 
 ## Resource budget
 
 The node shows **7,741 MiB** of memory to the OS. Two budgets share it, kept
 apart because they are enforced differently.
 
-**Node overhead, outside Kubernetes — enforced by nothing: 1,687 MiB** by RSS
-(`k3s-server` 1,022, `containerd` 200, container shims 254, `tailscaled` 55,
-the rest of the OS ~156), measured two hours after k3s started
-([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md); the history on the 4 GB
-node is in [ADR-0011](adr/0011-memory-viability-on-4gb.md)). RSS overstates a
-little, since shared pages are counted per process: the conservative measure.
+**Node overhead outside Kubernetes: 1,687 MiB** (the planning figure in
+[ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)). It uses resident set
+size (RSS), which counts shared pages per process and errs high.
 
 **Pod requests — the CI ceiling.**
 **Ceiling enforced in CI: 5.5 GB of declared requests.** (The check reads GB
@@ -349,7 +336,7 @@ so it adds no request.
   can, as an administrator, edit rulesets and environments; for it the gates
   hold by convention ([CONTRIBUTING](../CONTRIBUTING.md#branch-protection)).
 - **Scanners find known defects, not intent.** Dependabot reports published
-  vulnerabilities and CodeQL blocks new high-severity findings
+  vulnerabilities and CodeQL reports findings
   ([ADR-0048](adr/0048-dependency-and-code-scanning-for-the-public-repository.md));
   harmful code that looks ordinary passes both. The reviewer and the
   operator's approval of each pin are what stop it reaching the node.
@@ -360,7 +347,7 @@ so it adds no request.
 |---|---|
 | A second server (real environment isolation, or high availability) | a real client |
 | Terraform for what is outside the cluster (server, firewall, Tailscale policy, Cloudflare DNS, R2) | the next node is created or rebuilt. Deferred by the operator: the state backend is the choice that needs its ADR; existing resources are adopted with `import` ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
-| Infrastructure observability (metrics and logs) | the USGS showcase is live on the site. Candidate: VictoriaMetrics single-node, node-exporter, kube-state-metrics, VictoriaLogs, a viewer for the operator over the tailnet; the site gets exported snapshots. Its own ADR measures it first ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
+| Infrastructure observability (metrics and logs) | the USGS showcase is published, and this follow-up is prioritized in the Project. Measure the candidate metrics and logs stack before adoption ([ADR-0022](adr/0022-platform-as-a-portfolio-of-architectures.md)) |
 | PgBouncer (a CloudNativePG `Pooler`) | the first external BI consumer: each Postgres connection costs 5–10 MB, and BI tools open many |
 | Short-lived credentials (a secret store or workload identity), and the writers' credentials split by layer | a real client, or a second team on the cluster ([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md) built the first part) |
 | Automated secret rotation | its mechanism is chosen in an ADR; secrets are sealed by hand today ([ADR-0010](adr/0010-sealed-secrets.md)) |

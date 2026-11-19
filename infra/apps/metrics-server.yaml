@@ -1,5 +1,5 @@
 # metrics-server: serves `kubectl top`, which measures the resource budget
-# (architecture.md §11). The upstream chart, replacing the k3s addon
+# (docs/platform.md, Resource budget). The upstream chart, replacing the k3s addon
 # (ADR-0021); chart 3.14.0 ships metrics-server v0.9.0, the version k3s ran.
 apiVersion: argoproj.io/v1alpha1
 kind: Application

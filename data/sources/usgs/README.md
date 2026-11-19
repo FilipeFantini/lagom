@@ -10,7 +10,7 @@ The CronJobs that ran it on Postgres were retired on 2026-11-07
 |---|---|
 | **Source** | `https://earthquake.usgs.gov/fdsnws/event/1/query`, `format=geojson`. No key, no authentication. The static summary feeds are not used: they have no `updatedafter` and cannot be paged or backfilled. |
 | **Destination** | dlt `ducklake` destination in staging and prod (catalog in the environment's Postgres, files in its R2 bucket, [ADR-0026](../../../docs/adr/0026-dagster-one-instance-per-environment.md)), dataset `bronze`, table `usgs_events`. The command line takes the destination as a required argument |
-| **Freshness threshold** | 2 hours — the newest `properties__updated` in bronze may not be older than that. Asserted by dbt in the next step, not here. |
+| **Freshness** | Checked separately by dbt. See [warehouse tests](../../warehouse/README.md#tests) for thresholds and invocation. |
 | **Volume** | about 9 events an hour, roughly 300 000 a year |
 
 ## How it works

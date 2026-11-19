@@ -24,7 +24,7 @@ spec:
   # because it would only throttle (engineering-protocol.md §16.5). The memory
   # limit is what the kernel enforces: above it the Pod is OOM-killed.
   # `memory: 300Mi` is the request counted by the budget check and in
-  # architecture.md §11.
+  # docs/platform.md, Resource budget.
   resources:
     requests:
       cpu: 50m
@@ -35,7 +35,7 @@ spec:
   postgresql:
     # Sized to fit the 512Mi limit with headroom. Worst case, in MiB:
     #   shared_buffers                      96   shared by all backends
-    #   25 connections x ~5 private         125  low end of architecture.md §8's
+    #   25 connections x ~5 private         125  low end of the per-connection
     #                                            5-10 MB: the shared pages a
     #                                            backend touches are already in
     #                                            shared_buffers
@@ -92,9 +92,8 @@ spec:
       parameters:
         barmanObjectName: r2-backups
 
-  # The read-only group for consumers of gold (architecture.md §10, permission
-  # model). The operator creates it and keeps it matching this block; it can
-  # do nothing on its own: NOLOGIN, no password, no attribute beyond the
+  # The read-only group for consumers of gold (docs/data.md, Reader permissions).
+  # CloudNativePG reconciles it. It has NOLOGIN, no password and no attribute beyond the
   # default. Its privileges are SELECT on gold's tables and USAGE on the gold
   # schema, granted by dbt every time it builds a gold model
   # (data/warehouse/dbt_project.yml), because a rebuilt table loses the
@@ -144,5 +143,5 @@ spec:
           name: lake-reader-credentials
 
   # No monitoring or pooler yet: PgBouncer waits for the first external BI
-  # consumer (ADR-0012, architecture.md §8). A disabled block would read as
+  # consumer (ADR-0012, docs/platform.md). A disabled block would read as
   # protection that is not there. Backup is on, above (ADR-0025).

@@ -82,14 +82,14 @@ def test_replicas_default_and_explicit() -> None:
     assert replicas({"kind": "DaemonSet", "spec": {}}) == 1
 
 
-def test_read_ceiling_from_architecture(tmp_path: Path) -> None:
-    doc = tmp_path / "architecture.md"
+def test_read_ceiling_from_platform(tmp_path: Path) -> None:
+    doc = tmp_path / "platform.md"
     doc.write_text("**Ceiling enforced in CI: 2.6 GB of declared requests.** More text.")
     assert read_ceiling_bytes(doc) == int(2.6 * 2**30)
 
 
 def test_read_ceiling_fails_loudly_when_missing(tmp_path: Path) -> None:
-    doc = tmp_path / "architecture.md"
+    doc = tmp_path / "platform.md"
     doc.write_text("no ceiling here")
     with pytest.raises(SystemExit):
         read_ceiling_bytes(doc)

@@ -13,9 +13,7 @@
 # they were when the sidecar and the webserver went (ADR-0046). Pods: 3
 # resident, plus one run. The CronJob usgs-pipeline (256 / 512) counted here
 # until it was retired on 2026-11-07 (ADR-0033); the quota was left as it was.
-# Dagster's figures are measured (architecture.md section 11). The budget
-# check counts the same workloads against the node's ceiling (architecture.md
-# section 11); the quota keeps staging inside them.
+# CI counts the same workloads against the node's ceiling (docs/platform.md).
 apiVersion: v1
 kind: ResourceQuota
 metadata:
