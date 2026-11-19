@@ -186,7 +186,7 @@ Does not prove:
   memory a render takes, are known only from a render on real data. On the
   fixture, one render takes about 4 s and a peak of about 0.7 GB, and a window of
   3,500 synthetic events took the same (2026-11-10). The cluster budget
-  ([`architecture.md` §11](../../docs/architecture.md#11-resource-budget)) has no
+  ([Platform resource budget](../../docs/platform.md#resource-budget)) has no
   line for it yet.
 - **How the page looks** in a browser. CI draws no picture; the legend, the
   labels and the map are reviewed by eye.

@@ -172,3 +172,10 @@ ceiling.
 - **2026-11-19 — removed from Git.** The change that carries this ADR removes
   the files above; the budget check reads 4,734 of 5,632 MiB. What is left in
   the cluster is not yet deleted.
+
+### 2026-11-19 — Follow-up cleanup
+
+CloudNativePG reported the staging role removals reconciled for `serving`,
+`events_writer` and `grafana_reader`. The `ensure: absent` entries are removed
+from the staging Cluster now that the controller has dropped those roles.
+The absence declarations were a one-time cleanup, not standing policy.

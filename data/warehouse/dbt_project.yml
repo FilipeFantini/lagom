@@ -15,7 +15,7 @@ models:
     marts:
       +materialized: table
       +schema: gold
-      # The read-only group of every gold consumer (architecture.md §10). A
+      # The read-only group of every gold consumer (docs/data.md, Reader permissions). A
       # `table` model is rebuilt on each run, and the new table has none of
       # the old one's grants, so they are re-applied here on every build:
       # dbt's `grants` issues SELECT after the table is created, and the

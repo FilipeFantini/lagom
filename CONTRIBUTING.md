@@ -1,354 +1,168 @@
 # Contributing
 
-The workflow is in place from the first commit, even with one developer, so that
-adding the second changes nothing.
-
-Start with [`AGENTS.md`](AGENTS.md). For anything larger than a single-file
-change, read [`docs/engineering-protocol.md`](docs/engineering-protocol.md)
-first.
-
-## Language
-
-Conversation happens in Brazilian Portuguese. **Everything written into the
-repository is in English** — code, comments, commits, docs, PR descriptions, log
-messages.
+Start with [AGENTS.md](AGENTS.md) and, for a change larger than one file,
+the [engineering protocol](docs/engineering-protocol.md).
 
 ## Workflow
 
-1. Branch from `main`. Only `main` is reconciled by Argo CD, so nothing reaches
-   the cluster from a branch.
-2. Commit in small, coherent steps. One concern per commit.
-3. Open a pull request and let CI run.
-4. Get a review. Working alone, the review is the `reviewer` agent
-   ([`.claude/agents/reviewer.md`](.claude/agents/reviewer.md)): an
-   independent pass that runs the adversarial review of
-   [`docs/engineering-protocol.md`](docs/engineering-protocol.md) §12 Phase E.
-   The required `agent review` check runs it in CI on every push and posts
-   its verdict on the pull request
-   ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)); a
-   reviewer subagent before opening the pull request is optional. Blocker and
-   major findings are fixed before merge; minor ones never block. A change to
-   Markdown only, outside the agents' instructions, passes without a review,
-   to spend less of the Claude subscription
-   ([ADR-0038](docs/adr/0038-leaner-agent-gates.md)). A pull request that
-   touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS) has a **For
-   the operator** section in its description — what changes in behaviour,
-   what it touches, what could go wrong, how to undo it, in plain words.
-5. Merge to `main`. Argo CD converges the cluster. Who may merge — any agent,
-   once the required checks are green and a reviewer returned APPROVE, with the
-   operator's explicit go-ahead for a guardrail change — is
-   [`AGENTS.md`](AGENTS.md) §6
-   ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
+1. Create a worktree with one branch from `main`. Use a descriptive branch
+   under `feat/`, `fix/`, `docs/`, `chore/` or `refactor/`.
+2. Commit one coherent change at a time. Follow [Conventional Commits](#commits).
+3. Open a pull request into `main`, with the [required evidence](#pull-requests)
+   and a closing reference to the issue where applicable.
+4. Read the independent verdict posted by `agent review`, for example with
+   `gh pr view <number> --comments`. The
+   [reviewer](.claude/agents/reviewer.md) exercises the adversarial review
+   defined in the engineering protocol. Resolve blocker and major findings
+   before merge and address substantive minor findings. Markdown-only changes
+   outside the agents' instructions pass the review gate without a model run
+   ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md),
+   [ADR-0038](docs/adr/0038-leaner-agent-gates.md)).
+5. Any agent that can reach GitHub may merge after every required check passes,
+   the independent reviewer returns APPROVE where required, and the operator
+   approves a guarded pull request. The session that pushed a sandboxed agent's
+   work handles the merge. Only `main` is reconciled into the cluster.
+6. Remove clean, finished worktrees and merged branches with the safe Git
+   commands allowed by the [agent rules](AGENTS.md#10-more-than-one-harness).
 
-**More than one harness.** Agents can run on Claude Code, Codex, or another
-harness. Everything below about `.claude/settings.json` binds Claude Code only.
-An agent on any other harness runs inside its harness's own sandbox with
-network access off — for Codex, `workspace-write` — so its commands can edit
-the checkout but cannot commit, reach the cluster, GitHub, or the tailnet; a
-session outside the sandbox commits and pushes its changes
-([`AGENTS.md`](AGENTS.md) §10). The exception is the sequential handoff through T3 Code, where Codex or
-Antigravity works like the architect session, outside that sandbox
-([ADR-0051](docs/adr/0051-handoff-to-another-provider-through-t3-code.md)). An agent started by an agent runner works in a
-container that has network but no credential, on its own clone, and hands its
-work over as a patch file; that session treats the patch as untrusted input,
-applies it in a fresh worktree, and opens the pull request
-([ADR-0032](docs/adr/0032-agents-in-credential-free-containers.md)). Once
-the setup below is shown to work, a runner's GitHub connector may instead
-hold the operator's fine-grained token for `lagom` alone, and its agents
-push, open and merge their own pull requests, with GitHub requiring the
-operator's approval for the guarded paths
-([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)).
+The main session owns the design. A scoped
+[implementer](.claude/agents/implementer.md) works from a brief with paths,
+constraints and acceptance criteria, commits locally and hands the result
+back with evidence. The architect audits the diff and opens the pull request.
 
-**Agents.** The main Claude session acts as architect. It can hand a scoped
-task to the `implementer` agent
-([`.claude/agents/implementer.md`](.claude/agents/implementer.md)) with a brief —
-files, acceptance criteria, constraints. The implementer commits on a local
-branch, never pushes or changes the cluster, and reports validation evidence;
-the architect reads the diff, opens the pull request, and sends it to review.
-**Most of these limits are instructions, not enforced permissions.** One part is
-enforced: [`.claude/settings.json`](.claude/settings.json) denies, to every
-Claude Code session and agent, the git commands that discard uncommitted work
-or rewrite shared history — `reset --hard`, `checkout --` and `checkout HEAD`,
-`restore`, `clean`, `switch -f`, `stash drop`/`clear`, `branch -D`/`-f`, force
-pushes in any flag position or `+` refspec, remote deletes — and pushes to
-`main`. Two harmless forms are blocked with them, as accepted friction:
-`git restore --staged` (use `git reset <file>`) and `git clean -n`. Claude Code
-cannot scope these
-rules to one agent, so they bind the main session too. They match the command
-as written: `git -C . reset --hard` is not caught, so they stop mistakes, not a
-determined bypass.
+## What is enforced for agents
 
-The same file denies **writes to the cluster** (since 2026-10-27): the
-`kubectl` verbs that change or enter running objects (`apply`, `delete`,
-`edit`, `patch`, `replace`, `scale`, `label`, `annotate`, `exec`, `cp`,
-`attach`, `run`, `debug`, `set`, `rollout`, `drain`, `cordon`, `uncordon`,
-`taint`), in either position (`kubectl -n prod delete …` too); `kubectl
-create` from a file or kustomization (`-f`, `--filename`, `-k`), of a Secret
-or a token, and of a Job from an image (`--image`); `helm install`, `upgrade`,
-`uninstall`, `rollback`, in either position; and `argocd app sync`, `delete`,
-`set`, `rollback`, `terminate-op`. Denying `create secret` also blocks the
-sealing recipe in the runbook (`create secret … --dry-run=client | kubeseal`),
-on purpose: an agent never handles a secret's value, so sealing stays the
-operator's step. Argo CD is the cluster's writer, and a
-change reaches it through a merge. What stays allowed is what the runbook
-needs an agent for: reading (`get`, `describe`, `logs`, `top`), `kubectl
-create job --from=cronjob/…` (a Job from a CronJob's template; no CronJob
-runs since 2026-11-07, and a pipeline run on demand is *Launch run* in
-Dagster's UI), `port-forward`, and
-`kubectl diff -n <namespace> -f` (manifests here carry no namespace; Argo CD sets it), which replaces `apply --dry-run=server` as the server-side
-check of a manifest. What it does not stop: commands run through `ssh` on the
-node (`sudo k3s kubectl …`, `systemctl`), `kubectl` reached through another
-program, the bare `create` forms not listed (`create namespace`,
-`configmap`, `serviceaccount`), `kubectl proxy` and `certificate approve`,
-and any verb not listed. The rules match the command as written, like the git
-ones. Everything else — no push from the
-implementer — is still instruction only. Changing the file is a guardrail
-change ([`engineering-protocol.md`](docs/engineering-protocol.md) §18 rule 3).
+The Claude Code [deny list](.claude/settings.json) blocks specific Git forms
+that discard work, rewrite history or push to `main`. It blocks forms that
+write to the cluster, enter workloads or generate a Secret. Those restrictions
+also bind Mac handoff agents under [AGENTS.md](AGENTS.md#10-more-than-one-harness).
+Inspect with `get`, `describe`, `logs`, `top` or
+`kubectl diff -n <namespace> -f <manifest>` where authorized. The operator
+handles sealing and the manual steps in the runbook.
 
-Branch naming: `feat/`, `fix/`, `docs/`, `chore/`, `refactor/` followed by a
-short description.
+The deny list matches written commands. It does not constrain their
+equivalents invoked indirectly, unlisted writes or the GitHub permissions
+of the Mac session. Agents remain bound by the
+[harness rules](docs/engineering-protocol.md#18-agent-driven-development).
 
 ## Commits
 
-Conventional Commits:
-
-```
-feat(ingestion): add USGS earthquake source
-fix(dbt): correct timezone handling in silver layer
-docs(adr): record table format decision
-```
-
-Explain **why** in the body when the change is not self-evident. The subject
-says what changed; the body says what it is protecting against.
+Use a Conventional Commit such as `docs(adr): record table format decision`.
+Explain why in the body when it is not self-evident. Use the GitHub noreply
+address and the attribution trailer in [AGENTS.md](AGENTS.md#6-execution-flow).
 
 ## Checks
 
-CI runs on every pull request and on `main`
-([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): lint, types, and tests
-for `tools/` and for every project under `data/sources/`; lint and parse of the dbt
-project; a secret scan of the whole history (see [Secrets](#secrets)); the
-promotion check (prod pins only digests staging pinned first,
-[ADR-0015](docs/adr/0015-images-on-ghcr.md)); the resource budget check; and the
-manifest policy check (explicit prune, pinned chart versions and images,
-[`tools/README.md`](tools/README.md#manifest-policy-check)).
-**A red check is not merged.**
+[CI](.github/workflows/ci.yml) runs on pull requests and `main`. It checks
+formatting, types and tests for tools, sources and orchestration. It lints
+and parses dbt and builds a fixture lake with its tests. The dashboard job
+renders and reconciles the boards against fixture gold. It is a fixture
+check and does not publish. The [tool checks](tools/README.md) cover the
+resource budget, manifest policy and image promotion. The whole history
+is scanned for [secrets](#secrets).
 
 ### Branch protection
 
-`main` is protected by a repository ruleset named `main`, enabled on
-2026-10-27 when the repository became public
-([ADR-0017](docs/adr/0017-public-repository-from-a-snapshot.md)). GitHub
-enforces, with no bypass — the operator follows the same rules:
+The `main` repository ruleset requires a pull request and blocks force
+push and deletion, with no bypass. Its required status names are
+`tools (lint, types, tests)`, `services (lint, types, tests)`,
+`warehouse (lint, parse)`, `secret scan`, `resource budget`,
+`promotion (prod pins only staging's digests)`, `manifest policy`,
+`guardrail approval` and `agent review`. Job renames must be coordinated
+with the operator's ruleset update. The dashboard render runs in CI but
+its name is outside this required list.
 
-- changes reach `main` only through a pull request;
-- the CI checks above must pass, named exactly as their jobs report:
-  `tools (lint, types, tests)`, `services (lint, types, tests)`,
-  `warehouse (lint, parse)`, `secret scan`, `resource budget`,
-  `promotion (prod pins only staging's digests)`, `manifest policy`,
-  `guardrail approval` and `agent review` — a renamed job must be renamed in
-  the ruleset too, or every pull request waits for a check that never reports
-  (`manifest policy` joined the ruleset on 2026-10-27; `guardrail approval`
-  and `agent review` on 2026-11-07, after the setup tests below). The job
-  `services` checks `data/sources/`: its name predates ADR-0053 and stays until
-  the operator renames it in the ruleset in the same step;
-- `main` cannot be force-pushed or deleted.
+Pull requests touching [CODEOWNERS paths](.github/CODEOWNERS) wait in
+[`guardrail approval`](.github/workflows/guardrail-approval.yml). The
+operator selects **Review deployments → Approve** after reviewing the
+**For the operator** section. Approvals require Deployments permission
+and are renewed on every push. Editing the description alone keeps an
+existing approval. A pull request stacked on a different branch gets
+these checks after it targets `main` and receives a new push.
 
-**The guardrail approval.** Every agent acts as the operator on GitHub, so
-the gate for a guarded change looks at what a token can do, not at who acts
-([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)). A pull
-request that touches a path in [`.github/CODEOWNERS`](.github/CODEOWNERS) —
-what Argo CD applies, the gates, and the instructions agents follow — makes
-the [`guardrail approval`](.github/workflows/guardrail-approval.yml) workflow
-wait on the `guardrail` environment until the operator approves it (the pull
-request's checks → *Review deployments* → *Approve*). Approving needs the
-Deployments permission, which no agent's token holds. The workflow runs from
-`main` (`pull_request_target`, for pull requests into `main` only), so a pull
-request cannot remove its own gate, and each new push needs a new approval
-(an edit to the description does not). A pull request stacked on another
-branch has no `guardrail approval` or `agent review` check; once its base
-becomes `main` it stays blocked until its next push. The operator approves on the pull
-request's **For the operator** section — what changes in behaviour, what it
-touches, what could go wrong, how to undo it, in plain words; for a pin under
-`infra/`, every change merged since the previous pin — not by
-reading code.
+The merge gates run `main`'s workflows on `pull_request_target` and read
+pull request files as data. The repository Actions policy **Allow the
+merge gates on pull_request_target** permits that event only for
+[`guardrail-approval.yml`](.github/workflows/guardrail-approval.yml) and
+[`agent-review.yml`](.github/workflows/agent-review.yml). Recreate the
+policy on a rebuild. Inspect the configuration with:
 
-Inspect what applies with
-`gh api repos/FilipeFantini/lagom/rules/branches/main` and
-`gh api repos/FilipeFantini/lagom/environments/guardrail`.
+```bash
+gh api repos/FilipeFantini/lagom/rules/branches/main
+gh api repos/FilipeFantini/lagom/environments/guardrail
+gh api repos/FilipeFantini/lagom/actions/policies
+```
 
-**Setting up the gate** (done on 2026-11-07), in this order — each step depends on the one before:
+Check for the required status names, the operator as required environment
+reviewer, and the policy limiting the trigger to the two workflows.
 
-1. The operator creates the `guardrail` environment with themselves as the
-   required reviewer, *Prevent self-review* off (agents act as the operator),
-   and administrators' bypass off.
-2. [`guardrail-approval.yml`](.github/workflows/guardrail-approval.yml) is on
-   `main`.
-3. A pull request touching a guarded path shows `guardrail approval` waiting
-   for the environment; one touching none shows it passing. Both are closed
-   unmerged.
-4. `guardrail approval` is added to the `main` ruleset's required checks.
-5. The operator creates the runner's token — fine-grained, `lagom` only, at
-   most 90 days: Contents, Pull requests and (optionally) Issues read and
-   write; every other permission *No access*, Administration, Deployments,
-   Environments, Actions, Secrets and Workflows included.
-6. With that token, approving a waiting run fails:
-   `GH_TOKEN=<token> gh api -X POST repos/FilipeFantini/lagom/actions/runs/<run-id>/pending_deployments`
-   with the environment's id, `state=approved` and a comment, is refused.
-7. Only then does the token go into the runner's GitHub connector.
+**Recreate the gates**, as operator, before requiring their check names:
 
-What it does not enforce:
+1. Create the `guardrail` environment with the operator as required
+   reviewer, **Prevent self-review** off and administrator bypass off.
+2. Put both workflows on `main`. Use `claude setup-token` and save the
+   token as repository secret `CLAUDE_CODE_OAUTH_TOKEN`. Keep it out of the
+   terminal history and out of the Dependabot secrets store.
+3. Test one guarded pull request waiting for approval, one unguarded pull
+   request passing that gate, and a substantive pull request receiving an
+   `agent review` verdict. Close the test requests unmerged. Then require
+   the checks in the `main` ruleset.
+4. If using a runner connector, the operator first proves its scoped token
+   cannot approve the waiting deployment. Use a fine-grained token limited
+   to this repository, expiring in at most 90 days. Grant Contents and Pull
+   requests read and write, and Issues read and write only if needed. Set
+   every other permission to **No access**. The expected result of the pending-deployment approval request is
+   refusal. Only then configure the connector
+   ([ADR-0035](docs/adr/0035-agents-use-the-operators-scoped-token.md)).
 
-- **Review of unguarded paths beyond the reviewer.** Zero approvals are
-  required outside `CODEOWNERS`. A pull request there cannot reach the
-  cluster, the gates or the agents' instructions without touching a guarded
-  path; it can change dependencies and the rules documents (ADRs, roadmap,
-  runbook), which only the reviewer reads
-  ([ADR-0038](docs/adr/0038-leaner-agent-gates.md)).
-- **The Mac session's restraint.** The operator's Mac session holds a token
-  with `repo` and `workflow` scopes, which as an administrator can edit
-  rulesets and environments. For it, the operator's go-ahead for a change to
-  CI, agent definitions or instructions, permissions, RBAC, and secrets also
-  holds by convention
-  ([ADR-0029](docs/adr/0029-agents-on-more-than-one-harness.md)).
-- **That the reviewer is right.** `agent review` is required since
-  2026-11-07, so no pull request merges without its APPROVE; whether the
-  verdict is correct rests on a model
-  ([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md)).
-
-**Making `agent review` required** (done on 2026-11-07), in this order
-([ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md) Decision 7):
-
-1. [`agent-review.yml`](.github/workflows/agent-review.yml) is on `main`
-   (it runs on `pull_request_target`, so it reviews nothing before then).
-2. The operator creates a token with `claude setup-token` and stores it as
-   the repository secret `CLAUDE_CODE_OAUTH_TOKEN`.
-3. A pull request shows the `agent review` check run with a verdict comment.
-4. Only then is `agent review` added to the `main` ruleset's required checks;
-   a required check that never reports blocks every pull request.
-
-**The Actions policy that lets the two gates run.** Both gates run on
-`pull_request_target`, which GitHub blocks by default in public repositories
-from 2026-12-02 unless an Actions policy allows it; it was tried in two
-brownouts, on 2026-11-09 and 2026-11-16 from 16:00 to 18:00 UTC, when both
-gates failed to start and no pull request could merge
-([GitHub changelog](https://github.blog/changelog/2026-11-02-pull_request_target-blocked-by-default-december-2/)).
-The trigger runs with the repository's secrets on behalf of anyone's pull
-request, which is why GitHub closes it; the gates are safe with it because
-they run only `main`'s code and read the pull request's files as data, never
-running them. On 2026-11-16 the operator created the repository policy
-`Allow the merge gates on pull_request_target` (*Settings → Actions →
-Policies*): enforcement active, workflow paths
-`.github/workflows/guardrail-approval.yml` and
-`.github/workflows/agent-review.yml`, one rule restricting their events to
-`pull_request_target`. Any other workflow that adds the trigger stays
-blocked. The policy lives outside Git, so a rebuilt or forked repository needs
-it created again; the site's repository needs the same one. Inspect it with
-`gh api repos/FilipeFantini/lagom/actions/policies` (and
-`/actions/policies/<id>` for its paths and rules). How it takes precedence
-over GitHub's default rule is not documented; it is confirmed by the gates
-running after 2026-12-02.
-
-Until 2026-10-27 `main` had no protection: on a private repository it needs a
-paid plan, and the operator accepted that as an exception (2026-10-13) and as
-debt for ADR-0013 (2026-10-16).
+The gate does not substitute for review of risks outside guarded paths.
+The Mac's broader token can administer the repository, so the operator's
+go-ahead also holds by instruction for that session. A verdict covers the
+reviewer's findings, with the limitations in
+[ADR-0036](docs/adr/0036-the-reviewer-as-a-required-check.md).
 
 ### Repository security settings
 
-These live in GitHub's settings, not in Git, so a rebuilt repository needs
-them set again. Why each exists is in
-[ADR-0048](docs/adr/0048-dependency-and-code-scanning-for-the-public-repository.md).
+These settings live on GitHub. Recreate and verify them on a rebuild.
+[ADR-0048](docs/adr/0048-dependency-and-code-scanning-for-the-public-repository.md)
+and [ADR-0049](docs/adr/0049-the-reviewer-runs-on-dependabots-pull-requests.md)
+record the setup and exceptions.
 
-| Setting | State | Inspect with |
-|---|---|---|
-| Dependabot alerts and security updates | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom --jq .security_and_analysis` |
-| No Dependabot secret: `agent review` gets the repository's token, and allows `dependabot[bot]` in its workflow ([ADR-0049](docs/adr/0049-the-reviewer-runs-on-dependabots-pull-requests.md)) | the copy made on 2026-11-16 deleted on 2026-11-17 | `gh api repos/FilipeFantini/lagom/dependabot/secrets` (empty) |
-| CodeQL default setup, `actions` and `python`, on pull requests and weekly | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/default-setup` |
-| `main` ruleset: *Require code scanning results*, CodeQL, security *High or higher*, alerts *Errors* | not set: CodeQL does not analyse Dependabot's pull requests (ADR-0048 Validation) | `gh api repos/FilipeFantini/lagom/rulesets/25948914` |
-| CodeQL alert #1 (`actions/untrusted-checkout/high` in `agent-review.yml`) dismissed as *won't fix* | dismissed on 2026-11-16 | `gh api repos/FilipeFantini/lagom/code-scanning/alerts/1` |
-| Actions must be pinned to a full commit SHA | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/actions/permissions` |
-| Fork pull request CI approval: all external contributors | on since 2026-11-16 | `gh api repos/FilipeFantini/lagom/actions/permissions/fork-pr-contributor-approval` |
-| Secret scanning and push protection | on | `gh api repos/FilipeFantini/lagom --jq .security_and_analysis` |
-
-A row marked *to set* is not in force yet; it changes to its date when it
-is.
+| Setting | Expected state |
+|---|---|
+| Dependabot alerts and security updates | Enabled. No Dependabot secret copy |
+| CodeQL default setup | Actions and Python, on pull requests and weekly |
+| Code scanning as a merge requirement | Unset because the default setup does not analyze Dependabot pull requests |
+| CodeQL alert 1 on the reviewer workflow | Dismissed with the rationale in ADR-0048 |
+| Actions | Require full commit SHA pins |
+| CI from forks | Approval for all external contributors |
+| Secret scanning and push protection | Enabled |
 
 ## Pull requests
 
-A pull request states:
+Write the description in English. Include what changes and why, affected
+paths, evidence from actual commands, the documentation updated or why none
+applies, security, residual risks and pending checks. For a defect that
+reached `main`, describe the gate that now catches it or why none can.
 
-- **What changed and why**, in prose a reader can follow without the diff.
-- **How it was validated** — the command run and its real result, not an
-  assurance. A green build is not a working feature.
-- **Which documents were updated**, or an explicit statement that none were
-  affected and why.
-- **Open items and accepted risks**, if any.
-- **For a fix to a defect that reached `main`:** the escape, and the
-  deterministic check that now catches it — or why none can
-  ([ADR-0013](docs/adr/0013-agent-driven-development-guardrails.md) rule 1).
-
-Guardrail changes need the operator's explicit go-ahead before merge
-([`engineering-protocol.md`](docs/engineering-protocol.md) §18 rule 3).
-
-Do not include unrelated refactoring. A diff that touches files the description
-does not mention will be sent back.
-
-## Required checks
-
-A pull request is not ready while any of these is true:
-
-- Build, lint, type check, or a required test fails.
-- Acceptance criteria are not validated by evidence.
-- A secret appears in the diff.
-- Declared resource requests exceed the ceiling in
-  [`docs/architecture.md`](docs/architecture.md).
-- Documentation required by [`AGENTS.md`](AGENTS.md) §5 was not updated.
-
-Never weaken a check to get a green result. If a check is wrong, fix the check
-in its own commit, with the reason stated.
+For guarded paths, add a section titled **For the operator**, in plain words.
+Say what changes, what it touches, what could go wrong and how to reverse
+it. For an image pin, cover the changes since the previous pin. Keep the
+diff scoped to the description and omit tool-generated credit trailers.
 
 ## Adding a data source
 
-This is the most common change, and the platform is designed so it is
-configuration rather than code:
-
-1. Choose the pattern — the platform is batch-only, so a source goes through
-   dlt ([ADR-0003](docs/adr/0003-ingestion-split-dlt-benthos.md),
-   [ADR-0052](docs/adr/0052-streaming-leaves-the-platform.md)).
-2. Create one directory, `data/sources/<name>/`, and declare the source config
-   in it. Credentials go to the cluster secret mechanism, never into the
-   repository.
-3. Add dbt models for bronze, silver, and gold under
-   `data/warehouse/models/`, with the schema contract the next layer can rely
-   on. Those two directories are all a source adds
-   ([ADR-0053](docs/adr/0053-repository-layout-infra-and-data.md)).
-4. Add reconciliation and freshness tests —
-   [`docs/engineering-protocol.md`](docs/engineering-protocol.md) §16.4.
-5. Add fixtures for tests. **Tests never call the live API.**
-6. Declare resource requests and limits.
-7. Update [`docs/architecture.md`](docs/architecture.md) if the data flow or the
-   budget changed.
+Follow [Add a source](docs/data.md#add-a-source) and its contract and
+verification requirements.
 
 ## Secrets
 
-Never commit a credential, token, or connection string — not even a
-placeholder that looks real. Secrets are committed only as Sealed Secrets
-(`*-sealed.yaml`; how to seal one is in the runbook), and never appear in logs,
-including inside error messages and tracebacks.
+Use [Sealed Secrets](docs/runbook.md#sealed-secrets) when a cluster secret
+belongs in Git. If an actual secret enters history, rotate first. Then ask
+the operator to handle history remediation.
 
-If a secret is committed by accident, treat it as compromised: rotate it first,
-then clean the history.
-
-**CI scans for secrets** with [gitleaks](https://github.com/gitleaks/gitleaks)
-over every commit in the history, with its default rules and one exception for
-Sealed Secrets ciphertext, explained in [`.gitleaks.toml`](.gitleaks.toml). A
-finding fails the build. A false positive is answered by narrowing a rule in
-that file, with the reason written next to it — never by a `.gitleaksignore`
-entry nobody can explain, and never by removing the job.
-
-What the scan does not check: secrets that match no rule (a password with low
-entropy, or an unusual format), anything outside Git (shell history, CI logs,
-the cluster), and whether a sealed file is really a `SealedSecret`. The
-ciphertext exception matches the shape of a line, not the file it is in, so a
-real credential written as `key: Ag` followed by 500 or more base64 characters
-would pass the generic rule in any file. It lowers
-the chance that a credential reaches the history; it does not prove none did.
+The [gitleaks configuration](.gitleaks.toml) describes the narrowly shaped
+exception for encrypted values. Whole-history scanning cannot detect
+patterns it does not know, credentials outside Git, or whether text shaped
+like sealed ciphertext is in a valid SealedSecret. Investigate each finding.
+Document and narrow any false-positive exception at its source.

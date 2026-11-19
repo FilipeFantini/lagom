@@ -3,9 +3,7 @@
 # Chart: dagster/dagster 1.13.27, from https://dagster-io.github.io/helm.
 # Only what differs from the chart defaults is set here.
 #
-# Memory figures are set from measurement in staging (architecture.md
-# section 11): peaks by the kubelet over an hour of runs on 2026-10-28, and
-# again after seven days of uptime on 2026-11-05.
+# Memory requests follow the measured budget (docs/platform.md).
 
 # The metadata lives in the database `dagster` of staging's Postgres, as the
 # role `dagster` (postgres-staging/cluster.yaml). Its password is in the

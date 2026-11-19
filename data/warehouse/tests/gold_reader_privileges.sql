@@ -1,5 +1,5 @@
 -- gold_reader may read gold and nothing else, and may write nowhere
--- (architecture.md section 10). Returns a row, and so fails, for each relation
+-- (docs/data.md, Reader permissions). Returns a row, and so fails, for each relation
 -- in a layer schema where that is not so, and for a gold schema it cannot use.
 -- The privileges are granted by dbt_project.yml; this checks the outcome in the
 -- database, not the config.

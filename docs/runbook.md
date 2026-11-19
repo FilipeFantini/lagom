@@ -1,35 +1,33 @@
 # Runbook
 
-How to run, deploy, and recover the platform described in
-[`architecture.md`](architecture.md). Read the section for the task at hand;
-the design and the reasons for it are in `architecture.md` and the ADRs.
+Procedures for operating and recovering [Lagom's platform](platform.md). Run
+commands from the repository root unless stated otherwise. The operator runs
+cluster writes, shell access to the node and credential operations. Check
+the [agent rules](../AGENTS.md) and set the correct Kubernetes context before
+working against a live environment.
 
-Operational procedures. **Kept current as part of any change that affects how
-the platform is run or recovered** — see [`AGENTS.md`](../AGENTS.md) §5.
+**Placeholders.** Keep identifying values out of the public repository.
+Replace `<admin-user>`, `<operator-ssh-public-key>`, `<operator-tailscale-login>`,
+`<tailnet>`, `<node-tailnet-ip>`, `<operator-email>` and `<team-name>` locally.
+Tailscale lists the tailnet addresses. The Hetzner Console lists the public
+addresses (`<ip>`, `<public-ip>`, `<public-ipv4>`, `<public-ipv6>`).
+`<node-name>` is the target node and `<old-node-name>` the one it replaces.
+Credentials come from the operator's password manager and stay out of chat,
+shell history and unencrypted files.
 
-**Placeholders.** The repository is public, so values that identify the
-operator or address the node are written in angle brackets and never filled
-in here ([ADR-0017](adr/0017-public-repository-from-a-snapshot.md)):
-`<admin-user>` (the node's login user), `<operator-ssh-public-key>` (from
-1Password), `<operator-tailscale-login>` (the identity the operator signs in to
-Tailscale with), `<tailnet>` and `<node-tailnet-ip>` (both printed by
-`tailscale status`), and `<ip>` / `<public-ip>` / `<public-ipv4>` (the Hetzner
-Console). `<node-name>` is not a secret but changes with each node: it is
-`lagom-shared-02` since 2026-10-28, and the next node takes the next index;
-`<old-node-name>` is the one being replaced.
+## Provision the node
 
-## Provision the node (M0)
+In Hetzner Console → Add Server, select a Debian 13 ARM CAX21 in `fsn1`,
+IPv4 and IPv6 enabled, with local disk and no private network or server
+backup. Attach a firewall allowing only Secure Shell (SSH, TCP port 22)
+from your public address until [Tailscale access](#tailscale-acl-and-zero-inbound-ports)
+works. Enable delete and rebuild protection.
 
-Hetzner Console → Add Server, with the settings in
-[`roadmap.md`](roadmap.md#provisioning-settings). Two fields matter beyond the
-table:
-
-- **SSH keys:** select the operator's key. It lands in root's
-  `authorized_keys`, which the cloud-config below makes unusable — but with no
-  key selected, Hetzner generates a root password and emails it, and that
-  password should never exist.
-- **Cloud config:** paste the block below, including the `#cloud-config` first
-  line; without it cloud-init ignores the content.
+Select your SSH key to avoid generating a root password. Paste the
+configuration below as **Cloud config**, including its first line. cloud-init
+reads it at first boot to create the operator's passwordless account and
+disable root and password login. Verify that the selected key grants
+administrative access before closing your bootstrap connection.
 
 ```yaml
 #cloud-config
@@ -54,21 +52,6 @@ runcmd:
   - systemctl restart ssh
 ```
 
-**Why it works.** The cloud-config is the server's *user data*: Hetzner stores
-it once, at creation, and serves it from the metadata endpoint
-(`169.254.169.254`). On first boot cloud-init reads it and applies it. It is
-therefore fixed at creation — a Rebuild re-runs cloud-init with the **original**
-user data, so changing it means creating a new server.
-
-**Never set `disable_root: true` without creating a user.** cloud-init then
-replaces root's key with a forced command that only prints
-`Please login as the user "NONE"`, and the node is unreachable. This happened on
-the first attempt and cost a server recreation.
-
-`NOPASSWD` is required because the user has no password (`lock_passwd`). The
-accepted trade-off: whoever holds the SSH key has root. The key lives in
-1Password and port 22 is open only to the operator's IP.
-
 **Verify** — the host key changes on every creation, so remove the old entry
 and compare the new fingerprint before trusting it:
 
@@ -83,9 +66,10 @@ Expected: `status: done` with `errors: []`; `permitrootlogin no`,
 `passwordauthentication no`, `kbdinteractiveauthentication no`,
 `allowusers <admin-user>`; and root refused with `Permission denied (publickey)`.
 
-## Join the tailnet (M1)
+## Join the tailnet
 
-On the node, from Tailscale's official Debian repository:
+Tailscale is the private network used to reach the node. On the node, install
+it from Tailscale's official Debian repository:
 
 ```bash
 curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg \
@@ -96,18 +80,10 @@ sudo apt-get update && sudo apt-get install -y tailscale
 sudo tailscale up --hostname=<node-name>
 ```
 
-`tailscale up` prints a login URL. The operator opens it, signs in, and approves
-the machine. **No auth key is involved**, so no credential passes through a
-script or a chat. The trade-off is that the step is interactive — fine for one
-node; an unattended rebuild would use a single-use, short-lived auth key.
-
-Then, in the Tailscale admin console: *Machines →* `<node-name>` *→ Disable key
-expiry*. A device must re-authenticate every 180 days by default; on a server
-that silently drops it from the tailnet, and the cluster's API with it.
-
-On the operator's machine: install the Tailscale app
-(`brew install --cask tailscale-app`, which asks for the macOS admin password)
-and sign in to the same tailnet.
+Open the login URL, sign in and approve the machine without an auth key.
+In *Machines →* `<node-name>`, disable key expiry so access survives the
+normal re-authentication interval. On the operator's machine, install the
+client with `brew install --cask tailscale-app` and join the same tailnet.
 
 **Verify:**
 
@@ -118,20 +94,15 @@ ssh <admin-user>@<node-name> hostname
 tailscale status --json | jq '.Peer[] | select(.HostName=="<node-name>") | {Tags, KeyExpiry}'
 ```
 
-The first pings may go through a DERP relay until NAT traversal finds a direct
-path; on 2026-10-12 it became direct within seconds. A path that stays on DERP
-works, only slower.
-
 The last command must print `"tag:lagom-node"` (after the ACL step below) and
 `"KeyExpiry": null`, which is what *Disable key expiry* sets.
 
-The node is `<node-name>.<tailnet>.ts.net`, `<node-tailnet-ip>`; `tailscale
-status` on either machine prints both.
+## Install k3s
 
-## Install k3s (M1)
-
-Configuration first, as files, so the install is declarative and re-runnable;
-then the official installer with a pinned version. On the node:
+k3s runs Kubernetes on the node. Give its server certificate the Tailscale
+name and IP address, enable encryption at rest for Secret objects, and let
+Argo CD install the storage class and metrics server. Write the configuration
+and Go runtime memory cap before running the pinned installer. On the node:
 
 ```bash
 IP=$(tailscale ip -4)
@@ -156,43 +127,7 @@ curl -sfL https://get.k3s.io -o /tmp/k3s-install.sh
 sudo INSTALL_K3S_VERSION="v1.36.5+k3s1" sh /tmp/k3s-install.sh
 ```
 
-The heredoc is unquoted so the shell fills in `$IP`, the node's tailnet
-address; nothing else in it starts with `$`.
-
-**Why it works.** The installer creates the `k3s` systemd unit; on every start
-k3s reads `config.yaml`, where each key is the long form of a command-line flag.
-
-- `tls-san` adds names to the API server's certificate. `kubectl` checks that
-  the name it connects to is in the certificate, so the tailnet name must be
-  listed or every connection over Tailscale fails TLS verification.
-- `disable` keeps k3s from installing those packaged components; a component
-  disabled on a running cluster is uninstalled
-  ([ADR-0021](adr/0021-k3s-packaged-components-under-git.md), which also says
-  in what order the switch was made).
-- `secrets-encryption` encrypts Secret objects in the datastore (SQLite) with a
-  key generated on the node. It protects a copy of the datastore — a stolen
-  disk image or backup. It does not protect against root on the node, which
-  holds the key.
-- The version is the `stable` channel on 2026-10-12. Upgrading is a deliberate
-  change, preceded by a staging rebuild ([ADR-0007](adr/0007-three-environments.md)).
-
-**Memory limit for the Go runtime** — the `memory.conf` above. Without it,
-`k3s-server` grew to 1.2 GB holding memory it did not use
-([ADR-0011](adr/0011-memory-viability-on-4gb.md)). A systemd drop-in survives
-reinstalls of k3s, unlike the installer's environment file, which the
-installer rewrites. Written before the installer runs, it applies from k3s's
-first start (exercised 2026-10-28); on a node where k3s already runs, add it
-and run `sudo systemctl daemon-reload && sudo systemctl restart k3s`.
-
-The figure is 900MiB on the 8 GB node too. `GOMEMLIMIT` bounds k3s's own heap,
-which grows with the objects in the cluster, not with the node's RAM; the
-cluster moved unchanged, so the figure that stopped GC thrash on 4 GB still
-fits. Measured on 2026-10-28, two hours after k3s started: 115 garbage
-collections since start, no thrash
-([ADR-0024](adr/0024-ci-ceiling-on-the-8-gb-node.md)); re-checked with the
-three-day measurement, by the check below.
-
-**Check the limit still has headroom** whenever the cluster gains a component.
+**Check the limit still has headroom** (after configuring the kubeconfig) whenever the cluster gains a component.
 If collections run several times per second and the node's CPU is near 100%
 while pods use little, the runtime has hit the limit — raise it and record
 the measurement ([ADR-0011](adr/0011-memory-viability-on-4gb.md) notes):
@@ -201,18 +136,6 @@ the measurement ([ADR-0011](adr/0011-memory-viability-on-4gb.md) notes):
 kubectl get --raw /metrics | grep -E '^go_(memstats_sys_bytes|gc_gomemlimit_bytes|goroutines|gc_duration_seconds_count) '
 kubectl get --raw /api/v1/nodes/<node-name>/proxy/stats/summary   # CPU of "kubelet" (k3s) vs "pods"
 ```
-
-Restarting k3s does not stop running containers (`KillMode=process`); only the
-API is unavailable for a few seconds.
-
-Traefik and servicelb are not installed, and local-path and metrics-server are
-installed by Argo CD instead of k3s ([ADR-0021](adr/0021-k3s-packaged-components-under-git.md)):
-the `disable:` list in `config.yaml` above. metrics-server is what `kubectl top`
-needs to measure the budget in [architecture.md §11](architecture.md#11-resource-budget). **On a fresh install the cluster has no
-storage class until Argo CD syncs `local-path`**; the Postgres `Cluster`s wait
-for it (their volumes bind on first use). The API (6443) and kubelet (10250)
-listen on all interfaces. **The Hetzner firewall is what keeps them
-private** — which is why the check below probes from outside.
 
 **Verify:**
 
@@ -226,7 +149,7 @@ for p in 22 80 443 6443 10250; do nc -z -G 5 -w 5 <public-ip> $p && echo "$p OPE
 
 Expected: only `22 OPEN` while the firewall still admits SSH.
 
-## Tailscale ACL and zero inbound ports (M1)
+## Tailscale ACL and zero inbound ports
 
 The tailnet's default policy lets every device reach every other. The policy
 below, applied in the admin console (*Access controls*), replaces it:
@@ -254,28 +177,13 @@ below, applied in the admin console (*Access controls*), replaces it:
 
 Then *Machines →* `<node-name>` *→ Edit ACL tags →* `tag:lagom-node`.
 
-**Why it works.** A tagged machine belongs to its tag, not to a person, so rules
-name roles — operators reach Lagom nodes — instead of people. Anything not
-granted is denied, in both directions: operators get SSH and the API and nothing
-else (not even the kubelet), and the node can open no connection to anyone's
-device, so a compromised node cannot reach the operator's machine. `tests` are
-assertions the console checks on every save; a policy that breaks them is
-rejected.
+After the private connection works, remove the inbound rule for port 22.
+Keep the firewall attached with zero inbound rules on both address families.
+It shields the Kubernetes API (6443) and node agent (10250).
 
-**Then close the public firewall.** With the tailnet path verified, the inbound
-rule for port 22 is removed from the Hetzner firewall. The firewall itself stays
-attached with **no inbound rules, which denies all inbound traffic** — do not
-delete or detach it: it is the only thing keeping the API (6443), the kubelet
-(10250), and anything a future LoadBalancer Service publishes off the internet,
-since k3s listens on every interface. (Until 2026-10-27 that included Traefik
-on 80 and 443; [ADR-0021](adr/0021-k3s-packaged-components-under-git.md).) Outbound is unrestricted. Tailscale still connects directly, because
-the firewall is stateful and NAT traversal starts from outbound packets.
-
-**Break-glass.** If Tailscale fails on the node, re-add an inbound rule for port
-22 from the operator's current IP in the Hetzner Console and SSH to the public
-address; remove it afterwards. The Hetzner web console is no way in: the user
-has no password (`lock_passwd`), so a console login cannot succeed. The last
-resort is Hetzner's rescue system, which boots the node from a separate image.
+If Tailscale fails, add a temporary rule for port 22 from your current public
+address, fix access over SSH, then remove the rule and repeat the checks.
+Use the Hetzner rescue system if the node cannot boot.
 
 **Verify** — from outside the tailnet, then through it:
 
@@ -287,11 +195,9 @@ for p in 22 6443 10250; do nc -z -G 5 -w 5 <node-name> $p && echo "$p OPEN" || e
 ```
 
 Expected: every public port closed while the control succeeds; over the tailnet
-22 and 6443 open, 10250 closed. On 2026-10-12 a listener on the operator's
-tailnet address was also probed from the node: refused, with a local control
-connection to the same listener succeeding.
+22 and 6443 open, 10250 closed.
 
-## Operator kubeconfig (M1)
+## Operator kubeconfig
 
 Fetched from the node, with the server address and every `default` name
 replaced by the node's, then merged into `~/.kube/config` so the contexts of
@@ -323,7 +229,7 @@ right in the cluster. It never goes to Git or chat, `umask 077` keeps it
 readable only by its owner, and it is not shared: per-developer RBAC replaces it
 for anyone else (M7).
 
-## Install Argo CD (M1)
+## Install Argo CD
 
 Argo CD is installed once by hand, from the operator's machine over the
 tailnet; after the handover below it manages itself
@@ -333,7 +239,7 @@ tailnet; after the handover below it manages itself
 helm repo add argo https://argoproj.github.io/argo-helm && helm repo update argo
 helm template argocd argo/argo-cd --version 10.10.3 -n argocd \
   -f infra/argocd/values.yaml > /tmp/argocd.yaml   # inspect before installing
-helm install argocd argo/argo-cd --version 10.10.3 -n argocd --create-namespace \
+helm install argocd argo/argo-cd --kube-context <node-name> --version 10.10.3 -n argocd --create-namespace \
   -f infra/argocd/values.yaml --wait
 kubectl -n argocd get pods
 ```
@@ -344,26 +250,18 @@ notifications, ApplicationSet or server Pods: the server's Deployment exists
 at zero replicas, since the operator uses no UI and the CLI works with
 `--core` ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)).
 
-**Repository access — none needed.** The repository is public, and every
-Application names it by its HTTPS URL, so Argo CD clones it anonymously, the
-way any reader can. There is no repository Secret in the cluster and no key at
-GitHub to create, rotate, or lose on a rebuild
-([ADR-0017](adr/0017-public-repository-from-a-snapshot.md)). The trade-off:
-anonymous reads are subject to GitHub's unauthenticated limits, which a poll
-every few minutes stays far below.
-
 **Break-glass.** If a change to the values file breaks Argo CD, it cannot apply
 its own fix. Revert the commit, then re-apply the chart by hand with the
 `helm upgrade` form of the install command above (`helm upgrade argocd ...`
-with the same flags); Argo CD resumes from `main`.
+with the same flags); Argo CD resumes from `main`. Verify the same Pod and Application status.
 
-## Hand over to Argo CD (M1)
+## Hand over to Argo CD
 
 Once `infra/` is on `main`, apply the root Application — the last
 command run by hand against the cluster:
 
 ```bash
-kubectl apply -f infra/apps/root.yaml
+kubectl --context <node-name> apply -f infra/apps/root.yaml
 kubectl -n argocd get applications
 ```
 
@@ -371,76 +269,49 @@ Expected within a few minutes: every Application in `infra/apps/`
 `Synced` and `Healthy`. `root` syncing is also the proof that Argo CD can read
 the repository.
 
-**On an empty cluster the Applications race.** `root` creates them all at
-once, with no sync order, so `postgres-prod` and `postgres-staging` can try to
-create a `Cluster` and `SealedSecret`s before CloudNativePG and Sealed Secrets
-have installed those types. That sync fails and Argo CD retries it: its
-automated sync retries five times with backoff by default (Argo CD v3.5.5 —
-the retry is not set in our manifests). On 2026-10-28 `postgres-prod` failed
-twice and succeeded on the third try, 32 s after `root` was applied; all nine
-Applications were `Synced/Healthy`, with both Postgres `Cluster`s ready, 65 s
-after it. A sync still failed after five tries stays failed until the next
-commit; sync it once by hand
-(`argocd app sync <app> --core --kube-context <node-name>`).
+On a fresh cluster, the database and sealed Secret Applications may try to
+apply objects before their controllers install the new object types. Wait
+for those controllers. If a sync remains failed after retries, the operator
+can run `argocd app sync <app> --core --kube-context <node-name>` then check
+for `Synced` and `Healthy`.
 
-The first sync of `argocd` adopts the objects that `helm install` created, and
-takes longer than the others. When a change restarts the application controller
-itself, the Application can show `OutOfSync` until the restarted controller
-re-reads it. Check whether a difference is real before acting:
+On first sync, Argo CD adopts the Helm bootstrap objects. If its own
+Application stays out of sync after the controller restarts, run
+`argocd app diff argocd --core --kube-context <node-name>` with the config's
+namespace set to `argocd`. An empty diff means there is no change to apply.
 
-```bash
-kubectl config set-context --current --namespace=argocd
-argocd app diff argocd --core      # no output means no difference
-kubectl config set-context --current --namespace=default
-```
+## Deploy
 
-`argocd` is the CLI (`brew install argocd`). `--core` makes it talk to the
-cluster through the kubeconfig instead of logging in to the Argo CD API.
-
-## Deploy (M1)
-
-**How a commit reaches the cluster:** pull request → merge to `main` → Argo CD
-notices the new commit on its next poll → applies the difference → the workload
-picks it up. Nothing is run against the cluster by hand.
-
-Argo CD **polls Git** every 120 s plus up to 60 s of jitter (the chart defaults
-for `timeout.reconciliation`), so a merge lands within about three minutes. It
-**watches the cluster** continuously, so a manual change there is reverted
-almost at once (`selfHeal`).
-
-Measured on 2026-10-13, on `hello`, a trivial nginx kept for this test until
-2026-11-16, when it was removed to save its memory
-([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md));
-any Application now shows the same loop:
-
-| Test | Result |
-|---|---|
-| Merge a one-line change to `infra/hello/configmap.yaml` | merged 13:34:59, applied by Argo CD 13:36:05, served by nginx ~20 s later; the pod did not restart |
-| `kubectl -n hello scale deployment hello --replicas=2` by hand | reverted to 1 replica by Argo CD after 2 s |
-
-**Check state:**
+Merge the reviewed pull request. The [reconciliation loop](platform.md#gitops--argo-cd)
+applies the changes from `main`. Verify the revision and affected workload:
 
 ```bash
-kubectl -n argocd get applications                       # Synced / Healthy per Application
-kubectl -n argocd get application root -o jsonpath='{.status.sync.revision}'    # commit applied
+kubectl -n argocd get applications
+kubectl -n argocd get application root -o jsonpath='{.status.sync.revision}'
 ```
 
-A manual change to anything under Argo CD's management is not a deployment: it
-is undone on the next pass. To change the cluster, change `main`.
+The revision must match the merge or a later commit. Check the affected
+Application is `Synced` and `Healthy` and run its procedure below.
 
-**Removing an Application.** Deleting its file from `infra/apps/`
-makes `root` prune the Application, but not what the Application created:
-no Application here carries Argo CD's resources finalizer, so its objects
-are left running, unmanaged, and a namespace made by `CreateNamespace=true`
-is never pruned. The operator deletes them by hand after the merge. For
-`hello`, on 2026-11-16:
+**Promote an image.** Read the published orchestration image digest in the
+`images` workflow summary for the intended `main` commit. In a pull request
+from `main`, set `dagster-user-deployments.deployments[].image.tag` in
+`infra/dagster-staging/values.yaml` to `<commit-sha>@sha256:<digest>`. After merge, confirm the code server and the next
+`usgs` and `dashboards` runs use it and succeed ([Dagster](#dagster)).
+Then promote the exact same digest to `infra/dagster-prod/values.yaml` in a
+separate pull request from updated `main`. Confirm the same checks in prod.
+A rollback is a new reviewed pull request for a previously tested digest.
 
-```bash
-kubectl -n argocd get application hello          # NotFound: root pruned it
-kubectl delete namespace hello                   # its Deployment, Service and ConfigMap go with it
-```
+**Remove an Application or a non-pruned object.** Before merging, identify
+objects that [Argo CD leaves behind](platform.md#gitops--argo-cd) and plan
+their retirement. Prefer a declarative cleanup where one is available.
+After sync, confirm the object disappeared or that Argo CD no longer manages
+it before the operator deletes any remaining approved object. Verify
+`NotFound` for the intended object and health for its former dependencies.
+Never delete a namespace as a shortcut unless its entire contents and data
+are approved for removal.
 
-## Sealed Secrets (M1)
+## Sealed Secrets
 
 Installed by Argo CD from `infra/apps/sealed-secrets.yaml`
 ([ADR-0010](adr/0010-sealed-secrets.md)). The operator needs `kubeseal`
@@ -452,10 +323,14 @@ secret-like name `.gitignore` lets through:
 
 ```bash
 read -rs VALUE
-kubectl create secret generic <name> -n <namespace> --from-literal=<key>="$VALUE" \
-  --dry-run=client -o yaml | kubeseal --format yaml > infra/<component>/<name>-sealed.yaml
+kubectl --context <node-name> create secret generic <name> -n <namespace> --from-literal=<key>="$VALUE" \
+  --dry-run=client -o yaml | kubeseal --context <node-name> --format yaml > infra/<component>/<name>-sealed.yaml
 unset VALUE
 ```
+
+Verify `kind: SealedSecret`, the name and the namespace in the sealed file.
+After merge, check `kubectl -n <namespace> get sealedsecrets` for
+`SYNCED True` on that object.
 
 The sealed file is bound to `<name>` and `<namespace>`: renaming it or applying
 it elsewhere makes it undecryptable, by design.
@@ -481,29 +356,20 @@ rm ~/sealed-secrets-key.yaml
 kubectl --context <node-name> -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key   # exactly one
 ```
 
-The exported file still carries its old cluster's `resourceVersion` and `uid`;
-on 2026-10-28 the API server accepted it as it is. If it ever refuses
-(`resourceVersion should not be set`), strip those lines first:
-`sed -E '/^[[:space:]]+(resourceVersion|uid|creationTimestamp):/d'`. Only if
-the controller was already running when the key arrived, restart it so it
-reloads its keys:
-`kubectl --context <node-name> -n kube-system delete pod -l app.kubernetes.io/name=sealed-secrets`.
+If the API rejects the exported cluster's metadata, remove the object's
+`resourceVersion`, `uid` and `creationTimestamp` before retrying. If the
+controller is already running after key import, the operator restarts it
+by deleting its Pod and waits for the replacement to become ready.
 
-**Verify** once Argo CD has synced `sealed-secrets`: every `SealedSecret` is
-`SYNCED True`, and the controller's certificate is the one the backup was
-taken from. With the old cluster still up, compare the two certificates;
-without it, `SYNCED True` on every `SealedSecret` is the evidence, since no
-other key can decrypt them:
+After Argo CD syncs, verify all SealedSecrets report `SYNCED True`. If
+the old cluster is available, compare certificate fingerprints:
 
 ```bash
 kubectl --context <node-name> get sealedsecrets -A
 for c in <old-node-name> <node-name>; do kubeseal --context $c --fetch-cert | openssl x509 -noout -fingerprint -sha256; done
 ```
 
-Exercised 2026-10-28: one key Secret, five `SealedSecret`s `SYNCED True`, and
-the same fingerprint on both nodes.
-
-## Postgres (M2)
+## Postgres
 
 Prod runs as the CloudNativePG `Cluster` `postgres` in namespace `prod`
 ([ADR-0012](adr/0012-cloudnative-pg.md)), created by Argo CD from
@@ -521,19 +387,13 @@ kubectl -n prod get cluster postgres                 # "Cluster in healthy state
 (`enableSuperuserAccess: false`); the local socket inside the Pod is the way in:
 
 ```bash
-kubectl -n prod exec -it postgres-1 -c postgres -- psql
+kubectl --context <node-name> -n prod exec -it <postgres-pod> -c postgres -- psql
 ```
 
-**Credentials** are generated by the operator in the Secret `postgres-app`,
-never in Git. List secrets by name only — `kubectl get secret -o yaml` prints
-the values, base64-encoded rather than encrypted:
+Run `SELECT current_user;` and confirm `postgres` before issuing SQL.
 
-```bash
-kubectl -n prod get secrets -o name
-```
-
-Connecting to prod from the operator's machine (port-forward over the tailnet)
-is *not yet exercised*; it is written here when dlt and dbt first connect.
+List credentials by name only with `kubectl -n prod get secrets -o name`.
+Expect the generated `secret/postgres-app`. The operator handles values.
 
 ### Staging
 
@@ -542,8 +402,6 @@ Staging runs the same way in namespace `staging`, from
 settings as prod's, the managed role `lagom_dev` and the `Database` `lagom-dev`
 ([ADR-0014](adr/0014-develop-against-staging.md)). Prod's NetworkPolicy
 (`infra/postgres-prod/networkpolicy.yaml`) drops traffic from staging.
-
-Exercised on 2026-10-17, after the first deploy.
 
 **Check it is healthy:**
 
@@ -554,19 +412,14 @@ kubectl -n staging get database lagom-dev           # APPLIED true
 kubectl -n staging describe resourcequota staging   # Used against Hard
 ```
 
-**Check that staging cannot reach prod** — `BLOCKED` is the pass; run the same
-command with `-n prod` as the control, which must print `REACHED`. The image is
-a small unprivileged nginx pinned by digest, the one the `hello` app used until
-2026-11-16; the node pulls it if it is not cached:
+The operator checks staging isolation with this probe. Expect `BLOCKED`;
+the same command in prod must print `REACHED` as a control.
 
 ```bash
-kubectl -n staging run nettest --rm -i --quiet --restart=Never \
+kubectl --context <node-name> -n staging run nettest --rm -i --quiet --restart=Never \
   --image=nginxinc/nginx-unprivileged:1.30.5-alpine@sha256:56b8272e43a0525f67aed68d1e0794a712d10e3e45a563e118e9a77c817e6f86 -- \
   sh -c 'nc -z -w 4 postgres-rw.prod.svc.cluster.local 5432 && echo REACHED || echo BLOCKED'
 ```
-
-Result on 2026-10-17: staging → prod `BLOCKED`; prod → prod and staging →
-staging `REACHED`.
 
 **Connect as the developer.** The password is in the Secret
 `lagom-dev-credentials`, unsealed by the Sealed Secrets controller. Put it in an
@@ -587,57 +440,31 @@ uv run --no-project --with 'psycopg[binary]' python -c \
   "import psycopg; print(psycopg.connect(host='127.0.0.1', port=15432, user='lagom_dev', dbname='lagom_dev', sslmode='disable').execute('select current_user, current_database()').fetchone())"
 ```
 
-**Use `sslmode=disable` over the port-forward.** With Postgres TLS, `kubectl
-port-forward` exits after the first session closes ("connection reset by
-peer… lost connection to pod"), so the next connection fails — found on
-2026-10-17 on the first dlt load, reproduced with psycopg2: four sessions
-without TLS kept the tunnel up, the second session with TLS killed it. The
-hop is still encrypted end to end except on loopback: WireGuard (Tailscale)
-to the node, TLS to the API server and from it to the kubelet; the password
-travels as a SCRAM exchange, never in clear. In-cluster clients keep TLS.
+Expected: `('lagom_dev', 'lagom_dev')`. Repeat with `dbname='lagom'` to
+verify that the developer is refused access. Use `sslmode=disable` on the
+loopback side of port-forward because Postgres TLS can tear down the forward
+when a session closes. The tailnet and Kubernetes API still encrypt the path.
+Close the forward and unset `PGPASSWORD` when finished.
 
-The trade-off: the command line is recorded in shell history, but it holds the
-Secret's name, not the password; the password lives in the shell's environment
-until the shell exits (`unset PGPASSWORD` sooner), where any process the shell
-starts can read it. A `~/.pgpass` file avoids the environment but leaves the
-password on disk.
-
-Verified on 2026-10-17: `lagom_dev` connects to `lagom_dev` over TLS; connecting
-to `lagom` is refused before authentication, and Postgres logs
-`pg_hba.conf rejects connection for host "127.0.0.1", user "lagom_dev",
-database "lagom"` for both TLS and plain connections.
-
-### Pull credentials, and the retired pipeline CronJob
-
-The CronJob `usgs-pipeline` ran dlt, then dbt, on Postgres every 30 minutes,
-first in staging on 2026-10-18 (9,929 events, dbt `PASS=32`, 37 s), then in
-prod with the same digests. It was retired in both environments on
-2026-11-07, when Dagster took over the alarm
-([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)); its manifests
-and runbook are in Git history. Dagster runs the pipeline
-([Dagster (M3)](#dagster-m3)); a run on demand is *Launch run* on the `usgs`
-job page of its UI.
+### Pull credentials
 
 Every Pod that pulls a private image needs the Secret `ghcr-pull` (a sealed
 `dockerconfigjson`, [ADR-0015](adr/0015-images-on-ghcr.md)) in its namespace;
 without it the Pod stays in `ImagePullBackOff`.
 
 **Seal a pull credential** — a classic token with only `read:packages`, one per
-namespace. Paste the token **when the command stops and waits**, never into the
-command line, which the shell keeps in its history; the first line prints only
-its length (a classic token is 40, and seals to 956 characters):
+namespace. Paste the token at the prompt. Check the history search prints zero matches.
 
 ```bash
-read -rs TOKEN && echo "token length: ${#TOKEN}" && kubectl create secret docker-registry ghcr-pull -n <namespace> \
+read -rs TOKEN && kubectl --context <node-name> create secret docker-registry ghcr-pull -n <namespace> \
   --docker-server=ghcr.io --docker-username=FilipeFantini --docker-password="$TOKEN" --dry-run=client -o yaml \
-  | kubeseal --format yaml > infra/postgres-<namespace>/ghcr-pull-sealed.yaml; unset TOKEN
+  | kubeseal --context <node-name> --format yaml > infra/postgres-<namespace>/ghcr-pull-sealed.yaml; unset TOKEN
 grep -a -c 'ghp_' ~/.zsh_history ~/.zsh_sessions/* 2>/dev/null   # all 0: the token is in no history
 ```
 
-If a token ever lands in the history, revoke it in GitHub's settings, delete
-the lines (`sed -i '' '/ghp_/d'` on each file, with every Terminal window
-closed first, since an open shell rewrites its history on exit), and seal a new
-one — what happened on 2026-10-18.
+After merge, verify the sealed Secret syncs and a Pod using the image
+becomes ready without `ImagePullBackOff`. Revoke a token immediately if
+it enters history or is exposed elsewhere, then seal a replacement.
 
 ### Pipeline heartbeat
 
@@ -647,20 +474,11 @@ Each environment's Dagster reports to its own check at Healthchecks.io
 `usgs_success_heartbeat` pings it after each successful `usgs` run, so a
 missing ping is the alarm for "nothing runs"; `run_failure_alarm` calls its
 `/fail` with the job, the run ID and the error as soon as any run fails, so
-the check goes down at once. A database password in that error is removed
-before the body is sent; the host remains. Until 2026-11-07 the ping came from the
-CronJob's `heartbeat` container. The account and the checks are made by hand,
-in its console:
+the check goes down at once. Configure these checks in its console:
 
 - One check per environment, `lagom-usgs-staging` and `lagom-usgs-prod`.
 - Schedule: *Cron*, `*/30 * * * *`, time zone UTC, the `usgs` schedule.
-- Grace: 20 minutes. Two samples so far: staging's runs of 2026-11-07, 15:30
-  and 16:00 UTC, took 49 and 47 s from Pod start to completion, and the
-  sensor evaluates every 30 s, so a healthy ping arrives in the first two
-  minutes of the slot. A run is stopped at 25 minutes
-  (`activeDeadlineSeconds`). Kubernetes keeps a finished Job for an hour
-  only, so the range is re-read from the run list in the UI after a week and
-  the grace corrected if a run comes near it.
+- Grace: 20 minutes. Review duration in Dagster if normal runs approach it.
 - Integration: e-mail to the operator.
 
 **Seal the ping URL**, one per namespace. The URL is a secret — whoever has it
@@ -669,23 +487,21 @@ the command line. It reaches the code server as `HEARTBEAT_URL`
 (`infra/dagster-<env>/values.yaml`):
 
 ```bash
-read -rs HC_URL && echo "url length: ${#HC_URL}" && kubectl create secret generic pipeline-heartbeat -n <namespace> \
+read -rs HC_URL && kubectl --context <node-name> create secret generic pipeline-heartbeat -n <namespace> \
   --from-literal=url="$HC_URL" --dry-run=client -o yaml \
-  | kubeseal --format yaml > infra/postgres-<namespace>/pipeline-heartbeat-sealed.yaml; unset HC_URL
+  | kubeseal --context <node-name> --format yaml > infra/postgres-<namespace>/pipeline-heartbeat-sealed.yaml; unset HC_URL
 ```
-
-A Healthchecks.io ping URL is `https://hc-ping.com/` (20 characters) plus a
-36-character UUID, 56 in all.
 
 **Verify** after the change reaches the namespace:
 
 1. The code server Pod is ready: it does not start without `HEARTBEAT_URL`.
-   *Automation → Sensors* in the UI shows both sensors running.
+   In prod, *Automation → Sensors* shows both sensors running.
 2. After the next `usgs` run, the daemon logs
    `Sensor "usgs_success_heartbeat" acted on run status SUCCESS of run <id>`
    (`kubectl -n <namespace> logs deploy/dagster-daemon`), and the check turns
    *up*, with the run's ID in the ping's body.
-3. To prove `/fail`, launch one failing run: on the `usgs` job page,
+3. To prove `/fail`, use an approved failure drill in an environment with
+   a UI. Launch one failing run: on the `usgs` job page,
    *Materialize all* ▾ → *Open launchpad* → *Edit tags*, and give the tag
    `dagster-k8s/config` this value, which keeps the run's resources and points
    the catalog at a host that does not exist, so dlt fails before writing
@@ -697,7 +513,6 @@ A Healthchecks.io ping URL is `https://hc-ping.com/` (20 characters) plus a
 
    The daemon logs `Sensor "run_failure_alarm" acted on run status FAILURE`,
    the check goes *down* and e-mails, and the next scheduled run clears it.
-   The tag lasts for that run only. Done in staging on 2026-11-07.
 
 **When the e-mail arrives:** a `/fail` carries the job, the run ID and the
 error in its body (*Events* of the check in the console). A missing ping
@@ -706,156 +521,53 @@ means no `usgs` run succeeded: check the run list in the UI, then
 Pods. A `/fail` that could not be sent after three attempts leaves only a
 failed tick in the UI (ADR-0033, decision 6).
 
-**Retire a manifest from `postgres-<env>`.** Those Applications never prune
-(removing the `Cluster` from Git must never delete the database), so deleting
-a file there leaves its object running, marked *requires pruning* in Argo CD.
-Delete it by hand **right after Argo CD has synced the change**, from the
-operator's machine. For the CronJobs this was part of the cutover, not a
-clean-up: while one still ran it pinged the same check, and its success would
-have cleared a Dagster `/fail`. Deleting a CronJob removes its Jobs and Pods
-with it:
-
-```bash
-kubectl -n <namespace> delete cronjob usgs-pipeline
-```
-
-Staging's backup was retired the same way on 2026-11-16
-([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)). After Argo CD has synced the `Cluster` without its plugin,
-delete the objects left behind; the `ScheduledBackup` takes its `Backup`
-objects with it, and the `SealedSecret` its Secret:
-
-```bash
-kubectl -n staging get cluster postgres -o jsonpath='{.spec.plugins}'   # empty: synced
-kubectl -n staging get pod postgres-1                                    # 1/1 Running: restarted without the sidecar
-kubectl -n staging delete scheduledbackup daily
-kubectl -n staging delete objectstore r2-backups
-kubectl -n staging delete sealedsecret r2-backups
-```
-
-The files in the bucket `lagom-staging-backups` are deleted by hand in
-Cloudflare's dashboard, with the bucket and its token, when the operator
-chooses; nothing reads them.
-
 ### The catalog's read-only role
 
-The login `lake_reader` reads DuckLake's metadata tables and writes nothing
-([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
-Think of the catalog's owner as the key-holder of a filing room and
-`lake_reader` as a visitor with a pass to look at the index cards: CloudNativePG
-makes the pass from the `Cluster`'s `managed.roles` (`postgres-<env>/cluster.yaml`),
-and the pass needs a password, which is a sealed Secret, `lake-reader-credentials`,
-per namespace. The job `lake_maintenance` then tells Postgres which cards the
-visitor may read.
-
-**Seal the password, one per namespace, before the change is merged.** The
-password is generated and sealed in one pipe, so it is never printed, typed or
-kept in the shell history. It is a basic-auth Secret, the shape CloudNativePG
-reads for a role; the same Secret gives the render step its `PGPASSWORD` later.
-Run from the repository root, with the kubeconfig that reaches the node and
-Tailscale connected, since `kubeseal` asks the cluster for the controller's
-public key:
+The operator seals the catalog reader's password in each namespace
+([reader permissions](data.md#reader-permissions)). The plot renderer reads
+it from the Secret. Run with shell pipeline failure propagation enabled
+(`set -o pipefail`):
 
 ```bash
 for ns in staging prod; do
   f="infra/postgres-$ns/lake-reader-credentials-sealed.yaml"
-  openssl rand -hex 24 | { read -r PW && kubectl create secret generic lake-reader-credentials -n "$ns" \
+  openssl rand -hex 24 | { read -r PW && kubectl --context <node-name> create secret generic lake-reader-credentials -n "$ns" \
     --type=kubernetes.io/basic-auth --from-literal=username=lake_reader --from-literal=password="$PW" \
-    --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset PW; }
+    --dry-run=client -o yaml | kubeseal --context <node-name> --format yaml > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"; unset PW; }
 done
 ```
 
-The output goes to a temporary file that is renamed only when `kubeseal`
-succeeds: a plain `>` creates the file before the command runs, so a failed run
-would leave an empty file that could be committed by mistake. Each namespace
-gets its own password. Commit the two `-sealed.yaml` files on the
-pull request's branch. `kubeseal` reads the controller's public key from the
-cluster, as for the other sealed Secrets.
-
-**Rollout order.** The tags that give each job its Secrets are in the image, so
-the image comes before the removal of the same variables from the values:
-
-1. Merge the pull request that adds the tags, the role and the sealed Secrets.
-   CI builds the image for that commit. The values still hold the credentials,
-   so runs are unchanged: the tags' copies are identical and kept once.
-2. In staging, pin that digest and remove the credentials from
-   `dagster-staging/values.yaml` in one pull request (the variables the code
-   server keeps are in ADR-0044, decision 2). Check a `usgs` run succeeds.
-3. After the checks below pass in staging, the same for prod, with staging's
-   digest (the promotion check enforces it).
-
-**Reload the code location before a manual run.** After the image changes,
-Dagster's webserver can keep the job definitions it loaded from the old one.
-A run started from the Launchpad then carries the old tags, and with them the
-old `dagster-k8s/config`: in staging on 2026-11-14 that tag held only the
-resources, and `lake_maintenance` started with no credentials. The daemon,
-which starts scheduled runs, reloads by itself, so the scheduled `usgs` run
-had the new tags. In the UI, *Deployment → Code locations → lagom → Reload*,
-then check that the `dagster-k8s/config` tag shown in the Launchpad begins with
-`{"container_config": {"env": ...`.
-
-**Check it in staging** (replace `staging` with `prod` after):
-
-Since 2026-11-16 staging has no Dagster UI ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): where a step below names
-the Launchpad or a reload, it applies to prod; in staging, a new digest rolls
-the code server by itself, and the scheduled run is the check.
+Verify both outputs are nonempty SealedSecrets before committing them.
+After merge, read the role's reconciliation status without reading
+its password. Let the [maintenance job](data.md#orchestration--dagster-jobs)
+refresh the grants. The operator can then verify them on the local socket:
 
 ```bash
-# 1. CloudNativePG created the role: it is listed as reconciled, with no password shown
-kubectl --context <node-name> -n staging get cluster postgres -o jsonpath='{.status.managedRolesStatus.byStatus}'
-# 2. Start lake_maintenance (Jobs -> lake_maintenance -> Launchpad); its step grant_lake_reader succeeds.
-#    Then read the privileges from inside Postgres (local socket, no password):
-kubectl --context <node-name> -n staging exec postgres-1 -c postgres -- psql -d lagom -At -c \
-  "select has_schema_privilege('lake_reader','ducklake','USAGE'), has_database_privilege('lake_reader','lagom','CONNECT'), \
-   (select count(*) from information_schema.tables t where t.table_schema='ducklake' and not has_table_privilege('lake_reader', format('%I.%I', t.table_schema, t.table_name), 'SELECT'))"
-# expected: t|t|0  (usage, connect, and no table in the schema without SELECT)
-# 3. The role can read and cannot write: an attach with read_only=True and no password in the
-#    string (PGPASSWORD from the Secret) lists the tables and refuses an INSERT. Not scripted here:
-#    the job `dashboards` does it, and its staging run is this check (*The dashboards' publishing path*).
-#    Done once, on 2026-11-14, against a throwaway Postgres: it reads, refuses INSERT and CREATE,
-#    and a failed attach prints no password.
+kubectl -n <namespace> get cluster postgres -o jsonpath='{.status.managedRolesStatus.byStatus}'
+kubectl -n <namespace> exec <postgres-pod> -c postgres -- psql -d lagom -At -c   "select has_schema_privilege('lake_reader','ducklake','USAGE'),
+          has_database_privilege('lake_reader','lagom','CONNECT'),
+          (select count(*) from information_schema.tables t
+           where t.table_schema='ducklake'
+             and not has_table_privilege('lake_reader', format('%I.%I', t.table_schema, t.table_name), 'SELECT'))"
 ```
 
-If `lake_maintenance` fails with `the role lake_reader does not exist`, the
-Secret is not sealed in that namespace yet or CloudNativePG has not reconciled
-it: step 1 shows which. The daily job fails and e-mails until then, by design
-(ADR-0044, decision 6); compaction still runs.
-
-**Rotate the password:** seal a new one with the command above for that
-namespace only, commit, and let Argo CD apply it; CloudNativePG changes the
-role's password to match. A reader holding the old one must restart.
+Expect `lake_reader` reconciled, `grant_lake_reader` successful and
+`t|t|0` from SQL. If grant renewal fails, check the role status and the
+SealedSecret's sync. To rotate the password, seal for that namespace only,
+merge, and verify the next render. Restart readers that hold the old value.
 
 ### The dashboards' publishing path
 
-The job `dashboards` renders the boards and uploads them to a public bucket
-([ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)).
-Think of the bucket as a shop window: Cloudflare serves whatever is in it to
-anyone, on the custom domain. The job holds a key that can change the window and
-nothing else, and a second key that can only look at the lake. Four Secrets per
-namespace make this work; the first is *The catalog's read-only role* above:
+Configure the dashboards bucket as public through its custom domain,
+with `r2.dev` disabled and a minimum TLS version of 1.2. The public
+hostnames are `lagom-staging.ofantini.com` and `lagom.ofantini.com`. In
+each environment, create a token with read access only to
+`lagom-<env>-lake`, and a token with read/write access only to
+`lagom-<env>-dashboards`. Confirm each token's scope in Cloudflare.
 
-| Secret | Keys | What it is |
-|---|---|---|
-| `lake-reader-credentials` | `username`, `password` | the catalog role `lake_reader` |
-| `r2-lake-reader` | `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`, `ENDPOINT` | an R2 token that can **read** the lake bucket (`lagom-<env>-lake`) |
-| `r2-dashboards` | the same three keys | an R2 token that can read and write **only** the dashboards bucket (`lagom-<env>-dashboards`) |
-
-**What exists in Cloudflare** (set up by the operator): per environment, a bucket
-`lagom-staging-dashboards` or `lagom-prod-dashboards`, public through a custom
-domain (`lagom-staging.ofantini.com`, `lagom.ofantini.com`), with the minimum TLS
-version 1.2, the `r2.dev` address off, and the tokens above, each limited to one
-bucket. Check these in the dashboard after any change: a token with account-wide
-scope, or `r2.dev` left on, defeats the reason for the design.
-
-**Seal the two R2 tokens, one pair per namespace, before the change is
-rolled out.** Cloudflare shows a token's key and secret once, at creation. The
-command reads them without echoing them (`read -s`), refuses a value of the
-wrong shape before sealing it (an R2 key ID is 32 hex characters, its secret 64,
-the endpoint `https://<account-id>.r2.cloudflarestorage.com`: a value pasted into
-the wrong prompt is caught here, not by a failed run), seals them in one pipe, and
-writes through a temporary file that is renamed only when `kubeseal` succeeds, so
-a failed run leaves no empty file to commit. Run from the repository root (the
-paths are relative to it), with the kubeconfig that reaches the node and
-Tailscale connected:
+Seal the tokens from the repository root with the correct cluster context
+and `set -o pipefail`. Use the prompts for the access key ID, secret and
+account endpoint. The function validates their shape before saving:
 
 ```bash
 seal_r2() {  # seal_r2 <namespace> <secret name> <file name>
@@ -866,9 +578,9 @@ seal_r2() {  # seal_r2 <namespace> <secret name> <file name>
   printf '%s endpoint (%s): ' "$name" "$ns"; read -rs endpoint; echo
   if [[ $key =~ ^[0-9a-f]{32}$ && $secret =~ ^[0-9a-f]{64}$ &&
         $endpoint =~ ^https://[0-9a-f]{32}\.r2\.cloudflarestorage\.com$ ]]; then
-    kubectl create secret generic "$name" -n "$ns" --from-literal=ACCESS_KEY_ID="$key" \
+    kubectl --context <node-name> create secret generic "$name" -n "$ns" --from-literal=ACCESS_KEY_ID="$key" \
       --from-literal=ACCESS_SECRET_KEY="$secret" --from-literal=ENDPOINT="$endpoint" \
-      --dry-run=client -o yaml | kubeseal --format yaml > "$f.tmp" && mv "$f.tmp" "$f" && echo "ok: $f" \
+      --dry-run=client -o yaml | kubeseal --context <node-name> --format yaml > "$f.tmp" && mv "$f.tmp" "$f" && echo "ok: $f" \
       || { rm -f "$f.tmp"; echo "FAILED: $f"; }
   else
     echo "REJECTED $ns/$name: lengths ${#key} ${#secret} ${#endpoint}, expected 32 64 65"
@@ -881,164 +593,53 @@ for ns in staging prod; do
 done
 ```
 
-Commit the four `-sealed.yaml` files. Each namespace takes its own tokens (the
-read-only lake token and the dashboards token, each limited to that
-environment's bucket). **Do not paste a token into a chat, a file or the shell
-history**; if one was shown anywhere, revoke it in Cloudflare and make another.
+Check all four outputs are nonempty SealedSecrets before committing them.
+After merge, verify each SealedSecret is `SYNCED True`. Promote the image
+through [staging then prod](#deploy). Check:
 
-**Rollout order.** The job, the sensor and the Secrets' names are in the image;
-the bucket's name is in the values. Seal the Secrets first, then merge. Without
-them a `dashboards` run's Pod stays in `CreateContainerConfigError` and the run
-fails (the alarm e-mails; Dagster's run monitoring marks a run whose Pod never
-starts as failed after its start timeout, the chart's default, to confirm in
-staging). Then pin the new image's digest in staging's values, reload the code
-location (*Deployment → Code locations → lagom → Reload*), and run the checks
-below; prod takes staging's digest after they pass.
+1. The `dashboards` run succeeds and logs both `earthquakes.html` and
+   `earthquakes_short.html` as published.
+   In staging, wait for the next `usgs` run. In prod, also check the job's
+   configuration in the Launchpad. It names the reader and dashboards
+   credentials and has no `PG_URI`.
+2. `curl -fsSI https://lagom-staging.ofantini.com/earthquakes.html` returns
+   200 with HTML and `cache-control: public, max-age=300`. Repeat for prod.
+   Open the page and confirm its UTC build timestamp is near the run time.
+3. Read the run's logged memory peak, which includes subprocesses and short
+   spikes that `kubectl top` can miss. Compare it with the
+   [job limit](platform.md#resource-budget). Investigate within 100 MiB
+   of the limit before changing resource requests.
+4. In an approved failure drill with a UI, launch `dashboards` with a copy of
+   its job tag and set `PGPASSWORD` to `wrong-password-for-test`. Confirm
+   validation fails, logs and the alert omit the test and real passwords,
+   and the previously published page is still served.
 
-**Check it in staging** (replace `staging` with `prod` after):
+If a command times out, check its duration and which render stage failed
+before changing the image. If telemetry stalls, ADR-0044 decision 9 describes
+the setting to disable it. To rotate a token, seal its replacement and
+verify a fresh run before revoking the old token.
 
-Since 2026-11-16 staging has no Dagster UI ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): where a step below names
-the Launchpad or a reload, it applies to prod; in staging, a new digest rolls
-the code server by itself, and the scheduled run is the check.
+## Operator UIs behind Cloudflare Access
 
-1. **The Secrets exist** (names only; never read their values):
-   `kubectl --context <node-name> -n staging get secret lake-reader-credentials r2-lake-reader r2-dashboards`.
-2. **The job is there with the right environment.** *Jobs → dashboards → Launchpad*
-   shows a `dagster-k8s/config` tag whose `env` names `PGPASSWORD`,
-   `LAGOM_R2_*` from `r2-lake-reader` and `LAGOM_DASHBOARDS_*` from
-   `r2-dashboards`, and no `PG_URI`.
-3. **The run succeeds.** Launch it from the Launchpad, or wait for the next
-   `usgs` run to end. The log ends with `published 1 page(s): earthquakes.html`.
-   Read `dct validate`, `dct render` and `check_boards` durations in the log: a
-   command near its timeout (180, 360, 120 s) says something is stalling, and
-   telemetry is the first suspect. If a blocked or slow telemetry endpoint makes
-   any command fail or wait, put `DO_NOT_TRACK=1` back in the step (ADR-0044,
-   decision 9). The unit tests prove a stalled command is killed; they do not prove
-   how the node's network behaves, so this run is the evidence.
-4. **The page is live with its watermark.**
-   `curl -sI https://lagom-staging.ofantini.com/earthquakes.html` returns 200,
-   `content-type: text/html; charset=utf-8` and `cache-control: public, max-age=300`;
-   the page, opened in a browser, shows `Page built at <time> UTC` above the
-   title, within minutes of the run. The root of the domain is not a page: R2
-   serves no index document, so the address of a board is the file's name.
-5. **The read-only attach works with the real role.** Step 3 passing is the
-   proof: the catalog string has no password, so a connection means libpq read
-   `PGPASSWORD`. To see that the role cannot write, no job is needed: the profile
-   attaches read-only and a test refuses a write; the catalog role itself was
-   checked in *The catalog's read-only role*.
-6. **A failed attach does not leak the password.** From the Launchpad, launch
-   `dashboards` with the run tag `dagster-k8s/config` set to the job's own tag
-   (copied from step 2) with `PGPASSWORD` given as the plain value
-   `wrong-password-for-test`. The run fails at `dct validate`. Read the run's log
-   and the failure e-mail: neither the test string nor the real password may
-   appear. The test string is not a secret; it is what the check looks for.
-7. **Memory.** The run's log ends with "memory peak of the run's container", read
-   from the container's cgroup (`/sys/fs/cgroup/memory.peak`): the run's process
-   and every command it started. `kubectl top` does not do: the render's Pod
-   lives less than a minute and metrics-server samples once a minute, so the
-   first staging runs never showed in it (2026-11-15). The request is 768 MiB
-   and the limit 1 GiB; the fixture peaked at 540 MiB, and staging on real data
-   at 804 MiB (2026-11-15, the run of 18:31). Record a new peak here and in [architecture.md §11](architecture.md#11-resource-budget);
-   if it comes within 100 MiB of the limit, raise the job's own resources, not
-   `usgs`'s.
-8. **The alarm still works for it.** After the above, a failed run in step 6 must
-   have sent one e-mail naming the job `dashboards`.
+Use this order so [Access](platform.md#access-channels) protects the hostname
+before it serves a tool. Bookmark `https://ops.ofantini.com/dagster/` with
+the trailing slash to avoid a plain HTTP redirect.
 
-**If a render fails,** the old pages stay up (nothing is deleted before the new
-ones are uploaded) and show their age in their watermark. The run's log says which
-command failed; its error has the password and keys removed.
-
-**Rotate a token:** make a new one in Cloudflare, seal it with the function above
-for that namespace, commit, let Argo CD apply it, then revoke the old one. The
-next run reads the new value; a running Pod keeps the old until it ends.
-
-## Operator UIs behind Cloudflare Access (M3)
-
-The operator's tools share one HTTPS address, one path per tool, behind a
-login ([ADR-0030](adr/0030-operator-uis-behind-cloudflare-access.md)):
-
-- `https://ops.ofantini.com/dagster/` is prod's Dagster. Staging's,
-  `/dagster-staging/`, was served until 2026-11-16, when staging's UI was
-  removed ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)); the path now gets the tunnel's 404.
-
-Bookmark them with the final slash. Without it, Dagster answers with a
-redirect to the address with the slash, and since it does not know the
-request came in over HTTPS, that redirect says `http://`. *Always Use HTTPS*
-at the zone sends the browser back to HTTPS, at the cost of one extra hop.
-
-**What each piece is:**
-
-| Piece | What it is |
-|---|---|
-| Tunnel, `cloudflared` | A Pod that dials out to Cloudflare and keeps the connections open; requests for `ops.ofantini.com` come back down them. Nothing on the node listens for the internet, so no port opens. Think of a phone line we call out on, which then carries incoming calls |
-| Ingress rule | One line in [`cloudflared/config.yaml`](../infra/cloudflared/config.yaml): a hostname plus a pattern on the path, mapped to a Service in the cluster. The first rule that matches wins; anything unmatched gets a 404 |
-| Path prefix | The part of the address that names the tool (`/dagster`). The tunnel passes it on unchanged, so each tool must serve its pages under it. Dagster's is `dagsterWebserver.pathPrefix` in its `values.yaml` |
-| Access application | Cloudflare's doorman for `ops.ofantini.com`, every path included. It shows a login page and lets through only the e-mail addresses in its policy |
-| One-time PIN | The login: Access e-mails a code to the address, and the code opens a session of 24 hours |
-| JWT | A token Access signs and adds to every request after login. `cloudflared` checks it before forwarding, so a request that skipped the doorman is refused |
-| Proxied CNAME | The DNS record for `ops.ofantini.com`. The world sees Cloudflare's addresses, never the node's |
-
-**Set it up**, once, in this order, so that the hostname never answers
-before its login exists. Most of Cloudflare's labels below were checked against its
-documentation on 2026-11-07; the dashboard can rename them.
-
-**1. Secure the Cloudflare account first.** Whoever holds the account holds
-the domain, the DNS, the login policy and the tunnel.
-
-- *My Profile → Authentication → Two-Factor Authentication*: turn it on, with
-  a security key or an authenticator app, and store the backup codes in
-  1Password.
-- Keep two-factor on the e-mail account that receives the one-time PINs too:
-  that inbox is the login to every tool.
-
-**2. Zero Trust organisation**, in the Cloudflare dashboard:
-
-1. Open **Zero Trust**. On the onboarding screen, choose the **team name**.
-   It becomes `<team-name>.cloudflareaccess.com` and shows on the login page,
-   so pick a neutral one, not a personal name.
-2. Choose the **Zero Trust Free** plan. It asks for payment details and does
-   not charge them.
-3. **Zero Trust → Integrations → Identity providers**: if **One-time PIN** is
-   not already under *Your identity providers*, select **Add new identity
-   provider → One-time PIN**.
-
-**3. The Access application:**
-
-1. **Zero Trust → Access controls → Applications → Create new application →
-   Self-hosted and private**.
-2. Name: `Lagom operator tools`.
-3. **Add public hostname**: subdomain `ops`, **Domain** `ofantini.com`, path
-   empty, so that every path is covered.
-4. **Access policies**: create a new one.
-   - Policy name: `Operator only`.
-   - Action: **Allow**.
-   - Include, selector **Emails**: `<operator-email>`.
-   - Never add *Everyone*, and never a *Bypass* policy.
-5. **Login methods**: only **One-time PIN**. Turn on **Apply instant
-   authentication**, which skips the choice of method.
-6. **Session Duration**: `24 hours`.
-7. **Additional settings → Cookie settings**: turn on **Binding Cookie**,
-   which ties the session cookie to the browser that logged in.
-8. **Create**.
-9. Give the architect two values:
-   - the **Application Audience (AUD) Tag**, from *Applications → Edit →
-     Additional settings*;
-   - the team name, from **Zero Trust → Settings**.
-
-   Neither is a secret: both appear in the login page's URL. They replace
-   `<access-aud-tag>` and `<team-name>` in `cloudflared/config.yaml`.
-
-**4. The zone's settings**, under *ofantini.com* in the dashboard:
-
-- **SSL/TLS → Overview**: encryption mode **Full (strict)**.
-- **SSL/TLS → Edge Certificates**:
-  - **Always Use HTTPS**: on.
-  - **Minimum TLS Version**: 1.2.
-- **DNS → Settings**: **DNSSEC** on. With Cloudflare as the registrar, this
-  is one click.
-- **Domain Registration → Manage**: **Registrar lock** stays on.
-- **DNS → Records**: every record for a tool is a proxied CNAME to the
-  tunnel (orange cloud). Never add a record with the node's public address.
+1. Enable two-factor authentication on the Cloudflare account and the
+   mailbox that receives codes. Store recovery codes in the password manager.
+2. In **Zero Trust**, use a neutral team name and the Free plan. Add
+   **One-time PIN** under *Integrations → Identity providers*.
+3. In *Access controls → Applications*, add a self-hosted application
+   **Lagom operator tools** for `ops.ofantini.com`, with the path empty to
+   cover the whole hostname. Allow only `<operator-email>`, with no
+   *Everyone* or *Bypass* policy. Select One-time PIN alone, instant
+   authentication, a 24-hour session and Binding Cookie.
+4. Read the **Application Audience (AUD) Tag** from the application's
+   additional settings and the team name from Zero Trust settings.
+   Use them in `infra/cloudflared/config.yaml`. For the zone, enable
+   **Full (strict)**, **Always Use HTTPS**, minimum TLS 1.2, DNSSEC
+   (signed Domain Name System records), and registrar lock. Keep the
+   hostname's record proxied to the tunnel, with no node address in DNS.
 
 **5. The tunnel and its token**, on the operator's Mac, from the repository's
 root. The token goes straight from `cloudflared` into `kubeseal` and is never
@@ -1050,22 +651,11 @@ cloudflared tunnel login                  # browser: authorise the zone ofantini
 cloudflared tunnel create lagom           # writes ~/.cloudflared/<tunnel-id>.json
 cloudflared tunnel route dns lagom ops.ofantini.com
 cloudflared tunnel token lagom \
-  | kubectl create secret generic cloudflared-token -n cloudflared --from-file=token=/dev/stdin --dry-run=client -o yaml \
+  | kubectl --context <node-name> create secret generic cloudflared-token -n cloudflared --from-file=token=/dev/stdin --dry-run=client -o yaml \
   | kubeseal --context <node-name> --format yaml > infra/cloudflared/token-sealed.yaml
 grep -c 'token:' infra/cloudflared/token-sealed.yaml   # 1: one sealed key
-rm ~/.cloudflared/cert.pem ~/.cloudflared/*.json
+rm ~/.cloudflared/cert.pem ~/.cloudflared/<tunnel-id>.json
 ```
-
-**Why it works:**
-
-- `tunnel login` gives the Mac a certificate that can create tunnels and DNS
-  records in the zone. It is deleted at the end.
-- `tunnel create` registers the tunnel and its secret.
-- `route dns` writes the proxied CNAME that points `ops.ofantini.com` at the
-  tunnel.
-- `tunnel token` prints the ID and secret as one string. `cloudflared` in the
-  cluster reads it from a file (`--token-file`), while the routing rules stay
-  in `config.yaml`, in Git.
 
 Once `config.yaml` holds the team name and AUD tag, check that `cloudflared`
 reads its rules as intended. The rules sit inside a ConfigMap, so the first
@@ -1075,14 +665,14 @@ command extracts them:
 sed -e '1,/config.yaml: |/d' -e 's/^    //' infra/cloudflared/config.yaml > /tmp/cloudflared.yaml
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress validate                                   # OK
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster/runs   # prod's rule
-cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster-staging  # the 404 rule since 2026-11-16
+cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/dagster-staging  # the default 404 rule
 cloudflared tunnel --config /tmp/cloudflared.yaml ingress rule https://ops.ofantini.com/               # the 404 rule
 rm /tmp/cloudflared.yaml
 ```
 
 **6. Merge** the pull request holding `token-sealed.yaml`, the filled-in
 `config.yaml` and the Dagster path prefixes. Argo CD creates the namespace,
-the Secret and the Pod, and rolls each Dagster webserver.
+the Secret and the Pod, and updates the prod webserver.
 
 **Verify:**
 
@@ -1090,155 +680,95 @@ the Secret and the Pod, and rolls each Dagster webserver.
 kubectl --context <node-name> -n cloudflared get pods                       # cloudflared 1/1 Running
 kubectl --context <node-name> -n cloudflared logs deploy/cloudflared | grep -c 'Registered tunnel connection'   # 4
 kubectl --context <node-name> -n prod get pods -l component=dagster-webserver      # 1/1 Running: the probe follows the prefix
-kubectl --context <node-name> -n staging get pods -l component=dagster-webserver   # none since 2026-11-16: staging has no UI
-curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://ops.ofantini.com/dagster/server_info
-# 302 to https://<team-name>.cloudflareaccess.com/...: the login comes first
+kubectl --context <node-name> -n staging get pods -l component=dagster-webserver   # no staging webserver
+curl -sS -o /dev/null -w '%{http_code}\n' https://ops.ofantini.com/dagster/server_info
+# 302: unauthenticated login redirect
 ```
 
-Then, in a private browser window, open both addresses. Each must show the
-Access login page, then take the code by e-mail, then show Dagster. Then, on
-each:
+In a private window, verify Access asks for a code and an approved address
+can open Dagster. An address outside the policy receives no code. Navigate to
+Runs, Jobs and Assets under the same prefix. Confirm an active run updates
+without reloading. The ingress tests check configuration, while the browser
+check verifies the access path. A direct bypass of Access is untested.
 
-- **Click through:** *Runs*, one run, *Assets*, *Jobs*. Every page and link
-  stays under its prefix. A broken prefix shows as a 404 or as a jump to
-  `ops.ofantini.com/` without it.
-- **Watch it update:** the run list updates by itself while a run is in
-  progress, which means the WebSocket goes through the tunnel.
+**Add a tool**:
 
-A second private window with an address outside the policy must get no code.
-
-**Not verified end to end: the tunnel's own JWT check.** Seeing it refuse a
-request would mean turning Access off. What is checked instead: the rules
-parse, and the `access` block applies to every rule (`ingress validate` and
-`ingress rule` in step 5).
-
-**Memory.** After a week:
-
-```bash
-kubectl --context <node-name> -n cloudflared top pod --containers
-```
-
-Set the request in `deployment.yaml` from the figure, as for every component
-([architecture.md §11](architecture.md#11-resource-budget)).
-
-**Add a tool** (Airflow, for instance):
-
-1. Configure the tool to serve under its path (Airflow: `base_url`
-   `https://ops.ofantini.com/airflow`). Point any HTTP probe it has at the
-   prefixed path.
+1. Configure the tool and its health probe to serve under the chosen prefix.
 2. Add a rule in `config.yaml`, before the final 404:
    - `hostname: ops.ofantini.com`;
-   - `path: ^/airflow(/.*)?$`;
+   - `path: ^/<tool>(/.*)?$`;
    - the tool's Service.
 
    Then bump `lagom.dev/config-revision` in `deployment.yaml`.
 3. If the tool runs in `prod`, add a NetworkPolicy like
    `allow-cloudflared-to-dagster-webserver`.
 
-The hostname, DNS and Access need nothing new.
+Repeat the ingress and authenticated browser checks for the new path.
 
-**If an address fails:**
+Troubleshoot by symptom: 1033 means the tunnel is disconnected; 404 means
+the route did not match; 502 means the Service did not answer; a 403 after
+login calls for checking `audTag`. If styles or links break, confirm the
+tool's path prefix matches the tunnel rule. To reach prod over the tailnet
+during a tunnel outage:
 
-- **Cloudflare error 1033:** the tunnel has no connection. Check the Pod and
-  its logs.
-- **404 from the tunnel:** no rule matches the path. Check the path against
-  `config.yaml`.
-- **502:** the rule matched, but the Service behind it does not answer. Check
-  the tool's Pod.
-- **A page that loads without its styles, or links that drop the prefix:**
-  the tool's path prefix is not set, or not set to the same path as the rule.
-- **403 from `cloudflared` after login:** the token's audience does not match
-  `audTag`. Re-check the AUD tag.
-- **In the meantime,** the port-forward still works. Run `kubectl --context
-  <node-name> -n <namespace> port-forward svc/dagster-dagster-webserver
-  3000:80`, then browse `http://localhost:3000/dagster` (prod). Staging has no
-  webserver to forward to since 2026-11-16.
+```bash
+kubectl --context <node-name> -n prod port-forward svc/dagster-dagster-webserver 3000:80
+```
 
-## Backup and restore (M3)
+Open `http://localhost:3000/dagster/` and close the forward when done.
 
-Prod's Postgres is backed up to its R2 bucket by the Barman Cloud plugin, and
-staging's was until 2026-11-16 ([ADR-0025](adr/0025-postgres-backup-barman-cloud-to-r2.md)):
+## Backup and restore
 
-| Environment | Bucket | Retention |
-|---|---|---|
-| staging | none since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)); `lagom-staging-backups` keeps the old files until they are deleted by hand | — |
-| prod | `lagom-prod-backups` | 14 days ([ADR-0027](adr/0027-hourly-wal-archiving-and-14-day-prod-retention.md)) |
+Only prod has a [database backup](platform.md#backups). For a new backup
+destination, create `lagom-prod-backups` in Western Europe and grant a new
+R2 token read and write on that bucket alone. Seal it with the
+[R2 helper above](#the-dashboards-publishing-path):
 
-Two kinds of copy land there:
+```bash
+seal_r2 prod r2-backups r2-backups-sealed.yaml
+```
 
-- **WAL**, continuously. Each write-ahead log segment is uploaded as soon as
-  Postgres closes it: when its 16 MiB fill, or after an hour
-  (`archive_timeout`, ADR-0027). CloudNativePG's default of 5 minutes shipped
-  a whole segment each time and filled the bucket by the clock.
-- **A base backup** every day at 03:00 UTC.
-
-A restore replays WAL on top of a base backup. It can reach any moment up to
-the last archived segment, so at most about **1 hour of writes** is lost
-(the RPO). Pipeline data is rebuilt by a re-load; Dagster's run history of that
-hour is not.
-
-**Set it up for an environment** (exercised in staging, 2026-10-28):
-
-1. In the Cloudflare console, R2: create the bucket `lagom-<env>-backups`
-   with *Location hint: Western Europe*. Then create an API token with
-   *Object Read & Write* on that bucket only, TTL *Forever*. Save the
-   access key, the secret and the S3 endpoint (no bucket in it) in 1Password
-   as `R2 Storage lagom-<env>-backups`.
-2. Seal it. Each prompt waits for a value pasted from 1Password, and nothing
-   is echoed. Expected lengths are 32, 64 and 65:
-
-   ```bash
-   printf 'Access Key ID: ' && read -rs KEY_ID && echo && printf 'Secret Access Key: ' && read -rs SECRET && echo && printf 'S3 endpoint: ' && read -rs ENDPOINT && echo && echo "lengths: ${#KEY_ID} ${#SECRET} ${#ENDPOINT}" && kubectl --context <node-name> create secret generic r2-backups -n <env> --from-literal=ACCESS_KEY_ID="$KEY_ID" --from-literal=ACCESS_SECRET_KEY="$SECRET" --from-literal=ENDPOINT="$ENDPOINT" --dry-run=client -o yaml | kubeseal --context <node-name> --format yaml > infra/postgres-<env>/r2-backups-sealed.yaml; unset KEY_ID SECRET ENDPOINT
-   ```
-
-3. Add the `ObjectStore`, the `ScheduledBackup` and `spec.plugins` to the
-   environment's directory, then merge. On a running Cluster the operator
-   restarts the Postgres Pod once to add the sidecar. That took a few seconds
-   in staging.
+Check the output is a nonempty SealedSecret. Reuse prod's `ObjectStore`,
+`ScheduledBackup` and `spec.plugins` declarations and merge. Verify the
+SealedSecret syncs and the Postgres Pod runs with its backup sidecar.
 
 **Check it works:**
 
 ```bash
-kubectl --context <node-name> -n <env> get cluster postgres -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
-kubectl --context <node-name> -n <env> get backups
-kubectl --context <node-name> -n <env> logs postgres-1 -c plugin-barman-cloud --since=10m | grep -E 'Archived WAL file|Backup completed'
+kubectl --context <node-name> -n prod get cluster postgres -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+kubectl --context <node-name> -n prod get backups
+kubectl --context <node-name> -n prod logs <postgres-pod> -c plugin-barman-cloud --since=10m | grep -E 'Archived WAL file|Backup completed'
 ```
 
 `ContinuousArchiving=True` and `LastBackupSucceeded=True` are the pass. If
 archiving fails, Postgres keeps the WAL it could not ship on its volume, so
 the volume grows: read the sidecar's log.
 
-**The first backup after enabling can fail.** The `ScheduledBackup` takes one
-backup at once (`immediate: true`). On a Cluster that is still restarting to
-add the plugin, that backup fails with `cannot proceed with the backup as the
-cluster has no plugin configured`. This happened in staging on 2026-10-28.
-Take one by hand once the Pod is back:
+If the immediate backup runs before its sidecar is ready, the operator
+takes a one-shot backup after the Pod is ready:
 
 ```bash
-N=manual-$(date -u +%Y%m%d%H%M); kubectl --context <node-name> -n <env> apply -f - <<YAML && kubectl --context <node-name> -n <env> wait backup/$N --for=jsonpath='{.status.phase}'=completed --timeout=600s
+N=manual-$(date -u +%Y%m%d%H%M)
+kubectl --context <node-name> -n prod apply -f - <<YAML
 apiVersion: postgresql.cnpg.io/v1
 kind: Backup
-metadata:
-  name: $N
+metadata: {name: $N}
 spec:
-  cluster:
-    name: postgres
+  cluster: {name: postgres}
   method: plugin
-  pluginConfiguration:
-    name: barman-cloud.cloudnative-pg.io
+  pluginConfiguration: {name: barman-cloud.cloudnative-pg.io}
 YAML
+kubectl --context <node-name> -n prod wait backup/"$N" --for=jsonpath='{.status.phase}'=completed --timeout=600s
 ```
 
-The heredoc is unquoted so the shell fills in `$N`. Nothing else in it
-starts with `$`.
-
-**Test a restore** into a temporary Cluster in the same namespace: `prod`,
-the only environment backed up since 2026-11-16. It reads the bucket and
-archives nothing of its own. Its memory request is small, since it runs beside
-prod's Postgres. Then compare the row counts and delete it:
+**Test a restore** into a temporary Cluster in prod with the operator's
+go-ahead. It reads the bucket and does not archive back to it. Before
+starting, confirm the node has enough memory and disk for a second database.
+Use the prod image digest in the manifest. Then verify the restored catalog
+and database against a known recovery point before removing the copy.
 
 ```bash
-kubectl --context <node-name> -n <env> apply -f - <<'YAML' && kubectl --context <node-name> -n <env> wait cluster/restore-test --for=condition=Ready --timeout=900s
+kubectl --context <node-name> -n prod apply -f - <<'YAML' && kubectl --context <node-name> -n prod wait cluster/restore-test --for=condition=Ready --timeout=900s
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -1258,294 +788,102 @@ spec:
         name: barman-cloud.cloudnative-pg.io
         parameters: {barmanObjectName: r2-backups, serverName: postgres}
 YAML
-for c in postgres restore-test; do echo "$c | $(kubectl --context <node-name> -n <env> exec $c-1 -c postgres -- psql -d lagom -At -F' | ' -c "select (select count(*) from bronze.usgs_events), (select count(*) from silver.stg_usgs__events), (select count(*) from gold.fct_earthquakes)")"; done
-kubectl --context <node-name> -n <env> delete cluster restore-test
+kubectl --context <node-name> -n prod get cluster restore-test
+kubectl --context <node-name> -n prod exec <restore-test-pod> -c postgres -- psql -d lagom -At -c "select count(*) from ducklake.ducklake_snapshot"
 ```
 
-Result in staging on 2026-10-28: ready 68 s after creation. The copy held
-every row up to the last archived WAL (14:28 UTC). The 9 rows a pipeline run
-wrote at 14:30, in a segment not yet closed, were missing, as the RPO above
-predicts (the timeout was 5 minutes then). Deleting the Cluster deletes its volume: local-path released it
-within two minutes.
+Expect a healthy Cluster and the catalog snapshots up to the last archived
+write-ahead log (WAL) segment. Compare snapshot IDs and the stored data
+against the selected recovery point. Recent changes on the live Cluster
+may be newer than that point. The operator deletes the test Cluster with
+`kubectl --context <node-name> -n prod delete cluster restore-test` after verification, then
+checks that the Cluster and its volume claim are gone.
 
-**Retention** is enforced by the sidecar every 30 minutes. To check it: an
-expired backup must be gone from `kubectl get backups` and from the bucket,
-with no `BadDigest` or `DeleteObjects` error in the sidecar's log. Without R2
-credentials the bucket is checked through the catalog, or by the operator
-listing `postgres/base/` in the Cloudflare console (ADR-0025 notes):
+To check retention, compare expired backups with the bucket's
+`postgres/base/` listing in Cloudflare. Verify the ObjectStore's
+`status.serverRecoveryWindow.firstRecoverabilityPoint` advances and the
+sidecar log shows deletion without `BadDigest` or `DeleteObjects` errors.
+
+## Dagster
+
+[Deployment](platform.md#dagsters-deployment) describes the resident Pods and
+[data](data.md#orchestration--dagster-jobs) lists the jobs. Check the Application
+and filter the Pods in the intended namespace:
 
 ```bash
-kubectl --context <node-name> -n <env> logs postgres-1 -c plugin-barman-cloud --since=24h | grep -iE 'retention|delete|error'
+kubectl -n argocd get application dagster-<env>
+kubectl -n <env> get pods | grep dagster
 ```
 
-A deletion logs `Deleting backup not in the catalog` with the backup's name,
-and the ObjectStore's `status.serverRecoveryWindow` moves its
-`firstRecoverabilityPoint` forward. Staging showed both on 2026-11-05.
-
-**Memory measured** on 2026-10-28 is in [architecture.md §11](architecture.md#11-resource-budget): the sidecar used 18 Mi during a
-base backup.
-
-## Dagster (M3)
-
-Each environment runs its own Dagster in its namespace
-([ADR-0026](adr/0026-dagster-one-instance-per-environment.md)), from
-`infra/dagster-<env>/values.yaml`. Three Pods stay up:
-
-- the **webserver**, the UI;
-- the **daemon**, which evaluates the schedules and starts queued runs;
-- the **code server** (`dagster-dagster-user-deployments-lagom-…`), which
-  loads the code location and answers the other two.
-
-A **run** is not one of them. For each run the daemon creates a Kubernetes
-Job named `dagster-run-<run id>`, whose Pod uses the code server's image and
-environment plus the Secrets its job names ([architecture.md §7](architecture.md#7-orchestration--dagster)); its memory is in [architecture.md §11](architecture.md#11-resource-budget). The Job and its Pod are deleted an hour after they
-finish. The run's history stays in the database `dagster` of the same
-environment's Postgres.
-
-Exercised in staging on 2026-10-28; prod runs the same since 2026-11-05.
-In prod, replace `staging` with `prod`.
-
-**The jobs** (code in [`data/orchestration/`](../data/orchestration/README.md)):
-
-| Job | Schedule (UTC) | What it does |
-|---|---|---|
-| `usgs` | every 30 minutes, at :00 and :30 | dlt loads the events USGS updated since the last cursor into DuckLake (`bronze.usgs_events`), then `dbt build` builds silver and gold on the `lake` target and runs their 33 tests |
-| `lake_maintenance` | daily at 04:15 | merges small Parquet files, expires snapshots older than 7 days, deletes files nothing references; its second step, `grant_lake_reader`, gives `lake_reader` its grants |
-| `dashboards` | after each successful `usgs` run (the sensor `render_dashboards_after_usgs`) | renders the boards against the lake, checks them, and publishes them to the environment's dashboards bucket ([architecture.md §9](architecture.md#9-visualization); runbook: *The dashboards' publishing path*) |
-
-All three carry the tag `lagom/pipeline=usgs`, and the daemon's queue starts one
-run with that tag at a time. A second run waits as *Queued* until the first
-ends. In staging's first week (2026-10-28 to 11-05), 372 of 373 `usgs` runs
-succeeded, in 43 s at the median and 136 s at most; the one failure was the
-driver pitfall below. All 8 `lake_maintenance` runs succeeded, in 10 to 17 s.
-In the 21:30 run of 2026-10-28, the load took 7 s and dbt 23 s; the rest was
-Dagster's own start-up and per-step overhead.
-
-**Check it is healthy:**
+Expect `Synced` and `Healthy`, a ready daemon and code server, plus a
+webserver in prod. To find a run before its Pod is collected:
 
 ```bash
-kubectl --context <node-name> -n argocd get application dagster-staging   # Synced / Healthy
-kubectl --context <node-name> -n staging get pods | grep dagster           # two Running (no webserver since 2026-11-16), plus finished runs
+kubectl -n <env> get jobs | grep dagster-run
+kubectl -n <env> logs job/dagster-run-<run-id> | grep -E ' - (RUN_SUCCESS|RUN_FAILURE|STEP_SUCCESS|STEP_FAILURE) - |loaded .* rows|PASS=|published '
+kubectl -n <env> logs deploy/dagster-daemon --since=1h | grep -E 'schedule|Launched'
 ```
 
-**Open the UI.** Prod's is `https://ops.ofantini.com/dagster`, behind the
-Access login
-([Operator UIs behind Cloudflare Access](#operator-uis-behind-cloudflare-access-m3)).
-Staging has no UI since 2026-11-16 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)): its runs are read
-from the terminal, below. When prod's is down, `kubectl port-forward` reaches
-it, with the kubeconfig. The UI has no login of its own: whoever reaches the
-port controls Dagster. Leave the command running, then browse
-http://localhost:3000/dagster (the webserver serves under its path prefix);
-stop it with Ctrl+C:
+Compare the code server and run Pod's `spec.containers[].image` digest
+with the pull request. `usgs` must complete ingestion and dbt. The
+dashboard run must publish its board. Use these logs and the
+[pipeline heartbeat](#pipeline-heartbeat) for staging.
 
-```bash
-kubectl --context <node-name> -n prod port-forward svc/dagster-dagster-webserver 3000:80
-```
+In prod, open [Dagster](https://ops.ofantini.com/dagster/), then *Runs*.
+For a manual run, use the named job's page and its Launchpad. The
+asset catalog can start an implicit job without the named job's resource
+or credential tags. After a code image change, reload the code location
+under *Deployment* before launching a run. Verify the job's tags and
+that the run appears in *Runs*. If a run is already active the second
+run queues.
 
-*Runs* lists every run with its status and duration; open one to see each
-step, its logs and the dbt tests as asset checks. *Jobs* and *Automation*
-show the two jobs and their schedules. Times are shown in the browser's time
-zone. The first visit shows a newsletter prompt: *Skip* closes it.
-
-**Find and read a run from the terminal**, when the UI is not open or the
-run's Pod still exists:
-
-```bash
-kubectl --context <node-name> -n staging get jobs | grep dagster-run            # Complete or Failed, with duration
-kubectl --context <node-name> -n staging logs job/dagster-run-<run id> \
-  | grep -E ' - (RUN_SUCCESS|RUN_FAILURE|STEP_SUCCESS|STEP_FAILURE) - |loaded .* rows|PASS='
-kubectl --context <node-name> -n staging logs deploy/dagster-daemon --since=1h | grep -E 'schedule|Launched'
-```
-
-A healthy run shows `loaded N rows into usgs_events`, two `STEP_SUCCESS`
-(`usgs__events`, then `warehouse`), dbt's `PASS=33`, and `RUN_SUCCESS`. The
-daemon logs `Completed scheduled launch of run …` at each :00 and :30. After
-an hour the Pod is gone, and the run is read in the UI.
-
-**Start a run on demand** (prod; staging has no UI, so a change there is
-validated by the next scheduled run: `usgs` every 30 minutes, `dashboards`
-after it, `lake_maintenance` at 04:15 UTC). In the UI, *Jobs → usgs →
-Materialize all*. For
-`lake_maintenance`, which has no assets, *Jobs → lake_maintenance → Launchpad
-→ Launch Run*. The run appears in *Runs*. If a scheduled run is in progress,
-it waits as *Queued*. Exercised on 2026-11-05: a `usgs` run started at
-11:17 UTC, loaded 4 rows, `PASS=33`, in under a minute.
-
-Start runs from the job's page, not from *Catalog* or the asset graph. A run
-started there belongs to Dagster's implicit asset job, which has none of the
-jobs' tags: since 2026-11-16 the queue holds every run to one at a time, so
-it no longer overlaps a scheduled load on dlt's cursor, but it still takes the code server's memory
-instead of the run's ([architecture.md §11](architecture.md#11-resource-budget)), and it has no credentials ([architecture.md §7](architecture.md#7-orchestration--dagster)), so it fails at its
-first asset with a missing variable.
-
-**Pitfalls hit on the way in** (staging, 2026-10-28). Each made the code
-server or the first runs fail:
-
-- **An `ENTRYPOINT` in the image** (PR #33). The chart and the run launcher
-  each pass a full command starting with `dagster`. With
-  `ENTRYPOINT ["dagster"]` the container ran `dagster dagster api grpc …` and
-  failed with `No such command 'dagster'`. The image has no `ENTRYPOINT`, and
-  CI imports the definitions inside the built image.
-- **psycopg 3 missing** (PR #34). SQLAlchemy 2.1 opens `postgresql://` URLs
-  with psycopg 3, which `dagster-postgres` does not declare. The schedule's
-  first tick failed with `ModuleNotFoundError: No module named 'psycopg'`, and
-  no run was launched.
-- **The wrong driver for Dagster's SQL** (PR #36). With psycopg 3 installed,
-  the first run failed in Dagster's run storage with
-  `syntax error at or near "$1"`: psycopg 3 sends parameters to the server
-  separately, a form Dagster's statements were not written for.
-  `postgresql.postgresqlScheme: postgresql+psycopg2` in the values selects
-  psycopg2 for every Dagster Pod, without rebuilding the image.
-
-**On a first deploy the daemon and webserver may restart once.** In prod, on
-2026-11-05, they started before CloudNativePG had created the database
-`dagster`, retried with `FATAL: database "dagster" does not exist`, exited,
-and came up on the restart; the code server and the first runs were
-unaffected. A restart count of 1 right after the first sync is this. One
-that keeps rising is not: read `kubectl logs --previous`.
-
-**The first pull is slow.** The image is 961 MiB ([§9a](architecture.md#9a-environments)). The first pull on the node
-took **4 min 25 s**. Until it ends, the Pod is `ContainerCreating` and
-`kubectl describe pod` shows `Pulling image`: that is not a failure. Runs use
-`imagePullPolicy: IfNotPresent` and the image is pinned by digest, so later
-runs start from the node's copy. A new digest is pulled once.
-
-**The alarm sensors** ([ADR-0033](adr/0033-dagster-alerts-through-healthchecks.md)) are two entries under *Automation → Sensors* in the UI, both
-running: `usgs_success_heartbeat` and `run_failure_alarm` (which also covers a
-failed `dashboards` run). A third, `render_dashboards_after_usgs`, is not the alarm: it starts the render. They live in the
-code server, which reads the check's ping URL from `HEARTBEAT_URL` when it
-starts and **does not start without it**. A sensor whose call failed three
-times shows a failed tick in the UI, with the HTTP status or the error class,
-never the URL. Dagster does not retry the run that tick was for.
-`HEARTBEAT_URL` comes from the Secret `pipeline-heartbeat`, set in each
-environment's values since its CronJob was retired (both on 2026-11-07). An image with the sensors is never pinned in an environment
-whose values do not set it: its code server would not start.
-
-**Memory** of each Pod and of a run, measured, is in [architecture.md §11](architecture.md#11-resource-budget).
+For a Pod in `ContainerCreating`, inspect `kubectl describe pod`: a
+first image pull must progress to ready. If the daemon or webserver
+restarts repeatedly, check `kubectl logs --previous` and the readiness
+of the `dagster` database and code server. If the pipeline runs but the
+alarm is stale, inspect the daemon's sensor ticks as described in
+[Pipeline heartbeat](#pipeline-heartbeat).
 
 ## Disaster recovery
 
-Used when the node is lost, or when the platform moves to a new node. The
-path exercised is a **rebuild from Git plus a re-load from USGS**, on
-2026-10-28, moving from `lagom-shared-01` to `lagom-shared-02`, with the old
-node still up. Since the same day, Postgres is also backed up to R2, and a
-restore into a new Cluster is tested ([Backup and restore](#backup-and-restore-m3)).
-A rebuild that bootstraps each Cluster from its bucket would also keep the
-event revisions a re-load loses, but it has not been run. Until it has, the
-re-load below is the proven path.
+Use this procedure after losing or replacing a node. The Git bootstrap and
+USGS reload were exercised with the original Postgres pipeline
+([ADR-0020](adr/0020-move-to-the-8-gb-node.md)). A full rebuild with DuckLake
+still needs a drill. Confirm the sealing and Secure Shell (SSH) keys are
+available before provisioning.
 
-**What survives the node, and where.** Everything the cluster runs is in Git.
-The sealing key and the SSH key are in 1Password. The Healthchecks.io checks,
-the GHCR images and the Tailscale policy live with their services. What is
-lost: Postgres's data (the re-load rebuilds the last 30 days of events, see
-below), dlt's cursor (rebuilt by the first run), and staging's `lagom_dev`
-(disposable by design). The Postgres passwords change: CloudNativePG
-generates new ones in `postgres-app`, and every consumer reads that Secret, so
-nothing has to be updated.
-
-**Procedure** — the sections above, in this order, on a node named with the
-next index:
-
-1. [Provision the node](#provision-the-node-m0). An ARM type: the images are
-   built for arm64 only.
-2. [Join the tailnet](#join-the-tailnet-m1), tag it `tag:lagom-node` and
-   disable key expiry. The [ACL](#tailscale-acl-and-zero-inbound-ports-m1)
-   already grants the tag, so it is not edited.
-3. [Install k3s](#install-k3s-m1), including the public-port check.
-4. [Add the kubeconfig context](#operator-kubeconfig-m1).
-5. [Install Argo CD](#install-argo-cd-m1).
-6. [Restore the sealing key](#sealed-secrets-m1) — before step 7.
-7. [Apply the root Application](#hand-over-to-argo-cd-m1) and wait for every
-   Application to be `Synced/Healthy` and both Postgres `Cluster`s ready.
-8. Run the pipeline, staging first, then prod: in staging, wait for the
-   scheduled `usgs` run (staging has no UI); in prod, *Launch run* on the
-   `usgs` job page of its [Dagster UI](#dagster-m3). The run must
-   succeed with `dbt build` reporting `ERROR=0`, and the environment's check
-   must turn *up* ([Pipeline heartbeat](#pipeline-heartbeat), *Verify*).
-   dbt's `reconcile_*` tests assert the relations between layers. With no
-   cursor, the first run is the re-load.
-9. Nothing to do for the [operator UIs](#operator-uis-behind-cloudflare-access-m3):
-    the tunnel's token is sealed in Git and Argo CD starts `cloudflared` in
-    step 7. Check that both addresses show the login page.
-
-**While two clusters run at once** (a move, or a drill with the old node up):
-
-- **Both reconcile the same `main`.** A merge reaches both. Merge nothing to
-  `infra/` that is meant for one node only.
-- **Both run Dagster and ping the same Healthchecks.io checks**, because
-  the sealed URLs decrypt with the same key on both. A check that stays *up*
-  proves nothing about the new node: the old one's pings would hide its
-  failures. Judge the new node by its own runs and sensor ticks, and power the old one
-  off as soon as the new one passes (the *When* paragraph of
-  [the checklist below](#retire-the-old-node)).
-- Both call the USGS API. Four requests every 30 minutes is far below any limit.
-
-**Measured on 2026-10-28** (timestamps from the drill's log, UTC):
-
-| Step | Start | Took | Notes |
-|---|---|---|---|
-| 1. Tailnet, tag, key expiry | — | not timed | done before the drill; verified with `tailscale status --json` |
-| 2. k3s (config, `GOMEMLIMIT`, install, checks) | 11:53:44 | 2 min 53 s | the installer itself took 26 s; the rest is verification and the port probes |
-| 3. kubeconfig context | 11:56:47 | 2 s | |
-| 4. Argo CD (`helm install --wait`) | 11:59:16 | 36 s | |
-| 5. Sealing key | 12:01:30 | 2 s | the exported Document applied as it is |
-| 6. Root Application to all `Synced/Healthy` | 12:01:32 | 65 s | `postgres-prod` retried twice (the race above) |
-| 7a. Staging run | 12:10:12 | 49 s | 9,883 rows loaded, `PASS=34`, heartbeat 200 |
-| 7b. Prod run | 12:13:45 | 30 s | 9,884 rows loaded, `PASS=34`, heartbeat 200 |
-
-**RTO: 20 min 31 s**, from the first command on the node to prod's first green
-run. About 6 minutes of it is the machine working; the rest is the operator
-reading results and starting the next step. It **excludes provisioning** (the
-server, cloud-init and the tailnet join were done before the drill and not
-timed; M0 estimated half an hour), so a rebuild from nothing is about 50
-minutes. That figure is an estimate, not a measurement. It also excludes
-history older than 30 days, which cannot be re-loaded (below).
-
-**What the re-load brings back.** Compared with the old node, both loaded by
-their 12:30 runs:
-
-| | bronze | silver | gold | oldest `updated` in bronze |
-|---|---|---|---|---|
-| old node, prod (loading since 2026-10-18) | 16,225 | 13,836 | 13,524 | 2026-09-18 |
-| new node, prod (first run 12:14) | 9,884 | 9,884 | 9,633 | 2026-09-28 |
-
-On the new node, bronze equals silver: a first load holds one revision per
-event, and later revisions accumulate from the next runs. Within the node,
-`bronze >= silver >= gold` holds, and dbt's `reconcile_*` tests passed in
-every run (`PASS=34`), including the scheduled 12:30 runs. The new node has
-3,952 events fewer in prod: those with an origin older than 30 days, which
-the USGS API does not return without `starttime` (the API's own `count`:
-9,474 events updated since 2026-10-01 without it, 12,318 with
-`starttime=2026-08-01`). **The operator accepted this limit on 2026-10-28**
-([ADR-0019](adr/0019-postgres-backup-deferred.md) notes): recovery brings
-back the last 30 days of events. A comparison of event ids between the two
-nodes over a shared window was not run.
-
-**Gaps the drill found, and what changed:**
-
-- The kubeconfig command overwrote `~/.kube/config`. It now merges, and
-  every command while two clusters are known names its context.
-- `GOMEMLIMIT` was added after the install, with a restart. The drop-in is now
-  written before the installer runs, so k3s starts with it.
-- The runbook hard-coded `lagom-shared-01`. It now uses `<node-name>`.
-- The `GOMEMLIMIT` check ran `kubectl` before the kubeconfig existed. It now
-  runs on the node (`sudo k3s kubectl`).
-- The expected Applications after the hand-over listed three of nine, and the
-  race on an empty cluster was undocumented. Both are now in
-  [Hand over to Argo CD](#hand-over-to-argo-cd-m1).
-- The sealing-key restore had never run. It worked as written. The section
-  now says when to run it, how to verify it, and what to do if the API refuses
-  the exported fields.
-- The re-load reaches 30 days back at most, and normal runs never load a
-  revision published after an event is 30 days old. This is a limit of the
-  USGS API's default, not of the runbook, and the operator accepted it
-  ([`data/sources/usgs/README.md`](../data/sources/usgs/README.md)).
+1. [Provision the node](#provision-the-node), [join the tailnet](#join-the-tailnet)
+   and apply the existing `tag:lagom-node` [policy](#tailscale-acl-and-zero-inbound-ports).
+2. [Install k3s](#install-k3s), verify the firewall and add the new
+   [kubeconfig context](#operator-kubeconfig).
+3. [Install Argo CD](#install-argo-cd) and [restore the sealing key](#sealed-secrets)
+   before applying the root Application.
+4. Before [handing over](#hand-over-to-argo-cd), choose how each lake
+   comes back. To recover the old lake, restore its Postgres catalog and
+   retain the files at the paths the catalog records. To reload from USGS
+   into a fresh catalog, prepare an empty lake location per environment
+   and review both `LAGOM_LAKE_DATA_PATH` and
+   `DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE__BUCKET_URL` in
+   `infra/dagster-<env>/values.yaml` together. Ensure the sealed
+   `r2-lake` writer and `r2-lake-reader` reader credentials cover that
+   location. Preserve the old prod backup archive as a restore source.
+   Give the replacement its own [archive destination](../infra/postgres-prod/objectstore.yaml)
+   and matching `r2-backups` credential. Review those targets before applying
+   the root Application, which enables scheduled writers. A merge to
+   `main` reaches both clusters while both reconcile it. During a move,
+   stop the old cluster before changing shared settings, or isolate both
+   the writers and their heartbeat checks. Use explicit contexts throughout.
+5. Verify all Applications are healthy, both Postgres Clusters are
+   ready, and staging then prod succeed. Verify dbt reports zero errors,
+   reconciliation passes, the [dashboard is published](#the-dashboards-publishing-path)
+   and the [heartbeat](#pipeline-heartbeat) comes from the new runs.
+6. Verify that [prod Dagster](#operator-uis-behind-cloudflare-access)
+   prompts for login. Its tunnel uses the sealed token from Git.
 
 ### Retire the old node
 
-**When:** first power it off, as soon as the new node's staging and prod runs
-pass. In the Hetzner Console choose *Power off*, not *Delete*: it is
-reversible, and it stops the old node's Dagster runs and their pings. Then wait
+**When:** first power it off in the Hetzner Console to stop its jobs and pings.
+Power off is reversible. After the new cluster is operational, wait
 **24 hours**, in which both Healthchecks.io checks must stay *up* (48 pings
 each, all from the new node). Delete only after that.
 
@@ -1570,20 +908,5 @@ each, all from the new node). Delete only after that.
 
 5. **The operator's `known_hosts`:** `ssh-keygen -R <old-node-name>`.
 
-Nothing in Git needs to change. Only records of the old node's history still
-name it.
-
-## Sections to fill as the platform is built
-
-- **Disaster recovery from a backup** — rebuilding the node, then
-  bootstrapping each Cluster from its bucket instead of `initdb`. The restore
-  itself is exercised in *Backup and restore* above. A full rebuild that
-  uses it is not exercised yet.
-- **Secret rotation** — how to rotate a source credential and a database
-  password. (M3, when a credential is first rotated: the drill rotated
-  nothing)
-- **On failure** — where to look: Argo CD sync state, Dagster run history, pod
-  logs. (M3)
-
-Each section is written when the corresponding milestone is implemented, with
-commands that were actually run — never from memory.
+Check only the expected node remains in the Hetzner Console, Tailscale
+and `kubectl config get-contexts`. Verify the new cluster still serves prod.

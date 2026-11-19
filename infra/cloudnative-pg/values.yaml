@@ -5,7 +5,7 @@
 
 # Sized from measurement on 2026-10-16: 24 MiB with no Cluster, 31 MiB
 # reconciling one. The limit leaves room for reconcile spikes and for the
-# staging Cluster still to come (architecture.md §11).
+# staging and prod Clusters (docs/platform.md, Resource budget).
 resources:
   requests: {cpu: 20m, memory: 64Mi}
   limits: {memory: 192Mi}

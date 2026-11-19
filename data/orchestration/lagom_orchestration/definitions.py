@@ -55,7 +55,7 @@ PIPELINE_TAG = {"lagom/pipeline": "usgs"}
 
 # The memory of each run's Pod. Without this, a run inherits the code server's
 # resources, and a run needs more than twice what the code server does
-# (architecture.md section 11). Dagster applies a run's tags over the code
+# (docs/platform.md, Resource budget). Dagster applies a run's tags over the code
 # location's configuration: a resource figure replaces the code server's, a
 # list (the environment) is added to it. The request is also declared on
 # each environment's Application (lagom.dev/ephemeral-memory-request) for the

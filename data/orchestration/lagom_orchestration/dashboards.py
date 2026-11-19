@@ -109,8 +109,7 @@ PAGE_CACHE_CONTROL = "public, max-age=300"
 # The container's peak memory, from its cgroup (v2): the run's process and
 # every command it started, as the kernel counted them against the limit. A
 # render's Pod lives less than a minute, which `kubectl top` (a sample a
-# minute) does not see; this is how its memory is measured (architecture.md
-# section 11).
+# minute) does not see. See docs/data.md, Memory of a run.
 CGROUP_MEMORY_PEAK = Path("/sys/fs/cgroup/memory.peak")
 
 

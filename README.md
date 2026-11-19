@@ -1,104 +1,38 @@
 # Lagom
 
-Open-source data stacks doing real analytics on one small server.
+Lagom is an open-source batch data platform for running real analytics on a
+single small server. Jobs ingest public data, build and reconcile warehouse
+models, and publish static reports. The first project follows earthquakes
+reported by the United States Geological Survey.
 
-Most data is not big data. Sales records, sensor readings, a public API: it
-usually fits on a single machine. Yet the default answer is a stack built for
-petabytes, with the cost and the operational weight that come with it. This
-project goes the other way. It combines open-source tools that are light on
-memory into a data platform that runs on one modest node, and measures how
-far that gets.
+The shared platform handles deployment, scheduling and recovery. Each data
+project adds its own source, models and outputs. The [public portfolio](https://ofantini.com)
+presents the projects and the infrastructure behind them.
 
-Small does not have to mean fragile. GitOps, tests, data reconciliation and a
-rehearsed disaster recovery come with it.
+## Repository layout
 
-> **Why "Lagom"?** It is a Swedish word for "not too little, not too much,
-> just enough". That is the idea here: as much infrastructure as the data
-> needs, and no more.
+| Path | What it holds | Who leads |
+|---|---|---|
+| [`infra/`](infra/README.md) | Cluster manifests, Argo CD applications and chart values | Agents lead infrastructure and explain the mechanism |
+| [`data/`](data/README.md) | Sources, warehouse models, orchestration code and report definitions | The operator leads data decisions, with options and trade-offs from agents |
+| [`tools/`](tools/README.md) | Checks used in continuous integration (CI) and operational scripts | |
+| [`docs/`](docs/platform.md) | Current design, operating procedures and decisions | |
 
-## How it fits together
+See [Platform](docs/platform.md) for deployment, access and the memory
+ceiling, and [Data](docs/data.md) for how a source becomes a report. The
+[decision records](docs/adr/README.md) explain why the system is built this
+way. The [GitHub Project](https://github.com/users/FilipeFantini/projects/2)
+tracks work in progress.
 
-```mermaid
-flowchart TB
-    src(["Public data<br/>APIs and event feeds"])
+## Start here
 
-    subgraph node["One small node, running k3s"]
-        direction LR
-        ing["Ingest<br/>dlt"] --> store[("Store<br/>bronze · silver · gold")] --> dbt["Transform<br/>dbt"]
-    end
-
-    site(["ofantini.com<br/>dashboards, refreshed each run"])
-
-    src --> node
-    node --> site
-    dag{{"Dagster<br/>orchestrates"}} -.-> node
-    git(["GitHub"]) -- "Argo CD syncs" --> node
-
-    classDef ext fill:#eef2ff,stroke:#6366f1,color:#1e1b4b
-    classDef core fill:#ecfdf5,stroke:#10b981,color:#064e3b
-    classDef side fill:#fff7ed,stroke:#f59e0b,color:#78350f
-    class src,site ext
-    class ing,store,dbt core
-    class dag,git side
-    style node fill:transparent,stroke:#94a3b8,stroke-width:2px,stroke-dasharray:6 4
-```
-
-Data comes in through ingestion jobs that start, do their work, and exit. It
-is stored in layers (raw, cleaned, modelled) and transformed with dbt.
-Dagster is set to schedule the work from the outside. After each run the
-dashboards are rendered to a static page with dbt Charts and published to a
-bucket; a visitor never reaches the lake or its catalog. The job that does it is
-built and has not yet run in the cluster
-([ADR-0042](docs/adr/0042-the-dashboards-return-to-dbt-charts.md),
-[ADR-0044](docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)). Argo CD keeps the cluster in sync
-with this repository, so changes arrive through Git, not by hand.
-
-## The stack
-
-| Layer | Tools |
-|---|---|
-| Ingestion | dlt for APIs |
-| Storage | Postgres today; DuckLake on Cloudflare R2, with Postgres as its catalog, being tested ([ADR-0023](docs/adr/0023-sme-stack-duckdb-on-ducklake.md)) |
-| Transformation | dbt, on Postgres or DuckDB |
-| Orchestration | Dagster |
-| Dashboards | dbt Charts: boards in YAML over gold, with a CI check, to be rendered to a static page after each run. The boards and the check exist, and a Dagster job renders and publishes them to an R2 bucket after each pipeline run (built; not yet run in the cluster) ([ADR-0040](docs/adr/0040-dbt-charts-for-the-dashboards.md), [ADR-0042](docs/adr/0042-the-dashboards-return-to-dbt-charts.md)) |
-| Platform | k3s on a single ARM node, Argo CD, Sealed Secrets, CloudNativePG, Tailscale, Cloudflare Tunnel + Access |
-
-Each choice is written down with the alternatives it beat and the trade-offs it
-accepts, in [`docs/adr/`](docs/adr/). Heavier stacks (Iceberg, Spark, Trino)
-come later, as the comparison that shows where the small one stops.
-
-## Learn more
-
-| Read | For |
-|---|---|
-| [`docs/architecture.md`](docs/architecture.md) | how it is built, and the memory budget |
-| [`docs/runbook.md`](docs/runbook.md) | how to provision, deploy, back up, and recover it |
-| [`docs/roadmap.md`](docs/roadmap.md) | what exists, what comes next, and what is left out on purpose |
-| [`docs/adr/`](docs/adr/) | why things are the way they are |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | the workflow, before a first pull request |
-| [`AGENTS.md`](AGENTS.md) and [`docs/engineering-protocol.md`](docs/engineering-protocol.md) | the working rules, for people and AI agents alike |
-
-## Running it
-
-The [runbook](docs/runbook.md) takes an empty server to the
-platform as it stands, step by step, with commands that were actually run. After that,
-every change reaches the cluster through a pull request.
-
-## Layout
-
-```
-infra/   the infrastructure: cluster manifests, Argo CD apps, Helm values
-data/    the data: sources, the dbt warehouse, the Dagster code, the dashboards
-tools/   CI checks and operational scripts
-docs/    architecture, roadmap, decisions (ADRs), runbook
-```
-
-`infra/` is where the AI agents lead and `data/` is where the operator, a data
-professional, leads. Adding a source is additive: one directory under
-`data/sources/` and one of dbt models under `data/warehouse/models/`
-([ADR-0053](docs/adr/0053-repository-layout-infra-and-data.md)).
+- To explore a source locally, start with the [USGS source](data/sources/usgs/README.md)
+  and the [warehouse](data/warehouse/README.md). Their tests can run against
+  fixtures.
+- To provision or operate the cluster, follow the [runbook](docs/runbook.md).
+- To make a change, start with the [contribution workflow](CONTRIBUTING.md)
+  and the [repository rules](AGENTS.md).
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+[MIT](LICENSE).

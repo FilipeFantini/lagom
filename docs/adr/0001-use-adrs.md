@@ -6,6 +6,9 @@
   (proposed): the Obsidian vault leaves the project's documentation; Notion is
   the one space outside the repository.
 
+**2026-11-19 amendment.** [ADR-0054](0054-documentation-one-place-per-fact.md)
+supersedes ADR-0034. Decisions and operating documentation stay in Git.
+
 ## Context and problem
 
 This platform is built incrementally, partly as a learning vehicle, and will be
