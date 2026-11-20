@@ -17,6 +17,14 @@
   [ADR-0036](0036-the-reviewer-as-a-required-check.md) are the gates this
   decision leans on.
 
+**2026-11-20 amendment.** [ADR-0054](0054-documentation-one-place-per-fact.md)
+moved the roadmap to the
+[GitHub Project](https://github.com/users/FilipeFantini/projects/2), and
+`docs/roadmap.md` no longer exists. In Decision 4, read "the roadmap's
+status" as the Project's items and "the milestone's section of
+`docs/roadmap.md`" as the issue being worked on. The incoming agent starts
+from `AGENTS.md`, that issue and the open pull requests.
+
 ## Context and problem
 
 ADR-0029 let Codex continue when Claude's limit is reached, but only inside
