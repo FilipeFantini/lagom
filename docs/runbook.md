@@ -627,6 +627,42 @@ the same run, check:
 7. `curl -fsS https://lagom-staging.ofantini.com/docs/index.html | grep -c
    '"send_anonymous_usage_stats": false'` prints `1`: the page does not load a
    tracker. The reports still answer 200 at the root (step 2).
+8. The same page holds `<link rel="icon" type="image/svg+xml" href="data:` and
+   not `favicons/favicon.ico`, and its overview starts with *Lagom* and links
+   to `ofantini.com`. Open it and confirm the tab shows the site's icon.
+
+R2's custom domain serves no index document: `/` and `/docs/` answer 404. One
+redirect rule in the `ofantini.com` zone sends both hosts' `/`, `/docs` and
+`/docs/` to the documentation page. In the Cloudflare dashboard, under
+**Rules → Redirect Rules**, create a single redirect:
+
+| Field | Value |
+|---|---|
+| Rule name | `lagom: entry to the documentation` |
+| Custom filter expression | `(http.host in {"lagom.ofantini.com" "lagom-staging.ofantini.com"} and http.request.uri.path in {"/" "/docs" "/docs/"})` |
+| Type | Dynamic |
+| Expression | `concat("https://", http.host, "/docs/index.html")` |
+| Status code | 302 |
+| Preserve query string | off |
+
+The status is 302, temporary, on purpose: a browser keeps a 301 indefinitely,
+and `/` is meant for the console's index when it exists
+([ADR-0056](adr/0056-the-data-console.md)), so that stage changes the
+expression and no visitor stays on the old target. The rule matches only those
+three paths, so every report and `docs/index.html` itself are served as before.
+Check each host:
+
+```bash
+for h in lagom-staging.ofantini.com lagom.ofantini.com; do
+  for p in / /docs /docs/; do
+    curl -sS -o /dev/null -w "$h$p %{http_code} %{redirect_url}\n" "https://$h$p"
+  done
+  curl -fsS -o /dev/null -w "$h/earthquakes.html %{http_code}\n" "https://$h/earthquakes.html"
+done
+```
+
+Each of the six redirects prints `302 https://<host>/docs/index.html`, and each
+report `200`.
 
 A run that fails after the reports leaves them current and the documentation
 as it was; the failure names the check that refused the page.

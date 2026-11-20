@@ -49,6 +49,9 @@ job `dashboards (render)`). It names no source or model:
   board reads with `ref()`, counting those in the partial it `extends`.
 - A manifest with no gold model, or a charts directory with no board, fails.
 
+The page's front page is [`models/overview.md`](models/overview.md), dbt's
+`__overview__` docs block. It presents Lagom and names no source.
+
 Silver and bronze have no such rule.
 
 ## Tests

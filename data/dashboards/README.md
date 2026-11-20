@@ -89,7 +89,9 @@ CI, against the cluster's lake:
 4. **dbt's documentation**, after the reports (the same Pod, the second asset
    `dashboards/docs`): `dbt docs generate --static` with this directory's
    `profiles.yml` (`lagom_dashboards`, read-only), checked, then uploaded as
-   `docs/index.html` with the same type and cache header. Usage statistics are
+   `docs/index.html` with the same type and cache header. dbt's unbuilt icon
+   link is replaced by an embedded icon (the job fails if dbt's tag is not
+   there exactly once). Usage statistics are
    off (`DO_NOT_TRACK=1`: ADR-0044 decision 9 is about `dct`), and the page is
    refused if they are on, the catalog is incomplete, or its markup loads a
    script, stylesheet, image or frame from another host (a best-effort guard on

@@ -102,7 +102,17 @@ previous page.
 dbt's documentation is the job's second step: `dbt docs generate --static`
 writes one page, with the manifest and the catalog (each table's columns, read
 from the lake read-only) embedded, and it is published as `docs/index.html` in
-the same bucket ([ADR-0056](adr/0056-the-data-console.md)). The reports stay at
+the same bucket ([ADR-0056](adr/0056-the-data-console.md)). Its front page is
+the `__overview__` docs block in
+[`data/warehouse/models/overview.md`](../data/warehouse/models/overview.md),
+which presents Lagom and links to [ofantini.com](https://ofantini.com) and the
+repository; it names no source, so a new source needs no edit there. dbt's
+static page names its icon by a template that was never built, which a browser
+requests and gets a 404, so the job replaces that tag with the site's icon
+embedded as a `data:` URL; it fails if dbt's tag is not there exactly once,
+which a dbt upgrade shows first in CI. R2's custom domain serves no index
+document, so a redirect rule in the Cloudflare zone sends `/` and `/docs/` to
+the documentation page ([runbook](runbook.md#the-dashboards-publishing-path)). The reports stay at
 the bucket's root, so their addresses do not change. Each kind of page owns a
 prefix, and a publication lists and deletes only the `.html` keys directly
 under its own: the reports' listing is delimited at the root, so it never sees
