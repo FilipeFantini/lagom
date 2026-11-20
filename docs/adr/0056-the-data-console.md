@@ -140,6 +140,10 @@ pipeline generates cannot drift from the code.
 - **Unverified:** whether R2's custom domain serves an index document at `/`.
   If not, the console lives at a named path and a redirect at the zone sends
   `/` to it. This is checked in the stage that publishes the index.
+  *2026-11-20:* checked before that stage: `/` and `/docs/` answer 404 on
+  `lagom.ofantini.com`, so it does not. Until the index exists, a temporary
+  (302) redirect rule in the zone sends both to `docs/index.html`; the index's
+  stage changes its target ([runbook](../runbook.md#the-dashboards-publishing-path)).
 - **Unverified:** whether dbt's static documentation loads anything from
   another host. The CI check that rejects external loads on the reports is
   applied to it.

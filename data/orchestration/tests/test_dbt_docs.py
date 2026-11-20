@@ -14,7 +14,13 @@ import pytest
 
 from lagom_orchestration import dbt_docs
 from lagom_orchestration.dashboards import SUBPROCESS_ENV
-from lagom_orchestration.dbt_docs import DOCS_TIMEOUT_SECONDS, external_loads, generate_docs
+from lagom_orchestration.dbt_docs import (
+    DOCS_TIMEOUT_SECONDS,
+    ICON_LINK,
+    external_loads,
+    generate_docs,
+    set_icon,
+)
 
 MODEL = "model.lagom.fct_earthquakes"
 POD = {
@@ -46,11 +52,15 @@ def _catalog() -> dict[str, Any]:
     return {"errors": None, "nodes": {MODEL: {"columns": {"event_id": {"type": "text"}}}}}
 
 
-# A page shaped like dbt's: the embedded manifest says what it says, and the
-# script holds URLs as text, which load nothing.
-def _page(tracking: str = "false", markup: str = "") -> str:
+# The icon link dbt 1.12's static page ships: a webpack expression never built.
+DBT_ICON = """<link rel="shortcut icon" href="${require('./assets/favicons/favicon.ico')}"/>"""
+
+
+# A page shaped like dbt's: its unbuilt icon link, the embedded manifest says
+# what it says, and the script holds URLs as text, which load nothing.
+def _page(tracking: str = "false", markup: str = "", icon: str = DBT_ICON) -> str:
     return (
-        '<html><head><link rel="icon" href="favicon.ico"></head><body>'
+        f"<html><head>{icon}</head><body>"
         f'<a href="https://example.invalid/docs">docs</a>{markup}'
         '<script>var home = "https://cdn.invalid/sp.js"; '
         f'var metadata = {{"send_anonymous_usage_stats": {tracking}}};</script>'
@@ -95,7 +105,26 @@ def test_the_page_is_returned_when_every_check_passes(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = FakeDbt()
-    assert _generate(work, monkeypatch, fake) == _page().encode()
+    assert _generate(work, monkeypatch, fake) == _page(icon=ICON_LINK).encode()
+
+
+def test_dbts_icon_link_is_replaced_by_the_embedded_icon() -> None:
+    html = set_icon(_page())
+    assert DBT_ICON not in html and "require(" not in html
+    assert html.count(ICON_LINK) == 1
+    assert ICON_LINK.startswith('<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,')
+    # The rest of the page is untouched.
+    assert html.replace(ICON_LINK, DBT_ICON) == _page()
+    # An embedded icon is not a load from outside.
+    assert external_loads(html) == []
+
+
+@pytest.mark.parametrize("icon", ['<link rel="icon" href="favicon.ico">', DBT_ICON * 2])
+def test_a_page_without_dbts_icon_link_exactly_once_fails(
+    work: Path, monkeypatch: pytest.MonkeyPatch, icon: str
+) -> None:
+    with pytest.raises(RuntimeError, match="icon link (0|2) times, not once"):
+        _generate(work, monkeypatch, FakeDbt(page=_page(icon=icon)))
 
 
 def test_the_command_reads_the_dashboards_profile_and_writes_only_under_the_work_dir(
@@ -142,7 +171,9 @@ def test_a_manifest_that_does_not_say_false_fails(
         _generate(work, monkeypatch, FakeDbt(manifest=_manifest(tracking)))
 
 
-@pytest.mark.parametrize("page", [_page(tracking="true"), "<html>no setting at all</html>"])
+@pytest.mark.parametrize(
+    "page", [_page(tracking="true"), f"<html>{DBT_ICON}no setting at all</html>"]
+)
 def test_a_page_that_would_load_a_tracker_or_does_not_say_otherwise_fails(
     work: Path, monkeypatch: pytest.MonkeyPatch, page: str
 ) -> None:
@@ -225,5 +256,5 @@ def test_the_command_line_writes_the_page(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(dbt_docs, "run_command", FakeDbt())
     output = tmp_path / "out" / "docs" / "index.html"
     assert dbt_docs.main([str(tmp_path), str(output)]) == 0
-    assert output.read_bytes() == _page().encode()
+    assert output.read_bytes() == _page(icon=ICON_LINK).encode()
     assert dbt_docs.main([]) == 2

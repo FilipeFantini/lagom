@@ -37,9 +37,9 @@ This is the part of the project the agents lead. See the [agent rules](../AGENTS
 | Cloudflare R2 | object storage: the lake's files, the dashboards' pages, prod's Postgres backups. One bucket per purpose and environment |
 
 **Outside the cluster, principle 2 does not hold yet.** The server, its
-firewall, the Tailscale policy, the Cloudflare zone, Access application, R2
-buckets and tokens, and the Healthchecks.io checks are created by hand, by the
-[runbook](runbook.md). Argo CD reconciles only what runs inside the cluster.
+firewall, the Tailscale policy, the Cloudflare zone and its redirect rule,
+Access application, R2 buckets and tokens, and the Healthchecks.io checks are
+created by hand, by the [runbook](runbook.md). Argo CD reconciles only what runs inside the cluster.
 Terraform takes them over by its trigger (below).
 
 The provisioning settings (image, type, firewall, labels, name) are the ones

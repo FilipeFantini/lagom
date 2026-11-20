@@ -32,8 +32,11 @@ logs/
 *.duckdb
 *.duckdb.wal
 
-# Local data — never in Git
+# Local data — never in Git. `data/` matches a directory of that name at any
+# depth, so the repository's own top-level data/ (ADR-0053) is re-included;
+# a nested data/ inside it stays ignored.
 data/
+!/data/
 *.parquet
 
 # Kubernetes
