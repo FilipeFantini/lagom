@@ -116,9 +116,9 @@ dagster-user-deployments:
     - name: lagom
       image:
         repository: ghcr.io/filipefantini/lagom-orchestration
-        # Batch-only orchestration built from main at 412a694
+        # Batch-only orchestration built from main at 40a3dbe
         # (ADR-0052, ADR-0053). The code location needs HEARTBEAT_URL, set below.
-        tag: "3328ddd88194076d185b85acb41f54b4b138422b@sha256:87e05374925c9c5f194285e66a76ccdf830cbcd94fc4bee64813a11289ecac70"
+        tag: "40a3dbeb5d0115bc50ceb52ec470d4f6ca8d851a@sha256:3dc2d7e17f860ae9ab1f22d5cb5a388a517667512e960decbbecbad4a820a63e"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
