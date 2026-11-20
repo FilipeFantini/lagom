@@ -54,7 +54,7 @@ Introduce a component when a demonstrated requirement justifies it.
   alternatives, the decision, trade-offs, risks, cost and reversal. Keep
   their history. Reverse a decision with a new ADR and mark the old one
   superseded. Link dated amendments without rewriting the earlier decision.
-- CI fails on a broken relative link or anchor in maintained Markdown
+- CI reports a broken relative link or anchor in maintained Markdown
   ([`doc_links.py`](../tools/doc_links.py)). ADR bodies are history and are
   not checked; a path written as code is not checked either.
 - The GitHub Project holds current priorities and issue status. The

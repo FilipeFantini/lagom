@@ -15,6 +15,9 @@ from doc_links import anchors, check_file, links, maintained_markdown, slug
         ("The `dashboards` job", "the-dashboards-job"),
         ("See [Data](data.md) here", "see-data-here"),
         ("Deliberately absent, and when it enters", "deliberately-absent-and-when-it-enters"),
+        ("_italic_ word", "italic-word"),
+        ("**bold** word", "bold-word"),
+        ("The snake_case name", "the-snake_case-name"),
     ],
 )
 def test_slug_follows_github(heading: str, expected: str) -> None:
@@ -24,6 +27,12 @@ def test_slug_follows_github(heading: str, expected: str) -> None:
 def test_anchors_number_repeated_headings_and_read_html_ids() -> None:
     text = '# Notes\n## Notes\n<a id="custom"></a>\n```\n# not a heading\n```\n'
     assert anchors(text) == {"notes", "notes-1", "custom"}
+
+
+def test_fence_closes_only_on_its_own_kind() -> None:
+    text = "````md\n```\n# fake\n```\n````\n[z](nope.md)\n~~~\n[in](code.md)\n~~~\n"
+    assert [target for _, target in links(text)] == ["nope.md"]
+    assert anchors(text) == set()
 
 
 def test_links_skip_code() -> None:

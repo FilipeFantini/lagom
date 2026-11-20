@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 ADR_BODY = re.compile(r"^docs/adr/\d{4}-[^/]+\.md$")
-FENCE = re.compile(r"^\s{0,3}(```|~~~)")
+FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$")
 INLINE_CODE = re.compile(r"`+[^`]*`+")
 # [text](target "optional title"); target has no spaces, or is in <...>.
@@ -36,20 +36,34 @@ SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 def slug(heading: str) -> str:
     """GitHub's anchor for a heading: lowercase, punctuation dropped, spaces to hyphens."""
     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", heading)  # a link keeps its text
+    # Emphasis by underscores renders without them; a snake_case word keeps its own.
+    text = re.sub(r"(?<!\w)_{1,2}(\S(?:.*?\S)?)_{1,2}(?!\w)", r"\1", text)
     text = text.replace("`", "").strip().lower()
     text = re.sub(r"[^\w\- ]", "", text)
     return text.replace(" ", "-")
 
 
 def prose_lines(text: str) -> Iterator[tuple[int, str]]:
-    """Lines outside fenced code blocks, numbered from 1."""
-    fenced = False
+    """Lines outside fenced code blocks, numbered from 1.
+
+    A fence closes only on the character that opened it, at least as long, with
+    nothing after it, so a ``` line inside a ```` block stays inside.
+    """
+    opener = ""
     for number, line in enumerate(text.splitlines(), start=1):
-        if FENCE.match(line):
-            fenced = not fenced
-            continue
-        if not fenced:
-            yield number, line
+        match = FENCE.match(line)
+        if not opener:
+            if match:
+                opener = match.group(1)
+            else:
+                yield number, line
+        elif (
+            match
+            and match.group(1)[0] == opener[0]
+            and len(match.group(1)) >= len(opener)
+            and not line.strip()[len(match.group(1)) :].strip()
+        ):
+            opener = ""
 
 
 def anchors(text: str) -> set[str]:
