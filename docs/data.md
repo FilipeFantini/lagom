@@ -207,4 +207,5 @@ describes the intended boundary. A new source reuses the deployment backbone.
 | Row-level security | A second consumer needs isolated rows |
 | PostgREST | A consumer needs a query API |
 | A stack based on Iceberg and larger compute engines | A showcase compares where the small stack stops, with its own capacity decision ([ADR-0023](adr/0023-sme-stack-duckdb-on-ducklake.md)) |
+| A resident server for the data console, or a catalog product (OpenMetadata, DataHub) on a larger host | One of these appears: the console must write (requests, comments), show content behind a login, answer ad-hoc queries over gold that the browser cannot ([ADR-0056](adr/0056-the-data-console.md), later stages), or offer column-level lineage and search across many sources. More memory alone is not a trigger: a server adds patching, an attack surface and an uptime tied to the host, which the static pages in R2 do not have. It needs its own decision record, and the public console stays static |
 | Event ingestion | A source requires it and a separate proposal justifies the budget ([ADR-0052](adr/0052-streaming-leaves-the-platform.md)) |
