@@ -32,6 +32,25 @@ that costs seconds, and it makes a re-run give the same result by construction
   the clock; only the freshness check below compares with `now`, because that
   is what freshness means.
 
+## Metadata contract
+
+dbt's documentation page ([ADR-0056](../../docs/adr/0056-the-data-console.md))
+is built from what the project declares, so the declarations are required, and
+CI fails where one is missing (`python -m lagom_orchestration.metadata_contract`,
+job `dashboards (render)`). It names no source or model:
+
+- **Every gold model** has a `description`, `config: contract: {enforced: true}`
+  and `config: meta: {owner: <GitHub account>}`, in its properties file
+  (`models/marts/<area>/_<area>__models.yml`).
+- **Every report** (a board in `data/dashboards/charts`) has an exposure in
+  the same area's `_<area>__exposures.yml`: `name` equal to the board's `id`,
+  `type: dashboard`, a `url` (root-relative, so each environment's page links
+  its own host), an `owner`, and `depends_on` listing exactly the models the
+  board reads with `ref()`, counting those in the partial it `extends`.
+- A manifest with no gold model, or a charts directory with no board, fails.
+
+Silver and bronze have no such rule.
+
 ## Tests
 
 `dbt build` runs them in dependency order and stops a model's dependents when it

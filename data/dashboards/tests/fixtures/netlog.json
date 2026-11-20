@@ -1,0 +1,10 @@
+{"constants":{"logEventTypes":{"URL_REQUEST_START_JOB":2}},"events":[
+{"phase":1,"source":{"id":1,"type":1},"time":"1","type":2,"params":{"url":"http://127.0.0.1:4000/page.html","method":"GET","network_isolation_key":"http://127.0.0.1 http://127.0.0.1"}},
+{"phase":0,"source":{"id":1,"type":1},"time":"2","type":3,"params":{"headers":[":authority: 127.0.0.1:4000",":path: /page.html"]}},
+{"phase":1,"source":{"id":2,"type":1},"time":"3","type":2,"params":{"url":"http://127.0.0.1:4000/favicon.ico","method":"GET"}},
+{"phase":1,"source":{"id":3,"type":1},"time":"4","type":2,"params":{"url":"HTTPS://Cdn.example.invalid/sp.js","method":"GET"}},
+{"phase":0,"source":{"id":3,"type":1},"time":"5","type":4,"params":{"location":"https://redirect.example.invalid/next","group_id":"https://sockets.example.invalid <http://127.0.0.1 same_site>"}},
+{"phase":0,"source":{"id":4,"type":1},"time":"6","type":5,"params":{"url":"wss://collect.example.invalid/socket"}},
+{"phase":0,"source":{"id":5,"type":1},"time":"7","type":2,"params":{"url":"http://127.0.0.1:40001/other-port.js","host":"https://hostonly.example.invalid"}},
+{"phase":0,"source":{"id":6,"type":1},"time":"8","type":2,"params":{"url":"mailto:someone@example.invalid","destination":"https://destination.example.invalid"}},
+{"phase":1,"source":{"id":7,"type":1},"time":"9","type":2,"params":{"url":"https://tail.example.invalid/cut

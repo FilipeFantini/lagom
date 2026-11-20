@@ -414,12 +414,17 @@ def test_the_dashboards_job_is_queued_with_the_pipeline_and_in_its_own_group(def
     """Same tag as `usgs`: the run queue never runs the render beside it."""
     graph = defs.resolve_asset_graph()
     key = AssetKey(["dashboards", "pages"])
+    docs = AssetKey(["dashboards", "docs"])
     assert graph.get(key).group_name == "dashboards"
+    assert graph.get(docs).group_name == "dashboards"
     # Not downstream of the pipeline: `usgs` selects `.downstream()` and would
     # run the render with the writers' credentials.
     assert not graph.get(key).parent_keys
     usgs = next(j for j in defs.resolve_all_job_defs() if j.name == "usgs")
-    assert key not in usgs.asset_layer.executable_asset_keys
+    assert not {key, docs} & usgs.asset_layer.executable_asset_keys
     job = next(j for j in defs.resolve_all_job_defs() if j.name == "dashboards")
     assert job.tags["lagom/pipeline"] == "usgs"
-    assert job.asset_layer.executable_asset_keys == {key}
+    # One job, one Pod, one set of credentials: the documentation is the second
+    # step of the same run, after the reports, so a failure of it leaves them current.
+    assert job.asset_layer.executable_asset_keys == {key, docs}
+    assert graph.get(docs).parent_keys == {key}

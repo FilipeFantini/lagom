@@ -614,6 +614,23 @@ through [staging then prod](#deploy). Check:
    validation fails, logs and the alert omit the test and real passwords,
    and the previously published page is still served.
 
+The `dashboards` run also publishes dbt's documentation
+([ADR-0056](adr/0056-the-data-console.md)), after the reports. In
+the same run, check:
+
+5. The log says `published docs/index.html` and holds two `memory peak` lines,
+   one after the reports and one after the documentation. The second is the run's
+   peak so far; the documentation's own cost is read from the two, and compared
+   with the job limit as in step 3.
+6. `curl -fsSI https://lagom-staging.ofantini.com/docs/index.html` returns 200
+   with HTML and `cache-control: public, max-age=300`. Repeat for prod.
+7. `curl -fsS https://lagom-staging.ofantini.com/docs/index.html | grep -c
+   '"send_anonymous_usage_stats": false'` prints `1`: the page does not load a
+   tracker. The reports still answer 200 at the root (step 2).
+
+A run that fails after the reports leaves them current and the documentation
+as it was; the failure names the check that refused the page.
+
 If a command times out, check its duration and which render stage failed
 before changing the image. If telemetry stalls, ADR-0044 decision 9 describes
 the setting to disable it. To rotate a token, seal its replacement and

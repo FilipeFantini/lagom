@@ -21,9 +21,10 @@ The job runs in staging and prod since 2026-11-15, after each pipeline run. It i
 | `charts/earthquakes.yml` | The first board: the earthquakes of the last 30 UTC days, the partial plus the table of the largest and the notes on the numbers |
 | `charts/earthquakes_short.yml` | The same board without the table and the notes, for an article on ofantini.com to frame; its own layout over the same partial, checked like the full one |
 | `dbt_charts.yml` | The project: the source the boards read, `lake`, through the dbt `lake` target |
-| `profiles.yml` | The connection `dct` uses: the warehouse's `lake` target plus the secret's `scope` ([why](#known-limits)), attached read-only |
+| `profiles.yml` | The connection `dct` and the job's `dbt docs generate` use: the warehouse's `lake` target plus the secret's `scope` ([why](#known-limits)), attached read-only |
 | `check_boards.py` | The gate: compares a render with gold, and fails where `dct render` does not |
-| `tests/` | The gate's tests, and a real render of the CI fixture as their fixture |
+| `ci/page_requests.py` | CI's browser check: opens each published page with the network log on and fails on a request to another origin |
+| `tests/` | The gate's tests, the browser check's, and a real render of the CI fixture as their fixture |
 
 ## The flow
 
@@ -85,7 +86,21 @@ CI, against the cluster's lake:
    removal of `.html` objects that are no longer boards. A page is one file that
    loads nothing from outside, so nothing else is uploaded.
 
-`dct` runs with the lake's variables and nothing else: not the bucket's token,
+4. **dbt's documentation**, after the reports (the same Pod, the second asset
+   `dashboards/docs`): `dbt docs generate --static` with this directory's
+   `profiles.yml` (`lagom_dashboards`, read-only), checked, then uploaded as
+   `docs/index.html` with the same type and cache header. Usage statistics are
+   off (`DO_NOT_TRACK=1`: ADR-0044 decision 9 is about `dct`), and the page is
+   refused if they are on, the catalog is incomplete, or its markup loads from
+   another host. If it fails, the reports are already current
+   ([ADR-0056](../../docs/adr/0056-the-data-console.md)).
+
+Reports and documentation have one prefix each: the reports at the bucket's
+root, the documentation under `docs/`. Each upload lists and deletes only the
+`.html` keys directly under its own, and every object is checked, before it
+leaves, for the value of a credential or endpoint the Pod holds.
+
+`dct` and `dbt` run with the lake's variables and nothing else: not the bucket's token,
 not the ping URL. Telemetry is on there (below); every command has a timeout.
 What the step proves and what is still to verify in staging are in
 [`runbook.md`](../../docs/runbook.md#the-dashboards-publishing-path).
@@ -135,8 +150,13 @@ PY
 
 It is the job `dashboards (render)` of [`ci.yml`](../../.github/workflows/ci.yml),
 step for step; the CI job also lints, type-checks and tests `check_boards.py`
-(with `ruff`, `mypy` and `pytest` from the orchestration project) and checks
-that the page loads nothing from outside. The flush step writes gold out as
+(with `ruff`, `mypy` and `pytest` from the orchestration project), checks
+the metadata contract (`docs/data.md`) and builds dbt's documentation as the job
+does, and checks that the pages load nothing from outside: by a text search over
+the reports, and by opening every page, documentation included, in a real browser
+(`ci/page_requests.py`) whose network log must show no other origin than the
+one serving the page. The browser is Chrome on the runner; the script takes any
+Chromium-based browser as its first argument. The flush step writes gold out as
 Parquet files: DuckLake keeps a table of up to 10 rows in its catalog, and the
 fixture's daily aggregate has 10, so it would be read from the catalog and not
 from files, as it is not in the cluster. `TZ=Pacific/Auckland` runs the validation, the

@@ -8,6 +8,8 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
 | `lagom_orchestration/definitions.py` | The `Definitions`: each source's assets, the dbt project as assets, the jobs and their schedules |
 | `lagom_orchestration/alarm.py` | The two sensors that raise the alarm through Healthchecks.io ([ADR-0033](../../docs/adr/0033-dagster-alerts-through-healthchecks.md)) |
 | `lagom_orchestration/dashboards.py` | The `dashboards` job's step (render, check, watermark, upload to R2) and the sensor that starts it after each `usgs` run ([ADR-0044](../../docs/adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md)) |
+| `lagom_orchestration/dbt_docs.py` | The `dashboards` job's second step: dbt's documentation as one checked page, published as `docs/index.html` ([ADR-0056](../../docs/adr/0056-the-data-console.md)) |
+| `lagom_orchestration/metadata_contract.py` | CI's check that every gold model and every board declares what the documentation needs; it runs in CI, not in a job |
 | `lagom_orchestration/lake.py` | Attaching the environment's DuckLake (read-only on request), its daily maintenance, and the grants of the catalog's read-only role |
 | `Dockerfile` | Built from the repository root: it bundles `data/sources/*/ingestion`, `data/sources/*/assets`, `data/warehouse` and the dashboards' boards (`data/dashboards`), and installs dbt Charts |
 | `tests/` | The code location loads, and its graph, schedules and alarm sensors are the intended ones |
@@ -32,7 +34,12 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
   `dct validate --strict --warehouse`, `dct render`, `check_boards.py`, the
   watermark check, the upload, then the removal of pages no longer boards.
   Every command has a timeout, and `dct` runs with the lake's variables only.
-  A failed run is covered by `run_failure_alarm`.
+  Then the asset `dashboards/docs` (`deps` on `pages`, so the reports are
+  current if it fails) runs `dbt docs generate --static` against the lake
+  read-only, refuses a page with usage statistics on, an incomplete catalog or
+  markup that loads from outside, and publishes it as `docs/index.html`; the
+  reports keep the bucket's root, and each upload deletes only under its own
+  prefix. A failed run is covered by `run_failure_alarm`.
 
 The three jobs carry the tag `lagom/pipeline: usgs`, which the run queue limits to one
 run at a time (so the render waits for the pipeline, and the budget does not change), and a `dagster-k8s/config` tag with the memory of the run's Pod
