@@ -172,9 +172,12 @@ dashboards render peaked at 804 MiB in staging against real data
 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)).
 The [publishing procedure](runbook.md#the-dashboards-publishing-path)
 shows how to read the process group's peak from the run log. The run logs the
-peak after each step, so the documentation step's cost is the difference. Its
-peak is not yet measured in staging; it is measured before the step is
-promoted ([#152](https://github.com/FilipeFantini/lagom/issues/152)).
+container's peak after each step. The peak is a running maximum, so a step
+that stays below the earlier one leaves it unchanged. In staging's first run
+with dbt's documentation (2026-11-20, against real data), the peak was 736 MiB
+after the reports and still 736 MiB after the documentation: the
+documentation step, catalog generation included, stayed below the render
+([#152](https://github.com/FilipeFantini/lagom/issues/152)).
 
 ## Add a source
 

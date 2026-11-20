@@ -118,7 +118,7 @@ dagster-user-deployments:
         # Batch-only orchestration built from main at 412a694 and pinned in
         # staging by #147 (ADR-0015, ADR-0052, ADR-0053).
         # The code location needs HEARTBEAT_URL, set below.
-        tag: "412a69416bb8f82dd4cba5ffc707920474ac1f21@sha256:cf37d9acdca8112d448bc3f892ec3e31ffd034f2da2bbe18a0e13e26d3da2d4f"
+        tag: "3328ddd88194076d185b85acb41f54b4b138422b@sha256:87e05374925c9c5f194285e66a76ccdf830cbcd94fc4bee64813a11289ecac70"
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs: ["-m", "lagom_orchestration.definitions"]
       port: 3030
