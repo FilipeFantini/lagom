@@ -19,6 +19,11 @@
   pull request* (the Cloudflare Pages project and the token) and decision 5
   (telemetry off).
 
+**2026-11-20 amendment.** [ADR-0056](0056-the-data-console.md), decision 3:
+other producers will share the dashboards bucket, so the step that removes
+stale pages will delete only under its own prefix. Until that change is
+built, the step still deletes every `.html` key it did not write.
+
 ## Context and problem
 
 The code server's `env` in each environment's `values.yaml` held the catalog
