@@ -57,13 +57,15 @@ def test_check_file_reports_missing_file_and_anchor(tmp_path: Path) -> None:
         "[ok, self](#page)\n"
         "[ok, web](https://example.com/x.md#nowhere)\n"
         "[ok, dir](.)\n"
+        "[ok, case](data.md#Add-a-Source)\n"
+        "[ok, encoded](data.md#add%2Da-source)\n"
         "[gone](roadmap.md)\n"
         "[bad anchor](data.md#trigger-table)\n",
     )
     problems = check_file(tmp_path, page, {})
     assert problems == [
-        "docs/page.md:6: roadmap.md: no such file",
-        "docs/page.md:7: data.md#trigger-table: no such anchor",
+        "docs/page.md:8: roadmap.md: no such file",
+        "docs/page.md:9: data.md#trigger-table: no such anchor",
     ]
 
 

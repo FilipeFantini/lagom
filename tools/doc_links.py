@@ -22,6 +22,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import unquote
 
 ADR_BODY = re.compile(r"^docs/adr/\d{4}-[^/]+\.md$")
 FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
@@ -71,7 +72,7 @@ def anchors(text: str) -> set[str]:
     found: set[str] = set()
     seen: dict[str, int] = {}
     for _, line in prose_lines(text):
-        found.update(HTML_ID.findall(line))
+        found.update(anchor.lower() for anchor in HTML_ID.findall(line))
         match = HEADING.match(line)
         if match:
             base = slug(match.group(1))
@@ -107,7 +108,8 @@ def check_file(root: Path, path: Path, cache: dict[Path, set[str]]) -> list[str]
         if fragment and resolved.suffix == ".md" and resolved.is_file():
             if resolved not in cache:
                 cache[resolved] = anchors(resolved.read_text(encoding="utf-8"))
-            if fragment not in cache[resolved]:
+            # GitHub matches a fragment case-insensitively, after percent-decoding.
+            if unquote(fragment).lower() not in cache[resolved]:
                 problems.append(f"{rel}:{number}: {target}: no such anchor")
     return problems
 
