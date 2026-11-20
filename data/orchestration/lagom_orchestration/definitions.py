@@ -3,8 +3,8 @@
 Every source's assets plus the dbt project, whose models become assets
 downstream of the sources they read. One job loads and builds, every 30
 minutes; another keeps DuckLake compact, daily; a third renders the
-dashboards and publishes them, after each successful pipeline run
-(lagom_orchestration/dashboards.py). Two sensors raise the alarm through
+dashboards and publishes them, with dbt's documentation, after each successful
+pipeline run (lagom_orchestration/dashboards.py). Two sensors raise the alarm through
 Healthchecks.io (lagom_orchestration/alarm.py).
 
 Paths are relative to the repository layout, which the image keeps under /app.
@@ -31,7 +31,12 @@ from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from data.sources.usgs.assets import usgs_events
 
 from lagom_orchestration.alarm import build_alarm_sensors
-from lagom_orchestration.dashboards import build_render_trigger, memory_peak_mib, run_dashboards
+from lagom_orchestration.dashboards import (
+    build_render_trigger,
+    memory_peak_mib,
+    run_docs,
+    run_reports,
+)
 from lagom_orchestration.lake import attach_lake, grant_reader_access, run_maintenance
 
 REPO = Path(__file__).resolve().parents[3]
@@ -144,6 +149,15 @@ DASHBOARDS_TAGS = {
 }
 
 
+def _log_memory_peak(context: AssetExecutionContext) -> None:
+    """The container's peak so far: after each step, so each one's cost is visible."""
+    peak = memory_peak_mib()
+    context.log.info(
+        "memory peak of the run's container: "
+        + (f"{peak:.0f} MiB" if peak is not None else "not reported by the kernel")
+    )
+
+
 # No `deps` on gold: an asset downstream of `usgs/events` would be selected by
 # the `usgs` job (`.downstream()` above) and run with the writers' credentials.
 # The key is `dashboards/pages` because an asset and a job cannot share a name
@@ -151,13 +165,18 @@ DASHBOARDS_TAGS = {
 @asset(key_prefix="dashboards", group_name="dashboards")
 def pages(context: AssetExecutionContext) -> None:
     """The boards, rendered against the lake, checked, and published to the bucket."""
-    published = run_dashboards(REPO)
+    published = run_reports(REPO)
     context.log.info(f"published {len(published)} page(s): {', '.join(published)}")
-    peak = memory_peak_mib()
-    context.log.info(
-        "memory peak of the run's container: "
-        + (f"{peak:.0f} MiB" if peak is not None else "not reported by the kernel")
-    )
+    _log_memory_peak(context)
+
+
+# After `pages`, so a failure here leaves the reports current: they upload first.
+# The same tags and credentials as the reports (ADR-0056).
+@asset(key_prefix="dashboards", group_name="dashboards", deps=[pages])
+def docs(context: AssetExecutionContext) -> None:
+    """dbt's documentation, generated against the lake, checked, and published as one page."""
+    context.log.info(f"published {run_docs(REPO)}")
+    _log_memory_peak(context)
 
 
 dashboards_job = define_asset_job(
@@ -191,7 +210,7 @@ def lake_maintenance() -> None:
 
 
 defs = Definitions(
-    assets=[usgs_events, warehouse, pages],
+    assets=[usgs_events, warehouse, pages, docs],
     # Every step in the run's own process. The default executor starts each
     # step in a new Python process beside the run's, which holds Dagster, dlt
     # and dbt's imports a second time. The steps run one after the other

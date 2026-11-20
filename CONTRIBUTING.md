@@ -56,7 +56,9 @@ address and the attribution trailer in [AGENTS.md](AGENTS.md#6-execution-flow).
 [CI](.github/workflows/ci.yml) runs on pull requests and `main`. It checks
 formatting, types and tests for tools, sources and orchestration. It lints
 and parses dbt and builds a fixture lake with its tests. The dashboard job
-renders and reconciles the boards against fixture gold. It is a fixture
+renders and reconciles the boards against fixture gold, checks the metadata
+contract, builds dbt's documentation, and opens every page in a browser to
+check that it requests nothing from outside. It is a fixture
 check and does not publish. The [tool checks](tools/README.md) cover the
 resource budget, manifest policy, image promotion and the relative links
 and anchors of the maintained Markdown. The whole history

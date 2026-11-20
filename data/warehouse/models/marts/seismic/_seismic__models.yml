@@ -2,7 +2,8 @@ version: 2
 
 # Column names and types here are a published interface (protocol 16.3):
 # `contract.enforced` makes dbt compare them with the SQL and fail the build on
-# any difference, before the table is written.
+# any difference, before the table is written. Every gold model also declares
+# its owner (`meta.owner`); CI checks it (README, Metadata contract).
 models:
   - name: fct_earthquakes
     description: >
@@ -10,6 +11,7 @@ models:
       revision, with magnitude and depth classes. Feeds the globe.
     config:
       contract: {enforced: true}
+      meta: {owner: FilipeFantini}
     columns:
       - name: event_id
         data_type: text
@@ -107,6 +109,7 @@ models:
       Gold. Earthquakes per UTC day and region, from fct_earthquakes.
     config:
       contract: {enforced: true}
+      meta: {owner: FilipeFantini}
     columns:
       - name: event_date
         data_type: date

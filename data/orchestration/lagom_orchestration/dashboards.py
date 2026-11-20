@@ -1,6 +1,6 @@
-"""The dashboards' render and its publication (ADR-0040, ADR-0044).
+"""The dashboards' render and its publication (ADR-0040, ADR-0044, ADR-0056).
 
-One run does, in order, and stops at the first thing that is wrong:
+The step `run_reports` does, in order, and stops at the first thing that is wrong:
 
 1. `dct validate --strict --warehouse`: the boards are valid and every query
    describes against the real lake;
@@ -11,10 +11,17 @@ One run does, in order, and stops at the first thing that is wrong:
 5. the upload to the environment's dashboards bucket, then the removal of the
    pages that are no longer boards.
 
+The step `run_docs` then publishes dbt's documentation (lagom_orchestration/
+dbt_docs.py) as one page, `docs/index.html`, in the same bucket. Reports and
+documentation share the bucket and never each other's objects: each upload
+has a prefix, and the removal of stale pages lists and deletes only directly
+under its own (ADR-0056, decision 3). Before any upload, every object is
+checked for the value of a credential the Pod holds.
+
 The Pod holds read-only credentials for the lake and a write token for the
-dashboards bucket only (READER_ENV in definitions.py). `dct` is a tool we do
-not control, so it runs with the lake's variables and nothing else: the
-bucket's token never reaches it, and neither does the ping URL.
+dashboards bucket only (READER_ENV in definitions.py). `dct` and `dbt` are
+tools we do not control, so they run with the lake's variables and nothing
+else: the bucket's token never reaches them, and neither does the ping URL.
 
 Nothing here prints the environment or a connection string. A failure's text
 goes through `redact_secrets`, because DuckDB repeats the catalog URI when an
@@ -47,12 +54,12 @@ from dagster._core.definitions.unresolved_asset_job_definition import Unresolved
 
 from lagom_orchestration.redact import redact_secrets
 
-# What `dct` and `check_boards.py` get from the Pod's environment. The lake's
+# What `dct`, `dbt` and `check_boards.py` get from the Pod's environment. The lake's
 # own variables (the same the dbt `lake` target reads), the catalog password
 # libpq reads, and what a process needs to run. Not DO_NOT_TRACK: dbt Charts'
 # telemetry stays on in the cluster (ADR-0044, decision 9), which is why every
-# command below has a timeout. Not the dashboards bucket's token, not the ping
-# URL.
+# command below has a timeout; `dbt` gets DO_NOT_TRACK from dbt_docs.py. Not
+# the dashboards bucket's token, not the ping URL.
 SUBPROCESS_ENV = (
     "PATH",
     "HOME",
@@ -104,6 +111,27 @@ WATERMARK_MAX_AHEAD = timedelta(minutes=2)
 # so there are no assets to cache for longer or to upload before the HTML.
 PAGE_CONTENT_TYPE = "text/html; charset=utf-8"
 PAGE_CACHE_CONTROL = "public, max-age=300"
+
+# Where each kind of page lives in the bucket (ADR-0056, decision 3). The
+# reports stay at the root, so their addresses do not change; the root listing
+# is delimited, so `docs/index.html` is never in it.
+REPORTS_PREFIX = ""
+DOCS_PREFIX = "docs/"
+DOCS_KEY = f"{DOCS_PREFIX}index.html"
+
+# Values the Pod holds that no published object may contain. Their hosts are
+# checked too where the value is an endpoint (_ENDPOINTS).
+_SECRET_VARIABLES = (
+    "PGPASSWORD",
+    "LAGOM_R2_ACCESS_KEY_ID",
+    "LAGOM_R2_SECRET_ACCESS_KEY",
+    "LAGOM_R2_ENDPOINT",
+    "LAGOM_DASHBOARDS_ACCESS_KEY_ID",
+    "LAGOM_DASHBOARDS_SECRET_ACCESS_KEY",
+    "LAGOM_DASHBOARDS_ENDPOINT",
+    "HEARTBEAT_URL",
+)
+_ENDPOINTS = ("LAGOM_R2_ENDPOINT", "LAGOM_DASHBOARDS_ENDPOINT")
 
 
 # The container's peak memory, from its cgroup (v2): the run's process and
@@ -276,29 +304,75 @@ def s3_client(endpoint: str, key_id: str, secret: str):  # type: ignore[no-untyp
     )
 
 
-def publish(client, bucket: str, pages: Mapping[str, bytes]) -> list[str]:  # type: ignore[no-untyped-def]
-    """Upload every page, then delete the `.html` objects that are not in `pages`.
+def check_no_secrets(objects: Mapping[str, bytes], environ: Mapping[str, str]) -> None:
+    """Fail if an object holds the value of a credential or an endpoint of the Pod.
 
-    The deletion comes after the last upload, so a failure part-way leaves the
-    old set (and some new pages) and never a bucket with fewer pages than
-    before. Only `.html` keys are deleted: anything else in the bucket is not
-    this step's to remove. An S3 error is re-raised as a plain error with the
-    redacted text, from nothing.
+    A page is made from the lake's metadata and the repository, not from the
+    environment; this is the check that says so, for the pages of tools we do
+    not control. The error names the variable and the object, never the value.
+    An endpoint is also looked for without its scheme, as a host.
     """
+    for name in _SECRET_VARIABLES:
+        value = environ.get(name)
+        if not value:
+            continue
+        needles = {value}
+        if name in _ENDPOINTS:
+            needles.add(value.split("://", 1)[-1].rstrip("/"))
+        encoded = [needle.encode() for needle in needles if needle]
+        for key in sorted(objects):
+            if any(needle in objects[key] for needle in encoded):
+                raise RuntimeError(f"{key} contains the value of {name}; nothing was published")
+
+
+def _directly_under(prefix: str, key: str) -> bool:
+    """`key` is `prefix` plus a name, with no `/` in it: one level, in one prefix."""
+    name = key[len(prefix) :]
+    return key.startswith(prefix) and bool(name) and "/" not in name
+
+
+def _check_keys(prefix: str, objects: Mapping[str, bytes]) -> None:
+    for key in objects:
+        if not _directly_under(prefix, key):
+            raise RuntimeError(
+                f"{key!r} is not directly under the prefix {prefix!r}; nothing was uploaded"
+            )
+
+
+def publish(client, bucket: str, prefix: str, objects: Mapping[str, bytes]) -> list[str]:  # type: ignore[no-untyped-def]
+    """Upload every object, then delete the `.html` keys under `prefix` that are not in `objects`.
+
+    `objects` maps full keys to bodies; each key is `prefix` and a name. The
+    listing is delimited by `/`, so it sees only the keys directly under the
+    prefix: the reports (prefix "") never list, and so never delete, what is
+    under `docs/`, and the other way round. The deletion comes after the last
+    upload, so a failure part-way leaves the old set (and some new pages) and
+    never a bucket with fewer pages than before. Only `.html` keys are
+    deleted: anything else in the bucket is not this step's to remove. An S3
+    error is re-raised as a plain error with the redacted text, from nothing.
+    """
+    _check_keys(prefix, objects)
     try:
-        for key in sorted(pages):
+        for key in sorted(objects):
             client.put_object(
                 Bucket=bucket,
                 Key=key,
-                Body=pages[key],
+                Body=objects[key],
                 ContentType=PAGE_CONTENT_TYPE,
                 CacheControl=PAGE_CACHE_CONTROL,
             )
         stale: list[str] = []
-        for listing in client.get_paginator("list_objects_v2").paginate(Bucket=bucket):
+        listings = client.get_paginator("list_objects_v2").paginate(
+            Bucket=bucket, Prefix=prefix, Delimiter="/"
+        )
+        for listing in listings:
             for item in listing.get("Contents", []):
-                if item["Key"].endswith(".html") and item["Key"] not in pages:
-                    stale.append(item["Key"])
+                key = item["Key"]
+                # The delimiter already keeps the listing to the prefix's own
+                # level; this is the same rule, said again at the one place
+                # that deletes.
+                if _directly_under(prefix, key) and key.endswith(".html") and key not in objects:
+                    stale.append(key)
         for start in range(0, len(stale), 1000):
             client.delete_objects(
                 Bucket=bucket,
@@ -308,7 +382,7 @@ def publish(client, bucket: str, pages: Mapping[str, bytes]) -> list[str]:  # ty
         raise RuntimeError(
             f"upload to the dashboards bucket failed: {redact_secrets(str(error))}"
         ) from None
-    return sorted(pages)
+    return sorted(objects)
 
 
 def _require(environ: Mapping[str, str], name: str) -> str:
@@ -318,12 +392,7 @@ def _require(environ: Mapping[str, str], name: str) -> str:
     return value
 
 
-def run_dashboards(
-    repo: Path,
-    environ: Mapping[str, str] = os.environ,
-    now: Callable[[], datetime] = lambda: datetime.now(UTC),
-) -> list[str]:
-    """The whole step: render, check, publish. Returns the names of the pages published."""
+def _bucket_and_client(environ: Mapping[str, str]):  # type: ignore[no-untyped-def]
     # Read first: a missing Secret key should fail before a render is spent.
     bucket = _require(environ, "LAGOM_DASHBOARDS_BUCKET")
     client = s3_client(
@@ -331,9 +400,36 @@ def run_dashboards(
         _require(environ, "LAGOM_DASHBOARDS_ACCESS_KEY_ID"),
         _require(environ, "LAGOM_DASHBOARDS_SECRET_ACCESS_KEY"),
     )
+    return bucket, client
+
+
+def run_reports(
+    repo: Path,
+    environ: Mapping[str, str] = os.environ,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> list[str]:
+    """The reports: render, check, publish at the bucket's root. Returns the pages published."""
+    bucket, client = _bucket_and_client(environ)
     with tempfile.TemporaryDirectory(prefix="dashboards-") as directory:
         pages = render_pages(repo, Path(directory), environ, now)
-    return publish(client, bucket, pages)
+    check_no_secrets(pages, environ)
+    return publish(
+        client, bucket, REPORTS_PREFIX, {f"{REPORTS_PREFIX}{k}": v for k, v in pages.items()}
+    )
+
+
+def run_docs(repo: Path, environ: Mapping[str, str] = os.environ) -> str:
+    """dbt's documentation: generate, check, publish as `docs/index.html`. Returns its key."""
+    # Imported here: dbt_docs uses this module's command runner and environment.
+    from lagom_orchestration import dbt_docs
+
+    bucket, client = _bucket_and_client(environ)
+    with tempfile.TemporaryDirectory(prefix="dbt-docs-") as directory:
+        page = dbt_docs.generate_docs(repo, Path(directory), environ)
+    objects = {DOCS_KEY: page}
+    check_no_secrets(objects, environ)
+    (key,) = publish(client, bucket, DOCS_PREFIX, objects)
+    return key
 
 
 def build_render_trigger(

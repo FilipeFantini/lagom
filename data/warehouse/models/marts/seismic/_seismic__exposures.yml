@@ -1,0 +1,29 @@
+version: 2
+
+# One exposure per published report (a board in data/dashboards/charts). dbt's
+# documentation then shows each report beside the model it reads, and CI checks
+# that every board has one that depends on exactly the models the board refs
+# (README, Metadata contract). The url is root-relative: staging and prod both
+# serve the reports at the root of their own host.
+exposures:
+  - name: earthquakes
+    label: Earthquakes of the last 30 days
+    type: dashboard
+    maturity: medium
+    description: The earthquakes of the last 30 UTC days, as figures, charts, a map and a table.
+    url: /earthquakes.html
+    owner:
+      name: FilipeFantini
+    depends_on:
+      - ref('fct_earthquakes')
+
+  - name: earthquakes_short
+    label: Earthquakes of the last 30 days, short
+    type: dashboard
+    maturity: medium
+    description: The same board without the table and the notes, for an article to frame.
+    url: /earthquakes_short.html
+    owner:
+      name: FilipeFantini
+    depends_on:
+      - ref('fct_earthquakes')

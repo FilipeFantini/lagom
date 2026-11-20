@@ -12,6 +12,7 @@ import json
 import os
 import stat
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -29,18 +30,23 @@ from dagster import (
     op,
 )
 
-from lagom_orchestration import dashboards
+from lagom_orchestration import dashboards, dbt_docs
 from lagom_orchestration.dashboards import (
+    DOCS_KEY,
+    DOCS_PREFIX,
     PAGE_CACHE_CONTROL,
     PAGE_CONTENT_TYPE,
+    REPORTS_PREFIX,
     WATERMARK,
     build_render_trigger,
+    check_no_secrets,
     check_watermark,
     memory_peak_mib,
     publish,
     render_pages,
     run_command,
-    run_dashboards,
+    run_docs,
+    run_reports,
     s3_client,
     subprocess_env,
 )
@@ -362,6 +368,19 @@ def _put(stubber: Stubber, key: str, body: bytes) -> None:
     )
 
 
+def _list(stubber: Stubber, prefix: str, keys: list[str], folders: Sequence[str] = ()) -> None:
+    """The listing the upload expects: the prefix's own level only, as S3 does with a delimiter."""
+    stubber.add_response(
+        "list_objects_v2",
+        {
+            "Contents": [{"Key": key} for key in keys],
+            "CommonPrefixes": [{"Prefix": folder} for folder in folders],
+            "IsTruncated": False,
+        },
+        {"Bucket": "b", "Prefix": prefix, "Delimiter": "/"},
+    )
+
+
 def test_every_page_is_uploaded_with_its_type_and_a_short_cache_then_stale_pages_go() -> None:
     client = _client()
     with Stubber(client) as stubber:
@@ -369,40 +388,89 @@ def test_every_page_is_uploaded_with_its_type_and_a_short_cache_then_stale_pages
         # an upload after the listing, or a missing header, fails the test.
         _put(stubber, "earthquakes.html", b"<new>")
         _put(stubber, "tides.html", b"<new2>")
-        stubber.add_response(
-            "list_objects_v2",
-            {
-                "Contents": [
-                    {"Key": "earthquakes.html"},
-                    {"Key": "old-board.html"},
-                    {"Key": "robots.txt"},
-                ],
-                "IsTruncated": False,
-            },
-            {"Bucket": "b"},
+        # The reports' listing is the root's own level: `docs/` shows only as
+        # a folder, and `docs/index.html` is not in it.
+        _list(
+            stubber,
+            REPORTS_PREFIX,
+            ["earthquakes.html", "old-board.html", "robots.txt"],
+            folders=[DOCS_PREFIX],
         )
         stubber.add_response(
             "delete_objects",
             {},
             {"Bucket": "b", "Delete": {"Objects": [{"Key": "old-board.html"}]}},
         )
-        published = publish(client, "b", {"tides.html": b"<new2>", "earthquakes.html": b"<new>"})
+        published = publish(
+            client,
+            "b",
+            REPORTS_PREFIX,
+            {"tides.html": b"<new2>", "earthquakes.html": b"<new>"},
+        )
         stubber.assert_no_pending_responses()
     assert published == ["earthquakes.html", "tides.html"]
     assert PAGE_CONTENT_TYPE == "text/html; charset=utf-8"
     assert PAGE_CACHE_CONTROL == "public, max-age=300"
 
 
+def test_the_reports_never_delete_the_documentation_even_if_a_listing_returned_it() -> None:
+    client = _client()
+    with Stubber(client) as stubber:
+        _put(stubber, "earthquakes.html", b"<new>")
+        # A listing that wrongly holds the docs page and a nested page: the
+        # deletion itself refuses what is not directly under the prefix.
+        _list(stubber, REPORTS_PREFIX, ["earthquakes.html", DOCS_KEY, "docs/old.html"])
+        publish(client, "b", REPORTS_PREFIX, {"earthquakes.html": b"<new>"})
+        stubber.assert_no_pending_responses()
+
+
+def test_the_documentation_deletes_only_stale_html_under_its_prefix() -> None:
+    client = _client()
+    with Stubber(client) as stubber:
+        _put(stubber, DOCS_KEY, b"<docs>")
+        _list(
+            stubber,
+            DOCS_PREFIX,
+            [DOCS_KEY, "docs/old.html", "docs/notes.txt"],
+            folders=["docs/sub/"],
+        )
+        stubber.add_response(
+            "delete_objects",
+            {},
+            {"Bucket": "b", "Delete": {"Objects": [{"Key": "docs/old.html"}]}},
+        )
+        assert publish(client, "b", DOCS_PREFIX, {DOCS_KEY: b"<docs>"}) == [DOCS_KEY]
+        stubber.assert_no_pending_responses()
+
+
 def test_nothing_is_deleted_when_there_is_nothing_stale() -> None:
     client = _client()
     with Stubber(client) as stubber:
         _put(stubber, "earthquakes.html", b"<new>")
-        stubber.add_response(
-            "list_objects_v2",
-            {"Contents": [{"Key": "earthquakes.html"}], "IsTruncated": False},
-            {"Bucket": "b"},
-        )
-        publish(client, "b", {"earthquakes.html": b"<new>"})
+        _list(stubber, REPORTS_PREFIX, ["earthquakes.html"])
+        publish(client, "b", REPORTS_PREFIX, {"earthquakes.html": b"<new>"})
+        stubber.assert_no_pending_responses()
+
+
+@pytest.mark.parametrize(
+    ("prefix", "key"),
+    [
+        (REPORTS_PREFIX, DOCS_KEY),
+        (REPORTS_PREFIX, "/x.html"),
+        (DOCS_PREFIX, "earthquakes.html"),
+        (DOCS_PREFIX, "docs/sub/index.html"),
+        (DOCS_PREFIX, "docs/"),
+        (DOCS_PREFIX, "other/index.html"),
+    ],
+)
+def test_a_key_outside_the_prefix_or_deeper_than_one_level_is_refused_before_any_upload(
+    prefix: str, key: str
+) -> None:
+    client = _client()
+    with Stubber(client) as stubber:
+        with pytest.raises(RuntimeError, match="not directly under the prefix"):
+            # A valid page first: nothing of the set is uploaded when one key is wrong.
+            publish(client, "b", prefix, {f"{prefix}ok.html": b"<a>", key: b"<b>"})
         stubber.assert_no_pending_responses()
 
 
@@ -413,7 +481,7 @@ def test_a_failed_upload_deletes_nothing_and_says_why_without_secrets() -> None:
             "put_object", service_error_code="AccessDenied", service_message="denied"
         )
         with pytest.raises(RuntimeError, match="upload to the dashboards bucket failed") as raised:
-            publish(client, "b", {"earthquakes.html": b"<new>"})
+            publish(client, "b", REPORTS_PREFIX, {"earthquakes.html": b"<new>"})
         # No list and no delete were attempted: the old set stands.
         stubber.assert_no_pending_responses()
     assert "AccessDenied" in str(raised.value)
@@ -445,22 +513,102 @@ def test_the_client_talks_to_the_endpoint_with_or_without_its_scheme() -> None:
         "LAGOM_DASHBOARDS_SECRET_ACCESS_KEY",
     ],
 )
-def test_a_missing_bucket_variable_fails_before_any_render(
-    repo: Path, missing: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_missing_bucket_variable_fails_before_any_render(repo: Path, missing: str) -> None:
     env = {k: v for k, v in _env(repo).items() if k != missing}
     with pytest.raises(RuntimeError, match=f"{missing} is not set"):
-        run_dashboards(repo, env)
+        run_reports(repo, env)
+    with pytest.raises(RuntimeError, match=f"{missing} is not set"):
+        run_docs(repo, env)
     assert _calls(repo) == []
 
 
-def test_the_step_publishes_what_it_rendered(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    uploaded: list[tuple[str, Any]] = []
+def test_the_reports_are_published_at_the_root(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    uploaded: list[tuple[Any, ...]] = []
     monkeypatch.setattr(dashboards, "publish", lambda *args: uploaded.append(args) or ["x"])
-    assert run_dashboards(repo, _env(repo), lambda: NOW) == ["x"]
-    ((_, bucket, pages),) = uploaded
+    assert run_reports(repo, _env(repo), lambda: NOW) == ["x"]
+    ((_, bucket, prefix, pages),) = uploaded
     assert bucket == "bucket"
+    assert prefix == ""
     assert pages == {"earthquakes.html": PAGE.encode()}
+
+
+def test_the_documentation_is_generated_then_published_under_its_prefix(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    generated: list[tuple[Path, Path, Any]] = []
+
+    def fake_generate(repo_: Path, work: Path, environ: Any) -> bytes:
+        generated.append((repo_, work, environ))
+        return b"<docs>"
+
+    uploaded: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(dbt_docs, "generate_docs", fake_generate)
+    monkeypatch.setattr(dashboards, "publish", lambda *args: uploaded.append(args) or [DOCS_KEY])
+    assert run_docs(repo, _env(repo)) == "docs/index.html"
+    ((_, bucket, prefix, objects),) = uploaded
+    assert (bucket, prefix, objects) == ("bucket", "docs/", {"docs/index.html": b"<docs>"})
+    assert generated[0][0] == repo
+
+
+def test_a_page_with_a_credential_is_not_uploaded(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    uploaded: list[Any] = []
+    monkeypatch.setattr(dashboards, "publish", lambda *args: uploaded.append(args) or [])
+    (tmp_path / "page.html").write_text(
+        f"{PAGE}<!-- {POD['LAGOM_DASHBOARDS_SECRET_ACCESS_KEY']} -->"
+    )
+    with pytest.raises(RuntimeError, match="LAGOM_DASHBOARDS_SECRET_ACCESS_KEY"):
+        run_reports(repo, _env(repo), lambda: NOW)
+    monkeypatch.setattr(
+        dbt_docs, "generate_docs", lambda *_: f"<p>{POD['PGPASSWORD']}</p>".encode()
+    )
+    with pytest.raises(RuntimeError, match="PGPASSWORD"):
+        run_docs(repo, _env(repo))
+    assert uploaded == []
+
+
+# The leak guard --------------------------------------------------------------
+
+SECRET_VARIABLES = [
+    "PGPASSWORD",
+    "LAGOM_R2_ACCESS_KEY_ID",
+    "LAGOM_R2_SECRET_ACCESS_KEY",
+    "LAGOM_R2_ENDPOINT",
+    "LAGOM_DASHBOARDS_ACCESS_KEY_ID",
+    "LAGOM_DASHBOARDS_SECRET_ACCESS_KEY",
+    "LAGOM_DASHBOARDS_ENDPOINT",
+    "HEARTBEAT_URL",
+]
+
+
+def test_a_clean_page_passes_the_leak_guard() -> None:
+    check_no_secrets({"docs/index.html": b"<html>nothing here</html>"}, POD)
+
+
+@pytest.mark.parametrize("name", SECRET_VARIABLES)
+def test_the_leak_guard_names_the_variable_and_the_object_and_never_the_value(name: str) -> None:
+    value = POD[name]
+    with pytest.raises(RuntimeError) as raised:
+        check_no_secrets({"docs/index.html": f"<p>x {value} y</p>".encode()}, POD)
+    text = str(raised.value)
+    assert name in text and "docs/index.html" in text
+    assert value not in text
+
+
+@pytest.mark.parametrize("name", ["LAGOM_R2_ENDPOINT", "LAGOM_DASHBOARDS_ENDPOINT"])
+def test_the_leak_guard_finds_an_endpoints_host_without_its_scheme(name: str) -> None:
+    host = POD[name].removeprefix("https://")
+    with pytest.raises(RuntimeError, match=name) as raised:
+        check_no_secrets({"a.html": f"<a>{host}/path</a>".encode()}, POD)
+    assert host not in str(raised.value)
+
+
+def test_the_leak_guard_ignores_a_variable_that_is_unset_or_empty() -> None:
+    # An empty value would match every page.
+    environ = {**POD, "PGPASSWORD": "", "HEARTBEAT_URL": ""}
+    del environ["LAGOM_R2_ENDPOINT"]
+    check_no_secrets({"a.html": b"<html>any text</html>"}, environ)
 
 
 # The trigger ----------------------------------------------------------------

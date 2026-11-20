@@ -1,7 +1,10 @@
 # ADR-0056 — The data console: one static entry point built by the pipeline
 
 - **Status:** Accepted, by the operator in conversation on 2026-11-20,
-  from the plan this record writes down. Nothing it decides is built yet.
+  from the plan this record writes down. Decisions 1 to 3 and 5 (dbt's
+  documentation, the metadata contract and the prefixes) are built by
+  [#152](https://github.com/FilipeFantini/lagom/issues/152); the index and
+  the health summary are not built yet.
 - **Date:** 2026-11-20
 - **Decided by:** the operator, in conversation on 2026-11-19 and 2026-11-20:
   one place to see and reach the whole data stack, built before any machine

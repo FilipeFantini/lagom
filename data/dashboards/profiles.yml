@@ -13,11 +13,15 @@
 # warehouse's profile, and must be kept the same; the variables are in
 # data/orchestration/README.md.
 #
-# The attach is read-only. Both the render and `check_boards.py` read the lake
-# and write nothing, and the cluster's role for them could not write anyway.
+# The attach is read-only. The render, `check_boards.py` and `dbt docs generate`
+# read the lake and write nothing, and the cluster's role for them could not
+# write anyway.
 #
-# Read by dct only (dbt_charts.yml names it). dbt never reads this file: it
-# parses and builds with the warehouse's own.
+# Read by dct (dbt_charts.yml names it) and by the `dashboards` job's
+# `dbt docs generate` (`--profile lagom_dashboards`, lagom_orchestration/
+# dbt_docs.py): documentation only reads the lake's columns, which is exactly
+# what a read-only attach allows. `dbt parse` and `dbt build` use the
+# warehouse's own profile.
 lagom_dashboards:
   target: lake
   outputs:

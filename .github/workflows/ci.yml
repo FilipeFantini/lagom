@@ -226,8 +226,17 @@ jobs:
     # second outside it, and the render and the check run in a time zone far
     # from UTC, so a window that is wrong, or a check that follows the
     # machine's zone, fails.
-    # What it does not prove: anything about real data, how the page looks in a
-    # browser, or publishing: nothing is uploaded and no secret is used.
+    # It also holds the metadata contract (every gold model has a description,
+    # an enforced contract and an owner; every board has an exposure that
+    # depends on exactly the models it reads), builds dbt's documentation page
+    # as the `dashboards` job does (lagom_orchestration/dbt_docs.py, which
+    # refuses a page with usage statistics on or an incomplete catalog, and
+    # checks its markup as a best-effort guard), and opens every page in a real
+    # browser with its network log on: a request the page causes to another
+    # origin fails, and a control page that does ask must fail, or the check
+    # would prove nothing. The browser check is the full one.
+    # What it does not prove: anything about real data, how the page looks, or
+    # publishing: nothing is uploaded and no secret is used.
     name: dashboards (render)
     runs-on: ubuntu-latest
     env:
@@ -286,6 +295,13 @@ jobs:
           # this is the command the cluster step will run.
           $u dbt parse --target lake \
             --project-dir data/warehouse --profiles-dir data/warehouse
+          # The metadata contract, on the manifest just written (the one the
+          # image's build writes too), and then dbt's documentation through the
+          # job's own code, in a directory beside the reports: the checks on
+          # the reports' files below do not reach `docs/`.
+          $u python -m lagom_orchestration.metadata_contract \
+            data/warehouse/target/manifest.json data/dashboards/charts
+          $u python -m lagom_orchestration.dbt_docs . "$out/docs/index.html"
           # Everything from here runs in a time zone 13 hours from UTC. The
           # fixture has earthquakes between 11:00 and 24:00 UTC, so a day bucket
           # or a displayed time in check_boards.py that follows the machine's
@@ -325,3 +341,30 @@ jobs:
               exit 1
             fi
           done
+      # The text search above cannot see what a script adds when the page runs,
+      # and gives false positives on URLs inside a script's text, so every page
+      # is also opened in a real browser with its network log on
+      # (data/dashboards/ci/page_requests.py): a request to any origin but the
+      # one serving the page fails. A browser makes requests of its own
+      # (Chrome's component updates, sign-in and autofill services) that differ
+      # by browser and version, so they are told apart by the log, not by a
+      # list of hosts: only URL_REQUEST_START_JOB events count, and each says
+      # who initiated it: the page's origin for what the page caused, "not an
+      # origin" for the browser's own. Nothing is allowlisted. The control is a
+      # page that does load a script from another host; if the check passes
+      # it, the check is blind and the step fails.
+      - name: the published pages request nothing from outside, in a browser
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/dashboards"
+          python3 data/dashboards/ci/page_requests.py google-chrome \
+            "$out"/*.html "$out/docs/index.html"
+          control="$(mktemp -d)"
+          printf '%s\n' '<!doctype html><title>control</title>' \
+            '<script src="https://example.invalid/x.js"></script>' > "$control/control.html"
+          if result="$(python3 data/dashboards/ci/page_requests.py google-chrome "$control/control.html")"; then
+            echo "::error::the browser check passed a page that loads from another host"
+            exit 1
+          fi
+          echo "$result"
+          grep -q "https://example.invalid/x.js" <<<"$result"

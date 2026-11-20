@@ -81,7 +81,7 @@ warehouse project into one image.
 |---|---|---|
 | `usgs` | Every 30 minutes | Ingest USGS revisions, then build and test silver and gold |
 | `lake_maintenance` | Daily at 04:15 | Compact small files, expire snapshots older than seven days, delete unreferenced files and refresh the catalog reader's grants |
-| `dashboards` | After a successful `usgs` run | Render, reconcile and publish reports |
+| `dashboards` | After a successful `usgs` run | Render, reconcile and publish reports, then dbt's documentation |
 
 The [pipeline heartbeat](runbook.md#pipeline-heartbeat) verifies that runs keep
 succeeding. A failure sends its run identifier and redacted error to the same
@@ -99,6 +99,32 @@ the self-contained HTML to the environment's bucket. A failed validation
 stops publication, and the build timestamp lets readers see the age of the
 previous page.
 
+dbt's documentation is the job's second step: `dbt docs generate --static`
+writes one page, with the manifest and the catalog (each table's columns, read
+from the lake read-only) embedded, and it is published as `docs/index.html` in
+the same bucket ([ADR-0056](adr/0056-the-data-console.md)). The reports stay at
+the bucket's root, so their addresses do not change. Each kind of page owns a
+prefix, and a publication lists and deletes only the `.html` keys directly
+under its own: the reports' listing is delimited at the root, so it never sees
+`docs/`, and the documentation never touches a report. Reports upload first, so
+a documentation failure leaves them current. Before it uploads anything, the
+job refuses a page that holds the value of a credential or endpoint the Pod
+has. It refuses the documentation page, with the reason, when:
+
+- usage statistics are on in the manifest or the page (`true` makes the page load
+  a tracker from other hosts);
+- the catalog has errors, or a model of the manifest has no columns in it;
+- its markup loads a script, stylesheet, image or frame from another host,
+  among the tags and attributes the check lists (read as markup, not searched
+  as text: the page's script holds URLs that load nothing).
+
+The markup check is a best-effort guard on the shape of dbt's page: it does not
+cover every way a page can load something. The full check is in CI, which opens
+every page in a real browser on the same pinned dbt version and fails on any
+request the page causes to an origin other than the one serving it. The
+browser's own requests are told apart by the net log's `initiator`, not by a
+list of hosts.
+
 The website at [ofantini.com](https://ofantini.com) presents the project and
 links to the reports. Each report is served by R2, independently of the
 cluster. The repository holds the reports' definitions and checks. The
@@ -106,6 +132,22 @@ cluster. The repository holds the reports' definitions and checks. The
 verification. Decisions live in [ADR-0039](adr/0039-the-site-in-its-own-repository.md),
 [ADR-0042](adr/0042-the-dashboards-return-to-dbt-charts.md) and
 [ADR-0044](adr/0044-per-job-credentials-and-the-dashboards-publishing-path.md).
+
+### Metadata contract
+
+The documentation is as good as the metadata under it, so CI
+(`dashboards (render)`, `lagom_orchestration.metadata_contract`) fails unless:
+
+- every model in the `gold` schema has a description, an enforced contract and
+  an owner (`meta.owner`);
+- every board in `data/dashboards/charts` has an exposure named as its `id`,
+  with a url and an owner, that depends on exactly the models the board reads
+  with `ref()`, in its own file and in every file it `extends`.
+
+The check names no source or model, so a new source's gold models and boards
+meet the same rules without a change to it. The
+[warehouse README](../data/warehouse/README.md#metadata-contract) says where
+each is declared.
 
 ### Reader permissions
 
@@ -129,7 +171,10 @@ are recorded under [Resource budget](platform.md#resource-budget). The
 dashboards render peaked at 804 MiB in staging against real data
 ([ADR-0046](adr/0046-memory-for-streaming-staging-on-demand-and-one-run-slot.md)).
 The [publishing procedure](runbook.md#the-dashboards-publishing-path)
-shows how to read the process group's peak from the run log.
+shows how to read the process group's peak from the run log. The run logs the
+peak after each step, so the documentation step's cost is the difference. Its
+peak is not yet measured in staging; it is measured before the step is
+promoted ([#152](https://github.com/FilipeFantini/lagom/issues/152)).
 
 ## Add a source
 
