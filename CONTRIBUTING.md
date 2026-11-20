@@ -58,7 +58,8 @@ formatting, types and tests for tools, sources and orchestration. It lints
 and parses dbt and builds a fixture lake with its tests. The dashboard job
 renders and reconciles the boards against fixture gold. It is a fixture
 check and does not publish. The [tool checks](tools/README.md) cover the
-resource budget, manifest policy and image promotion. The whole history
+resource budget, manifest policy, image promotion and the relative links
+and anchors of the maintained Markdown. The whole history
 is scanned for [secrets](#secrets).
 
 ### Branch protection
@@ -69,8 +70,9 @@ push and deletion, with no bypass. Its required status names are
 `warehouse (lint, parse)`, `secret scan`, `resource budget`,
 `promotion (prod pins only staging's digests)`, `manifest policy`,
 `guardrail approval` and `agent review`. Job renames must be coordinated
-with the operator's ruleset update. The dashboard render runs in CI but
-its name is outside this required list.
+with the operator's ruleset update. The dashboard render and `doc links`
+run in CI but their names are outside this required list, so GitHub does
+not block a merge on them.
 
 Pull requests touching [CODEOWNERS paths](.github/CODEOWNERS) wait in
 [`guardrail approval`](.github/workflows/guardrail-approval.yml). The

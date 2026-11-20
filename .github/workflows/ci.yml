@@ -27,6 +27,19 @@ jobs:
       - run: uv run --project tools --locked mypy --config-file tools/pyproject.toml tools
       - run: uv run --project tools --locked pytest tools
 
+  # Maintained Markdown keeps its relative links and anchors working: a moved
+  # or renamed document fails here, not in a reader's hands. ADR bodies keep
+  # their history and are not checked (tools/doc_links.py).
+  doc-links:
+    name: doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uv run --project tools --locked python tools/doc_links.py
+
   # The job id and name predate data/sources/ (it was services/) and are kept:
   # the name is a required check in the repository ruleset, so renaming the job
   # needs the ruleset renamed in the same step (CONTRIBUTING.md, Branch protection).
