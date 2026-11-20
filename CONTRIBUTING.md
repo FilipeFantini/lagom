@@ -58,7 +58,8 @@ formatting, types and tests for tools, sources and orchestration. It lints
 and parses dbt and builds a fixture lake with its tests. The dashboard job
 renders and reconciles the boards against fixture gold. It is a fixture
 check and does not publish. The [tool checks](tools/README.md) cover the
-resource budget, manifest policy and image promotion. The whole history
+resource budget, manifest policy, image promotion and the relative links
+and anchors of the maintained Markdown. The whole history
 is scanned for [secrets](#secrets).
 
 ### Branch protection
