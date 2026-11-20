@@ -1,10 +1,12 @@
-{"constants":{"logEventTypes":{"URL_REQUEST_START_JOB":2}},"events":[
-{"phase":1,"source":{"id":1,"type":1},"time":"1","type":2,"params":{"url":"http://127.0.0.1:4000/page.html","method":"GET","network_isolation_key":"http://127.0.0.1 http://127.0.0.1"}},
-{"phase":0,"source":{"id":1,"type":1},"time":"2","type":3,"params":{"headers":[":authority: 127.0.0.1:4000",":path: /page.html"]}},
-{"phase":1,"source":{"id":2,"type":1},"time":"3","type":2,"params":{"url":"http://127.0.0.1:4000/favicon.ico","method":"GET"}},
-{"phase":1,"source":{"id":3,"type":1},"time":"4","type":2,"params":{"url":"HTTPS://Cdn.example.invalid/sp.js","method":"GET"}},
-{"phase":0,"source":{"id":3,"type":1},"time":"5","type":4,"params":{"location":"https://redirect.example.invalid/next","group_id":"https://sockets.example.invalid <http://127.0.0.1 same_site>"}},
-{"phase":0,"source":{"id":4,"type":1},"time":"6","type":5,"params":{"url":"wss://collect.example.invalid/socket"}},
-{"phase":0,"source":{"id":5,"type":1},"time":"7","type":2,"params":{"url":"http://127.0.0.1:40001/other-port.js","host":"https://hostonly.example.invalid"}},
-{"phase":0,"source":{"id":6,"type":1},"time":"8","type":2,"params":{"url":"mailto:someone@example.invalid","destination":"https://destination.example.invalid"}},
-{"phase":1,"source":{"id":7,"type":1},"time":"9","type":2,"params":{"url":"https://tail.example.invalid/cut
+{"constants":{"logEventTypes":{"REQUEST_ALIVE":1,"URL_REQUEST_START_JOB":2,"HTTP_STREAM_JOB_CONTROLLER":3}},"events":[
+{"phase":1,"source":{"id":1,"type":1},"time":"1","type":2,"params":{"url":"http://127.0.0.1:4000/page.html","method":"GET","initiator":"not an origin"}},
+{"phase":0,"source":{"id":1,"type":1},"time":"2","type":3,"params":{"url":"http://127.0.0.1:4000/page.html"}},
+{"phase":1,"source":{"id":2,"type":1},"time":"3","type":2,"params":{"url":"http://127.0.0.1:4000/favicon.ico","method":"GET","initiator":"http://127.0.0.1:4000"}},
+{"phase":1,"source":{"id":3,"type":1},"time":"4","type":2,"params":{"url":"https://clients2.browser.example.invalid/update","method":"GET","initiator":"not an origin"}},
+{"phase":1,"source":{"id":4,"type":1},"time":"5","type":2,"params":{"url":"HTTPS://Cdn.example.invalid/sp.js","method":"GET","initiator":"http://127.0.0.1:4000"}},
+{"phase":0,"source":{"id":4,"type":1},"time":"6","type":3,"params":{"url":"https://controller-only.example.invalid/","initiator":"http://127.0.0.1:4000"}},
+{"phase":1,"source":{"id":5,"type":1},"time":"7","type":2,"params":{"url":"http://127.0.0.1:4000/script.js","method":"GET","initiator":"http://127.0.0.1:40001"}},
+{"phase":1,"source":{"id":6,"type":1},"time":"8","type":2,"params":{"url":"https://no-initiator.example.invalid/x","method":"GET"}},
+{"phase":1,"source":{"id":7,"type":1},"time":"9","type":2,"params":{"url":"wss://collect.example.invalid/socket","initiator":"http://127.0.0.1:4000"}},
+{"phase":1,"source":{"id":8,"type":1},"time":"10","type":2,"params":{"url":"mailto:someone@example.invalid","initiator":"http://127.0.0.1:4000"}},
+{"phase":1,"source":{"id":9,"type":1},"time":"11","type":2,"params":{"url":"https://tail.example.invalid/cut

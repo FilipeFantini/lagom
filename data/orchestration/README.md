@@ -37,7 +37,8 @@ One image, `lagom-orchestration`, runs both the code server and every run Pod.
   Then the asset `dashboards/docs` (`deps` on `pages`, so the reports are
   current if it fails) runs `dbt docs generate --static` against the lake
   read-only, refuses a page with usage statistics on, an incomplete catalog or
-  markup that loads from outside, and publishes it as `docs/index.html`; the
+  markup that loads a script or other tag from outside (a best-effort guard;
+  CI's browser check is the full one), and publishes it as `docs/index.html`; the
   reports keep the bucket's root, and each upload deletes only under its own
   prefix. A failed run is covered by `run_failure_alarm`.
 

@@ -1,19 +1,32 @@
-"""What a browser asks the network for when it opens a published page.
+"""What a browser asks the network for because of a published page.
 
 CI's text search over a page (ci.yml) cannot see what a script adds at run
 time, and gives false positives on URLs inside a script's text. This opens
-each page in a real browser, with its network log on, and fails on any
-request to an origin that is not the one serving the page.
+each page in a real browser, with its network log on, and fails on any request
+the page caused to an origin that is not the one serving it.
 
     python page_requests.py <browser> <page.html>...
 
 Each page's directory is served on 127.0.0.1 (a random port, in a thread of
-this process) and the browser opens that address, headless, with its own
-background traffic (component updates, sync, metrics) switched off. Nothing
-is allowed for: whatever else it asks for is listed and fails. The log must
-hold the page's own address, which proves the log works and the page was
-asked for; a page that is never requested must not pass as one that asks for
-nothing else.
+this process) and the browser opens that address, headless.
+
+A browser also makes requests of its own (component updates, sync, the
+sign-in and autofill services) that no flag fully silences, and which differ
+by browser and version. They are told apart from the page's by the net log
+itself, not by a list of hosts: every request is a `URL_REQUEST_START_JOB`
+event, and its `initiator` is the origin of the page that caused it, or
+"not an origin" for the browser's own requests and for the top-level
+navigation. So, of those events:
+
+- a request whose initiator is the server's origin and whose URL is on another
+  origin is a finding: the page asked for it;
+- a request whose initiator is any other real origin is a finding too;
+- a request with no initiator, or "not an origin", is the browser's own and is
+  not looked at. Nothing is allowlisted.
+
+The log must hold the page's own address among those events, which proves the
+log works and the page was asked for; a page that is never requested must not
+pass as one that asks for nothing else.
 """
 
 import functools
@@ -25,6 +38,7 @@ import tempfile
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 # --virtual-time-budget lets the page's timers and requests run for 15 s of
@@ -34,12 +48,14 @@ BROWSER_TIMEOUT_SECONDS = 90
 SCHEMES = ("http", "https", "ws", "wss")
 
 
-# The keys of an event's parameters that hold the address of a request: `url`
-# on every event of a request (URL_REQUEST_START_JOB and the rest) and
-# `location` on a redirect. Others (a socket pool's `group_id`, a
-# `network_isolation_key`) hold a site or an origin, often with a suffix, and
-# are not requests.
-_REQUEST_KEYS = ("url", "location")
+REQUEST_EVENT = "URL_REQUEST_START_JOB"
+# What `initiator` holds when no page caused the request.
+NO_ORIGIN = "not an origin"
+
+
+class Request(NamedTuple):
+    url: str
+    initiator: str | None
 
 
 def _is_request_url(value: object) -> bool:
@@ -50,21 +66,28 @@ def _is_request_url(value: object) -> bool:
     )
 
 
-def net_log_urls(text: str) -> list[str]:
-    """The http, https, ws and wss addresses requested in a Chromium net log, in order, once each.
+def net_log_requests(text: str) -> list[Request]:
+    """The requests in a Chromium net log: the `url` and `initiator` of each URL_REQUEST_START_JOB.
 
-    The log is a JSON object whose `events` array is written as the browser
-    runs and closed when it exits cleanly. A browser that is stopped leaves
-    the array open, so the events are read one by one and the first that is
-    cut off ends the read: what was written is kept.
+    The log is a JSON object: `constants` first (it names the event types by
+    number, and the numbers change with the browser), then the `events` array,
+    written as the browser runs and closed when it exits cleanly. A browser
+    that is stopped leaves the array open, so the events are read one by one
+    and the first that is cut off ends the read: what was written is kept.
     """
+    decoder = json.JSONDecoder()
+    marker = text.find('"constants"')
+    if marker < 0:
+        raise ValueError("not a net log: no constants")
+    constants, _ = decoder.raw_decode(text, text.find("{", marker))
+    event_type = constants.get("logEventTypes", {}).get(REQUEST_EVENT)
+    if not isinstance(event_type, int):
+        raise ValueError(f"not a net log: constants name no {REQUEST_EVENT} event")
     marker = text.find('"events"')
     if marker < 0:
         raise ValueError("not a net log: no events array")
-    start = text.find("[", marker)
-    decoder = json.JSONDecoder()
-    urls: dict[str, None] = {}
-    position = start + 1
+    requests: list[Request] = []
+    position = text.find("[", marker) + 1
     while True:
         while position < len(text) and text[position] in " \t\r\n,":
             position += 1
@@ -75,10 +98,11 @@ def net_log_urls(text: str) -> list[str]:
         except json.JSONDecodeError:
             break  # The tail of a log that was cut off.
         params = event.get("params") if isinstance(event, dict) else None
-        for key in _REQUEST_KEYS:
-            if isinstance(params, dict) and _is_request_url(params.get(key)):
-                urls[params[key]] = None
-    return list(urls)
+        if isinstance(event, dict) and event.get("type") == event_type and isinstance(params, dict):
+            url, initiator = params.get("url"), params.get("initiator")
+            if isinstance(url, str) and _is_request_url(url):
+                requests.append(Request(url, initiator if isinstance(initiator, str) else None))
+    return requests
 
 
 def origin(url: str) -> str:
@@ -86,19 +110,26 @@ def origin(url: str) -> str:
     return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
 
 
-def foreign_urls(urls: list[str], own_origin: str) -> list[str]:
-    """The URLs whose origin is not `own_origin`."""
-    return [url for url in urls if origin(url) != own_origin]
+def findings(requests: list[Request], own_origin: str) -> list[str]:
+    """The requests a page caused that it should not have, one line each."""
+    found: list[str] = []
+    for url, initiator in requests:
+        if initiator is None or initiator == NO_ORIGIN:
+            continue  # The browser's own request, or the navigation to the page.
+        if origin(initiator) != own_origin:
+            found.append(f"request initiated by another origin {initiator}: {url}")
+        elif origin(url) != own_origin:
+            found.append(f"request to another origin: {url}")
+    return found
 
 
 def problems(log: str, page_url: str) -> list[str]:
     """What is wrong with the requests in `log` for the page at `page_url`; empty if nothing."""
-    urls = net_log_urls(log)
+    requests = net_log_requests(log)
     found: list[str] = []
-    if page_url not in urls:
+    if page_url not in [request.url for request in requests]:
         found.append(f"the net log does not hold the page's own address {page_url}")
-    found += [f"request to another origin: {url}" for url in foreign_urls(urls, origin(page_url))]
-    return found
+    return found + findings(requests, origin(page_url))
 
 
 class _Quiet(SimpleHTTPRequestHandler):

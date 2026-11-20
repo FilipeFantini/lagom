@@ -91,8 +91,9 @@ CI, against the cluster's lake:
    `profiles.yml` (`lagom_dashboards`, read-only), checked, then uploaded as
    `docs/index.html` with the same type and cache header. Usage statistics are
    off (`DO_NOT_TRACK=1`: ADR-0044 decision 9 is about `dct`), and the page is
-   refused if they are on, the catalog is incomplete, or its markup loads from
-   another host. If it fails, the reports are already current
+   refused if they are on, the catalog is incomplete, or its markup loads a
+   script, stylesheet, image or frame from another host (a best-effort guard on
+   dbt's page shape, below). If it fails, the reports are already current
    ([ADR-0056](../../docs/adr/0056-the-data-console.md)).
 
 Reports and documentation have one prefix each: the reports at the bucket's
@@ -154,9 +155,14 @@ step for step; the CI job also lints, type-checks and tests `check_boards.py`
 the metadata contract (`docs/data.md`) and builds dbt's documentation as the job
 does, and checks that the pages load nothing from outside: by a text search over
 the reports, and by opening every page, documentation included, in a real browser
-(`ci/page_requests.py`) whose network log must show no other origin than the
-one serving the page. The browser is Chrome on the runner; the script takes any
-Chromium-based browser as its first argument. The flush step writes gold out as
+(`ci/page_requests.py`). The browser's net log says who initiated each request
+(`URL_REQUEST_START_JOB`'s `initiator`): the page's origin for what the page
+caused, "not an origin" for the browser's own. A request the page caused to
+another origin fails; the browser's own are not looked at, and no host is
+allowlisted. The browser is Chrome on the runner; the script takes any
+Chromium-based browser as its first argument. The browser check is the full
+one for the documentation page; the job's own markup check is a best-effort
+guard on dbt's page shape. The flush step writes gold out as
 Parquet files: DuckLake keeps a table of up to 10 rows in its catalog, and the
 fixture's daily aggregate has 10, so it would be read from the catalog and not
 from files, as it is not in the cluster. `TZ=Pacific/Auckland` runs the validation, the

@@ -11,6 +11,12 @@ it leaves: dbt's usage statistics are off in the manifest and in the page, the
 catalog is whole, and the markup asks nothing from another host. A failed check
 raises with its reason and nothing is published.
 
+The markup check (`external_loads`) is a best-effort guard on the shape of dbt's
+page: it lists the tags and attributes that load something, and a page can load
+in ways it does not list. The full check is CI's, which opens the page in a real
+browser on the same pinned dbt version and fails on any request the page causes
+to another origin (data/dashboards/ci/page_requests.py).
+
 `python -m lagom_orchestration.dbt_docs <repo> <output.html>` runs the same
 function, so CI exercises the job's own code.
 """

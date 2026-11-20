@@ -114,12 +114,16 @@ has. It refuses the documentation page, with the reason, when:
 - usage statistics are on in the manifest or the page (`true` makes the page load
   a tracker from other hosts);
 - the catalog has errors, or a model of the manifest has no columns in it;
-- its markup loads a script, stylesheet, image, frame or other resource from
-  another host (read as markup, not searched as text: the page's script holds
-  URLs that load nothing).
+- its markup loads a script, stylesheet, image or frame from another host,
+  among the tags and attributes the check lists (read as markup, not searched
+  as text: the page's script holds URLs that load nothing).
 
-CI also opens every page in a real browser and fails on a request to any origin
-but the one serving it.
+The markup check is a best-effort guard on the shape of dbt's page: it does not
+cover every way a page can load something. The full check is in CI, which opens
+every page in a real browser on the same pinned dbt version and fails on any
+request the page causes to an origin other than the one serving it. The
+browser's own requests are told apart by the net log's `initiator`, not by a
+list of hosts.
 
 The website at [ofantini.com](https://ofantini.com) presents the project and
 links to the reports. Each report is served by R2, independently of the
