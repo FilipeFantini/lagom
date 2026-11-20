@@ -12,7 +12,8 @@ For each inline link `[text](target)` outside code:
 - a fragment (`#section`) on a Markdown file, or alone, must match a heading
   of that file, using GitHub's anchor rules, or an explicit `<a id="...">`.
 
-What it does not check: reference-style links (`[text][ref]`), paths written
+What it does not check: reference-style links (`[text][ref]`), the outer
+target of a link around an image (`[![alt](img.png)](target)`), paths written
 as code, links in HTML elements other than `<a id>`, and anchors on files that
 are not Markdown.
 """
